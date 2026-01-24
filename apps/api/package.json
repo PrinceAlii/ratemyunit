@@ -1,0 +1,38 @@
+{
+  "name": "@ratemyunit/api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^9.3.1",
+    "@fastify/cors": "^8.5.0",
+    "@fastify/helmet": "^11.1.1",
+    "@fastify/swagger": "^8.13.0",
+    "@fastify/swagger-ui": "^2.1.0",
+    "@lucia-auth/adapter-drizzle": "^1.0.0",
+    "@node-rs/argon2": "^1.8.0",
+    "@ratemyunit/db": "workspace:*",
+    "@ratemyunit/types": "workspace:*",
+    "@ratemyunit/validators": "workspace:*",
+    "bullmq": "^5.1.9",
+    "dotenv": "^16.4.1",
+    "drizzle-orm": "^0.29.5",
+    "fastify": "^4.25.2",
+    "ioredis": "^5.9.2",
+    "lucia": "^3.0.1",
+    "playwright": "^1.41.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

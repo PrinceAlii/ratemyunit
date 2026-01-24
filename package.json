@@ -1,0 +1,31 @@
+{
+  "name": "ratemyunit",
+  "version": "0.0.1",
+  "private": true,
+  "description": "A platform for university students to rate their units/subjects",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:migrate": "pnpm --filter @ratemyunit/db migrate",
+    "db:seed": "pnpm --filter @ratemyunit/db seed",
+    "db:studio": "pnpm --filter @ratemyunit/db studio"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "prettier": "^3.8.1",
+    "turbo": "^1.11.3",
+    "typescript": "^5.3.3"
+  },
+  "packageManager": "pnpm@8.15.1",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}

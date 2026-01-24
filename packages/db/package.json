@@ -1,0 +1,29 @@
+{
+  "name": "@ratemyunit/db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "migrate": "drizzle-kit generate:pg && tsx src/migrate.ts",
+    "studio": "drizzle-kit studio",
+    "seed": "tsx src/seed.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^1.8.0",
+    "dotenv": "^16.4.1",
+    "drizzle-orm": "^0.29.3",
+    "postgres": "^3.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "drizzle-kit": "^0.20.10",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

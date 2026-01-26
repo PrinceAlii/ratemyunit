@@ -2,6 +2,9 @@
 node_modules/
 .pnpm-store/
 
+## Temp
+PROJECT_CONTEXT.md
+
 # Build outputs
 dist/
 build/

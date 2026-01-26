@@ -10,20 +10,12 @@ export class GenericDomScraper extends BaseScraper {
     const scrapedAt = new Date();
     const cleanCode = subjectCode.trim();
     
-    // Config must provide selectors
-    const selectors = this.config.selectors;
-    if (!selectors) {
-      return {
-        success: false,
-        subjectCode: cleanCode,
-        error: `No selectors configured for ${this.universityName}`,
-        scrapedAt
-      };
+    const routePattern = this.config.routes?.subject;
+    if (!routePattern) {
+        return { success: false, subjectCode: cleanCode, error: 'No subject route configured', scrapedAt };
     }
 
-    const routePattern = this.config.routes?.subject || '/:code';
     const url = `${this.config.baseUrl}${routePattern.replace(':code', cleanCode)}`;
-
     const page = await browser.newPage();
 
     try {
@@ -33,42 +25,7 @@ export class GenericDomScraper extends BaseScraper {
         return { success: false, subjectCode: cleanCode, error: '404 Not Found', scrapedAt };
       }
 
-      // Extract using selectors from config. Fail loudly for Title.
-      // We assume 'title' is critical.
-      const name = await this.getText(page, selectors.title, true); // <--- Required
-      
-      const description = selectors.description 
-        ? await this.getText(page, selectors.description) 
-        : 'No description.';
-        
-      const faculty = selectors.faculty 
-        ? await this.getText(page, selectors.faculty) 
-        : undefined;
-        
-      const creditPointsText = selectors.creditPoints 
-        ? await this.getText(page, selectors.creditPoints) 
-        : '6';
-      
-      const creditPoints = parseInt(creditPointsText.replace(/\D/g, ''), 10) || 6;
-
-      const data = {
-        code: cleanCode,
-        name: name || 'Unknown Subject', // Should not happen with required=true but typescript safety
-        description: this.cleanText(description),
-        creditPoints,
-        faculty: faculty ? this.cleanText(faculty) : undefined,
-        sessions: [] // TODO: Add selector for sessions list
-      };
-
-      const validation = safeValidateScrapedSubject(data);
-
-      return {
-        success: true,
-        subjectCode: cleanCode,
-        data: validation.success ? validation.data : undefined,
-        error: validation.success ? undefined : `Validation failed: ${validation.error}`,
-        scrapedAt
-      };
+      return await this.extractFromPage(page, cleanCode);
 
     } catch (error) {
        return { success: false, subjectCode: cleanCode, error: String(error), scrapedAt };
@@ -77,9 +34,93 @@ export class GenericDomScraper extends BaseScraper {
     }
   }
 
-  private async getText(page: Page, selector: string, required = false): Promise<string> {
+  async discoverSubjects(browser: Browser): Promise<string[]> {
+    const routePattern = this.config.routes?.subject;
+    if (!routePattern) return [];
+
+    // Construct regex from route pattern (e.g. "/units/:code" -> "/units/([a-zA-Z0-9\-_]+)")
+    // We escape special regex chars except :code
+    const escapedPattern = routePattern.replace(/[.*+?^${}()|[\\]/g, '\$&');
+    const regexString = escapedPattern.replace(':code', '([a-zA-Z0-9\-_]{3,10})'); // Limit code length to avoid garbage
+    const regex = new RegExp(regexString);
+
+    const startUrl = this.config.routes?.discovery 
+        ? `${this.config.baseUrl}${this.config.routes.discovery}` 
+        : this.config.baseUrl;
+
+    const page = await browser.newPage();
+    const discoveredCodes = new Set<string>();
+
     try {
-      // Use waitFor for required elements to ensure they load
+        console.log(`🔎 Discovering from: ${startUrl}`);
+        await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        
+        // Wait a bit for dynamic content
+        await page.waitForTimeout(2000);
+
+        // Extract all hrefs
+        const hrefs = await page.evaluate(() => {
+            return Array.from(document.querySelectorAll('a')).map(a => a.getAttribute('href')).filter(Boolean) as string[];
+        });
+
+        for (const href of hrefs) {
+            const match = href.match(regex);
+            if (match && match[1]) {
+                discoveredCodes.add(match[1]);
+            }
+        }
+        
+        console.log(`✅ Discovered ${discoveredCodes.size} units on shallow scan.`);
+
+    } catch (e) {
+        console.error(`Discovery failed: ${e}`);
+    } finally {
+        await page.close();
+    }
+
+    return Array.from(discoveredCodes);
+  }
+
+  protected async extractFromPage(page: Page, subjectCode: string): Promise<ScraperResult> {
+    const scrapedAt = new Date();
+    const selectors = this.config.selectors;
+    
+    if (!selectors) {
+        return { success: false, subjectCode, error: 'No selectors configured', scrapedAt };
+    }
+
+    try {
+        const name = await this.getText(page, selectors.title, true);
+        const description = selectors.description ? await this.getText(page, selectors.description) : 'No description.';
+        const faculty = selectors.faculty ? await this.getText(page, selectors.faculty) : undefined;
+        const creditPointsText = selectors.creditPoints ? await this.getText(page, selectors.creditPoints) : '6';
+        const creditPoints = parseInt(creditPointsText.replace(/\D/g, ''), 10) || 6;
+
+        const data = {
+            code: subjectCode,
+            name: name || 'Unknown Subject',
+            description: this.cleanText(description),
+            creditPoints,
+            faculty: faculty ? this.cleanText(faculty) : undefined,
+            sessions: [] 
+        };
+
+        const validation = safeValidateScrapedSubject(data);
+
+        return {
+            success: true,
+            subjectCode,
+            data: validation.success ? validation.data : undefined,
+            error: validation.success ? undefined : `Validation failed: ${validation.error}`,
+            scrapedAt
+        };
+    } catch (e) {
+        return { success: false, subjectCode, error: String(e), scrapedAt };
+    }
+  }
+
+  protected async getText(page: Page, selector: string, required = false): Promise<string> {
+    try {
       if (required) {
         await page.locator(selector).first().waitFor({ state: 'visible', timeout: 5000 });
       }
@@ -97,7 +138,7 @@ export class GenericDomScraper extends BaseScraper {
     }
   }
 
-  private cleanText(text: string): string {
+  protected cleanText(text: string): string {
     return he.decode(text).replace(/\s+/g, ' ').trim();
   }
 }

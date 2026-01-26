@@ -8,7 +8,7 @@ export const reviewStatusEnum = pgEnum('review_status', ['auto-approved', 'flagg
 export const voteTypeEnum = pgEnum('vote_type', ['helpful', 'not_helpful']);
 export const flagReasonEnum = pgEnum('flag_reason', ['spam', 'inappropriate', 'inaccurate', 'other']);
 export const flagStatusEnum = pgEnum('flag_status', ['pending', 'reviewed', 'dismissed']);
-export const scraperTypeEnum = pgEnum('scraper_type', ['courseloop', 'akari', 'custom', 'legacy']);
+export const scraperTypeEnum = pgEnum('scraper_type', ['courseloop', 'akari', 'custom', 'legacy', 'search_dom']);
 
 // Universities Table
 export const universities = pgTable('universities', {
@@ -104,6 +104,8 @@ export const units = pgTable('units', {
   deliveryModes: text('delivery_modes'),
 }, (t) => ({
   unitCodeIdx: index('units_unit_code_idx').on(t.unitCode),
+  unitNameIdx: index('units_unit_name_idx').on(t.unitName),
+  universityIdIdx: index('units_university_id_idx').on(t.universityId),
   activeIdx: index('units_active_idx').on(t.active),
   unq: unique().on(t.universityId, t.unitCode),
 }));

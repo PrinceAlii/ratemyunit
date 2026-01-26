@@ -11,7 +11,6 @@ export class ScraperService {
   private async getUniversityScraper(uniId?: string) {
     let uni;
     if (!uniId) {
-      // Default to UTS if not specified
       const [uts] = await db.select().from(universities).where(eq(universities.abbreviation, 'UTS')).limit(1);
       if (!uts) throw new Error('UTS university not found for default scraping');
       uni = uts;
@@ -21,14 +20,35 @@ export class ScraperService {
       uni = found;
     }
 
-    // Check if scraperRoutes has base property (legacy seed format check)
-    const routesObj = uni.scraperRoutes as any || {};
+    let scraperRoutes = uni.scraperRoutes;
+    if (typeof scraperRoutes === 'string') {
+      try { scraperRoutes = JSON.parse(scraperRoutes); } catch { scraperRoutes = {}; }
+    }
+
+    let scraperSelectors = uni.scraperSelectors;
+    if (typeof scraperSelectors === 'string') {
+      try { scraperSelectors = JSON.parse(scraperSelectors); } catch { scraperSelectors = {}; }
+    }
+
+    const selectorsObj = (scraperSelectors as any) || {};
+    const searchConfig = selectorsObj.search;
+    
+    // Create clean selectors object (remove search config to pass Zod record<string> check)
+    const cleanSelectors: Record<string, string> = {};
+    for (const [key, value] of Object.entries(selectorsObj)) {
+        if (key !== 'search' && typeof value === 'string') {
+            cleanSelectors[key] = value;
+        }
+    }
+
+    const routesObj = (scraperRoutes as any) || {};
     const baseUrl = routesObj.base || uni.handbookUrl || '';
     
     const configToValidate = {
       baseUrl,
-      routes: uni.scraperRoutes,
-      selectors: uni.scraperSelectors
+      routes: scraperRoutes,
+      selectors: cleanSelectors,
+      search: searchConfig
     };
 
     const parseResult = ScraperConfigSchema.safeParse(configToValidate);
@@ -40,14 +60,31 @@ export class ScraperService {
     return { uni, scraper: ScraperFactory.createScraper(uni.scraperType as any, uni.name, parseResult.data) };
   }
 
-  async scrapeUnit(unitCode: string, universityId?: string): Promise<{
+  async discoverUnits(universityId: string): Promise<string[]> {
+    const { scraper } = await this.getUniversityScraper(universityId);
+    const browser = await chromium.launch({ headless: true });
+    try {
+        return await scraper.discoverSubjects(browser);
+    } finally {
+        await browser.close();
+    }
+  }
+
+  async scrapeUnit(unitCode: string, universityId?: string, existingBrowser?: any): Promise<{
     success: boolean;
     unitCode: string;
     unitName?: string;
     error?: string;
   }> {
     const { uni, scraper } = await this.getUniversityScraper(universityId);
-    const browser = await chromium.launch({ headless: true });
+    
+    let browser = existingBrowser;
+    let shouldClose = false;
+
+    if (!browser) {
+        browser = await chromium.launch({ headless: true });
+        shouldClose = true;
+    }
 
     try {
       const result = await scraper.scrapeSubject(browser, unitCode);
@@ -60,7 +97,6 @@ export class ScraperService {
         };
       }
 
-      // Persist to DB
       await db
         .insert(units)
         .values({
@@ -99,7 +135,9 @@ export class ScraperService {
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     } finally {
-      await browser.close();
+      if (shouldClose && browser) {
+        await browser.close();
+      }
     }
   }
 

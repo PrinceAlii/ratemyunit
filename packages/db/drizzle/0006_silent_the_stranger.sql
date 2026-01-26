@@ -1,0 +1,1 @@
+ALTER TYPE "scraper_type" ADD VALUE 'search_dom';

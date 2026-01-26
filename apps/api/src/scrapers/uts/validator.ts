@@ -13,7 +13,7 @@ import { z } from 'zod';
 export const subjectCodeSchema = z
   .string()
   .trim()
-  .regex(/^\d{5}$/, 'Subject code must be exactly 5 digits')
+  .regex(/^[A-Za-z0-9\-_]{3,12}$/, 'Subject code must be 3-12 alphanumeric characters')
   .transform((code) => code.toUpperCase());
 
 /**

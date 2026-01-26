@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, boolean, timestamp, integer, pgEnum, unique, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, boolean, timestamp, integer, pgEnum, unique, index, jsonb } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Enums
@@ -8,6 +8,7 @@ export const reviewStatusEnum = pgEnum('review_status', ['auto-approved', 'flagg
 export const voteTypeEnum = pgEnum('vote_type', ['helpful', 'not_helpful']);
 export const flagReasonEnum = pgEnum('flag_reason', ['spam', 'inappropriate', 'inaccurate', 'other']);
 export const flagStatusEnum = pgEnum('flag_status', ['pending', 'reviewed', 'dismissed']);
+export const scraperTypeEnum = pgEnum('scraper_type', ['courseloop', 'akari', 'custom', 'legacy']);
 
 // Universities Table
 export const universities = pgTable('universities', {
@@ -17,6 +18,12 @@ export const universities = pgTable('universities', {
   emailDomain: varchar('email_domain', { length: 255 }).notNull().unique(),
   websiteUrl: varchar('website_url', { length: 500 }),
   handbookUrl: varchar('handbook_url', { length: 500 }),
+  
+  // Scraper Configuration
+  scraperType: scraperTypeEnum('scraper_type').default('custom').notNull(),
+  scraperRoutes: jsonb('scraper_routes'), 
+  scraperSelectors: jsonb('scraper_selectors'),
+  
   active: boolean('active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

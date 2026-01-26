@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '@ratemyunit/db/client';
-import { units, reviews, users, reviewVotes } from '@ratemyunit/db/schema';
-import { eq, desc, and, sql, inArray } from 'drizzle-orm';
+import { units, reviews, users, reviewVotes, universities } from '@ratemyunit/db/schema';
+import { eq, desc, and, sql, inArray, getTableColumns } from 'drizzle-orm';
 
 export async function unitsRoutes(app: FastifyInstance) {
   /**
@@ -14,6 +14,7 @@ export async function unitsRoutes(app: FastifyInstance) {
       q: z.string().optional(),
       search: z.string().optional(),
       faculty: z.string().optional(),
+      universityId: z.string().uuid().optional(),
       minRating: z.coerce.number().min(1).max(5).optional(),
       sort: z.enum(['rating_desc', 'rating_asc', 'recent', 'most_reviewed']).optional(),
       limit: z.coerce.number().int().min(1).max(50).default(20),
@@ -27,6 +28,7 @@ export async function unitsRoutes(app: FastifyInstance) {
     const offsetVal = validatedQuery.offset;
     const sort = validatedQuery.sort;
     const faculty = validatedQuery.faculty;
+    const universityId = validatedQuery.universityId;
 
     const conditions = [eq(units.active, true)];
 
@@ -42,27 +44,12 @@ export async function unitsRoutes(app: FastifyInstance) {
       conditions.push(sql`${units.faculty} = ${faculty}`);
     }
 
-    // Rating Filter (This is tricky without a materialized view or subquery for aggregates)
-    // For now, we'll do a simple join or subquery if needed.
-    // Optimization: Usually rating averages are stored on the unit table or a materialized view.
-    // For this MVP, we will calculate average on the fly or just filter if possible.
-    // Let's rely on a calculated average if we can, or just return all and let frontend filter if dataset small?
-    // No, let's try to aggregate.
-    
-    // Sort logic
-    let orderBy = desc(units.unitCode); // Default
-    if (sort === 'recent') {
-       orderBy = desc(units.scrapedAt);
-    } else if (sort === 'rating_asc') {
-       // Requires aggregated rating
-    } else if (sort === 'rating_desc') {
-       // Requires aggregated rating
+    // University Filter
+    if (universityId) {
+      conditions.push(eq(units.universityId, universityId));
     }
 
-    // Building the query
-    // We need to join with reviews to get average rating if we want to sort/filter by it.
-    // This can be heavy. Let's do a subquery for average rating.
-    
+    // Subquery for aggregated ratings
     const avgRatingSq = db
         .select({
             unitId: reviews.unitId,
@@ -80,30 +67,35 @@ export async function unitsRoutes(app: FastifyInstance) {
             unitName: units.unitName,
             faculty: units.faculty,
             creditPoints: units.creditPoints,
+            universityName: universities.name,
+            universityAbbr: universities.abbreviation,
             averageRating: sql<number>`COALESCE(${avgRatingSq.avgRating}, 0)`,
-            reviewCount: sql<number>`COALESCE(${avgRatingSq.reviewCount}, 0)`
+            reviewCount: sql<number>`COALESCE(${avgRatingSq.reviewCount}, 0)`,
+            scrapedAt: units.scrapedAt
         })
         .from(units)
-        .leftJoin(avgRatingSq, eq(units.id, avgRatingSq.unitId));
+        .leftJoin(avgRatingSq, eq(units.id, avgRatingSq.unitId))
+        .leftJoin(universities, eq(units.universityId, universities.id));
 
     // Apply where clauses
     let whereClause = and(...conditions);
     
-    // Apply rating filter via HAVING or Wrapper? 
-    // Since we joined a subquery, we can filter on the result in a wrapper or just use the subquery column?
-    // Drizzle with subqueries in where:
     if (ratingFilter) {
         whereClause = and(whereClause, sql`COALESCE(${avgRatingSq.avgRating}, 0) >= ${ratingFilter}`);
     }
 
     // Apply Sort
-    let sortClause = orderBy;
+    let orderBy = desc(units.unitCode); // Default sort
+    let sortClause: any = orderBy;
+    
     if (sort === 'rating_desc') {
         sortClause = desc(sql`COALESCE(${avgRatingSq.avgRating}, 0)`);
     } else if (sort === 'rating_asc') {
         sortClause = sql`COALESCE(${avgRatingSq.avgRating}, 0) ASC`;
     } else if (sort === 'most_reviewed') {
         sortClause = desc(sql`COALESCE(${avgRatingSq.reviewCount}, 0)`);
+    } else if (sort === 'recent') {
+       sortClause = desc(units.scrapedAt);
     }
 
     const results = await baseQuery
@@ -125,18 +117,35 @@ export async function unitsRoutes(app: FastifyInstance) {
   app.get('/:unitCode', async (request, reply) => {
     const { unitCode } = request.params as { unitCode: string };
 
-    const [unit] = await db
-      .select()
+    const [result] = await db
+      .select({
+        ...getTableColumns(units),
+        uniId: universities.id,
+        uniName: universities.name,
+        uniAbbr: universities.abbreviation,
+        uniUrl: universities.websiteUrl,
+      })
       .from(units)
+      .leftJoin(universities, eq(units.universityId, universities.id))
       .where(eq(units.unitCode, unitCode))
       .limit(1);
 
-    if (!unit) {
+    if (!result) {
       return reply.status(404).send({
         success: false,
         error: 'Unit not found',
       });
     }
+
+    const unit = {
+      ...result,
+      university: {
+        id: result.uniId,
+        name: result.uniName,
+        abbreviation: result.uniAbbr,
+        websiteUrl: result.uniUrl,
+      }
+    };
 
     return reply.send({
       success: true,
@@ -183,7 +192,7 @@ export async function unitsRoutes(app: FastifyInstance) {
         user: {
           id: users.id,
           displayName: users.displayName,
-          role: users.role, // Useful to show if review is from verified user/admin (though verified status is separate)
+          role: users.role, 
         },
         voteCount: sql<number>`(
           SELECT COUNT(*) FILTER (WHERE ${reviewVotes.voteType} = 'helpful') - 
@@ -200,8 +209,6 @@ export async function unitsRoutes(app: FastifyInstance) {
       ))
       .orderBy(desc(reviews.createdAt));
 
-    // Process display names based on privacy settings.
-    // Remove internal user IDs from public responses.
     const processedReviews = unitReviews.map(review => {
       let displayName = 'Anonymous Student';
 

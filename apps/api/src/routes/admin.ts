@@ -6,21 +6,17 @@ import { eq, desc, sql } from 'drizzle-orm';
 import { requireAdmin } from '../middleware/auth.js';
 import { scraperQueue } from '../lib/queue.js';
 import { moderateReviewSchema, banUserSchema } from '@ratemyunit/validators';
-import { scrapeUTSSubjects, scrapeAllUTSSubjects } from '../scrapers/uts/index.js';
+import { scraperService } from '../services/scraper.js';
 
 const scrapeSchema = z.object({
   unitCode: z.string().min(1),
+  universityId: z.string().uuid().optional(),
 });
 
 const bulkScrapeSchema = z.object({
   unitCodes: z.array(z.string().min(1)).min(1).max(100),
   delayMs: z.number().int().min(500).max(10000).optional(),
-});
-
-const scrapeRangeSchema = z.object({
-  startCode: z.string().regex(/^\d{5}$/, 'Must be 5 digits'),
-  endCode: z.string().regex(/^\d{5}$/, 'Must be 5 digits'),
-  limit: z.number().int().min(1).max(1000).optional(),
+  universityId: z.string().uuid().optional(),
 });
 
 export async function adminRoutes(app: FastifyInstance) {
@@ -126,7 +122,6 @@ export async function adminRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const { banned } = banUserSchema.parse(request.body);
 
-    // Prevent admin from banning themselves.
     if (request.user && request.user.id === id) {
       return reply.status(400).send({
         success: false,
@@ -140,6 +135,8 @@ export async function adminRoutes(app: FastifyInstance) {
 
     return reply.send({ success: true, message: `User ${banned ? 'banned' : 'unbanned'}.` });
   });
+
+  // --- Scraper Routes ---
 
   /**
    * POST /api/admin/scrape
@@ -156,10 +153,10 @@ export async function adminRoutes(app: FastifyInstance) {
       });
     }
 
-    const { unitCode } = result.data;
+    const { unitCode, universityId } = result.data;
 
-    // Add to queue.
-    await scraperQueue.add('scrape-unit', { unitCode });
+    // Add to queue with university ID
+    await scraperQueue.add('scrape-unit', { unitCode, universityId });
 
     return reply.send({
       success: true,
@@ -173,30 +170,28 @@ export async function adminRoutes(app: FastifyInstance) {
    */
   app.post('/scrape/bulk', async (request, reply) => {
     const result = bulkScrapeSchema.safeParse(request.body);
+    if (!result.success) return reply.status(400).send(result.error);
 
-    if (!result.success) {
-      return reply.status(400).send({
-        success: false,
-        error: 'Invalid request body',
-        details: result.error,
-      });
-    }
-
-    const { unitCodes, delayMs } = result.data;
+    const { unitCodes, delayMs, universityId } = result.data;
 
     try {
-      const scrapeResult = await scrapeUTSSubjects(unitCodes, {
+      const results = await scraperService.scrapeUnits(unitCodes, {
         delayMs,
-        continueOnError: true,
+        universityId,
+        continueOnError: true
       });
+
+      const successful = results.filter(r => r.success).length;
+      const failed = results.filter(r => !r.success).length;
+      const errors = results.filter(r => !r.success).map(r => ({ subjectCode: r.subjectCode, error: r.error || 'Unknown' }));
 
       return reply.send({
         success: true,
         data: {
-          total: scrapeResult.total,
-          successful: scrapeResult.successful,
-          failed: scrapeResult.failed,
-          errors: scrapeResult.errors,
+          total: unitCodes.length,
+          successful,
+          failed,
+          errors,
         },
       });
     } catch (error) {
@@ -211,45 +206,8 @@ export async function adminRoutes(app: FastifyInstance) {
    * POST /api/admin/scrape/range
    * Scrape a range of unit codes.
    */
-  app.post('/scrape/range', async (request, reply) => {
-    const result = scrapeRangeSchema.safeParse(request.body);
-
-    if (!result.success) {
-      return reply.status(400).send({
-        success: false,
-        error: 'Invalid request body',
-        details: result.error,
-      });
-    }
-
-    const { startCode, endCode, limit } = result.data;
-
-    try {
-      const scrapeResult = await scrapeAllUTSSubjects({
-        startCode,
-        endCode,
-        limit,
-        delayMs: 2000,
-      });
-
-      return reply.send({
-        success: true,
-        data: {
-          total: scrapeResult.total,
-          successful: scrapeResult.successful,
-          failed: scrapeResult.failed,
-          errors: scrapeResult.errors,
-          durationMs:
-            scrapeResult.completedAt.getTime() -
-            scrapeResult.startedAt.getTime(),
-        },
-      });
-    } catch (error) {
-      return reply.status(500).send({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
+  app.post('/scrape/range', async (_request, reply) => {
+    return reply.status(501).send({ success: false, error: 'Range scraping for generic universities not yet implemented' });
   });
 
   /**

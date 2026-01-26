@@ -34,17 +34,18 @@ export function StarRating({
           type="button"
           onClick={() => !readOnly && onChange?.(star)}
           className={cn(
-            'transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-sm',
-            readOnly ? 'cursor-default' : 'cursor-pointer hover:scale-110'
+            'transition-transform focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-sm',
+            readOnly ? 'cursor-default' : 'cursor-pointer hover:-translate-y-0.5'
           )}
           disabled={readOnly}
         >
           <Star
             className={cn(
               sizeClasses[size],
+              'stroke-black stroke-[3]',
               star <= value
-                ? 'fill-yellow-400 text-yellow-400'
-                : 'text-muted-foreground'
+                ? 'fill-secondary text-secondary'
+                : 'fill-muted text-muted-foreground'
             )}
           />
         </button>

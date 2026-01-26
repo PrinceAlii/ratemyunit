@@ -20,36 +20,38 @@ export function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="border-b-4 border-black bg-primary">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold">
+          <Link to="/" className="text-3xl font-black uppercase tracking-tight text-primary-foreground">
             RateMyUnit
           </Link>
-          
+
           <div className="flex items-center gap-4">
             {user?.role === 'admin' && (
-              <Link to="/admin" className="text-sm font-medium hover:text-primary transition-colors">
-                Admin
+              <Link to="/admin">
+                <Button variant="outline" className="font-bold uppercase border-2 border-black">
+                  Admin
+                </Button>
               </Link>
             )}
             {user ? (
               <>
                 {user.role !== 'admin' && (
-                  <span className="text-sm text-muted-foreground hidden sm:inline-block">
+                  <span className="text-sm font-bold text-primary-foreground hidden sm:inline-block">
                     {user.displayName || user.email}
                   </span>
                 )}
-                <Button variant="ghost" onClick={handleLogout}>
+                <Button variant="outline" onClick={handleLogout} className="border-2 border-black">
                   Logout
                 </Button>
               </>
             ) : (
               <>
                 <Link to="/login">
-                  <Button variant="ghost">Login</Button>
+                  <Button variant="outline" className="border-2 border-black">Login</Button>
                 </Link>
                 <Link to="/register">
-                  <Button>Sign Up</Button>
+                  <Button className="border-2 border-black shadow-neo">Sign Up</Button>
                 </Link>
               </>
             )}
@@ -61,8 +63,8 @@ export function Layout() {
         <Outlet />
       </main>
       
-      <footer className="border-t py-6 bg-muted/50">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
+      <footer className="border-t-4 border-black py-6 bg-secondary">
+        <div className="container mx-auto px-4 text-center text-sm font-bold uppercase text-secondary-foreground">
           &copy; {new Date().getFullYear()} RateMyUnit. All rights reserved.
         </div>
       </footer>

@@ -185,63 +185,64 @@ export function DataScraper() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Database className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold">Data Scraper</h2>
+        <Database className="h-8 w-8 text-primary" />
+        <h2 className="text-3xl font-display font-black uppercase">Data Scraper</h2>
       </div>
 
       {/* Scraping Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="p-4 border rounded-lg bg-card">
-          <div className="flex items-center gap-2 mb-1">
-            <Loader2 className="h-4 w-4 text-blue-500" />
-            <span className="text-sm text-muted-foreground">Active Jobs</span>
+        <div className="p-5 border-4 border-foreground bg-primary text-primary-foreground shadow-neo">
+          <div className="flex items-center gap-2 mb-2">
+            <Loader2 className="h-5 w-5" />
+            <span className="text-sm font-bold uppercase">Active Jobs</span>
           </div>
-          <div className="text-2xl font-bold">{statusLoading ? '-' : status?.active || 0}</div>
+          <div className="text-4xl font-black">{statusLoading ? '-' : status?.active || 0}</div>
         </div>
 
-        <div className="p-4 border rounded-lg bg-card">
-          <div className="flex items-center gap-2 mb-1">
-            <Clock className="h-4 w-4 text-yellow-500" />
-            <span className="text-sm text-muted-foreground">Queued Jobs</span>
+        <div className="p-5 border-4 border-foreground bg-secondary text-secondary-foreground shadow-neo">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock className="h-5 w-5" />
+            <span className="text-sm font-bold uppercase">Queued Jobs</span>
           </div>
-          <div className="text-2xl font-bold">{statusLoading ? '-' : status?.waiting || 0}</div>
+          <div className="text-4xl font-black">{statusLoading ? '-' : status?.waiting || 0}</div>
         </div>
 
-        <div className="p-4 border rounded-lg bg-card">
-          <div className="flex items-center gap-2 mb-1">
-            <CheckCircle className="h-4 w-4 text-green-500" />
-            <span className="text-sm text-muted-foreground">Completed</span>
+        <div className="p-5 border-4 border-foreground bg-green-500 text-white shadow-neo">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle className="h-5 w-5" />
+            <span className="text-sm font-bold uppercase">Completed</span>
           </div>
-          <div className="text-2xl font-bold">{statusLoading ? '-' : status?.completed || 0}</div>
+          <div className="text-4xl font-black">{statusLoading ? '-' : status?.completed || 0}</div>
         </div>
 
-        <div className="p-4 border rounded-lg bg-card">
-          <div className="flex items-center gap-2 mb-1">
-            <AlertCircle className="h-4 w-4 text-red-500" />
-            <span className="text-sm text-muted-foreground">Failed</span>
+        <div className="p-5 border-4 border-foreground bg-destructive text-destructive-foreground shadow-neo">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertCircle className="h-5 w-5" />
+            <span className="text-sm font-bold uppercase">Failed</span>
           </div>
-          <div className="text-2xl font-bold">{statusLoading ? '-' : status?.failed || 0}</div>
+          <div className="text-4xl font-black">{statusLoading ? '-' : status?.failed || 0}</div>
         </div>
       </div>
 
       {/* Single Subject Scraper */}
-      <div className="p-6 border rounded-lg bg-card">
-        <h3 className="text-lg font-semibold mb-4">Single Subject Scraper</h3>
+      <div className="p-6 border-4 border-foreground bg-card shadow-neo">
+        <h3 className="text-xl font-display font-black uppercase mb-4">Single Subject Scraper</h3>
         <div className="space-y-4">
           <div>
-            <Label htmlFor="single-code">Subject Code</Label>
+            <Label htmlFor="single-code" className="font-bold uppercase text-sm">Subject Code</Label>
             <Input
               id="single-code"
               placeholder="e.g., 31251"
               value={singleCode}
               onChange={(e) => setSingleCode(e.target.value)}
               disabled={singleMutation.isPending}
+              className="h-12 border-3"
             />
           </div>
-          <Button onClick={handleSingleScrape} disabled={singleMutation.isPending}>
+          <Button onClick={handleSingleScrape} disabled={singleMutation.isPending} className="h-12 border-4 font-bold">
             {singleMutation.isPending ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
                 Queuing...
               </>
             ) : (
@@ -250,10 +251,10 @@ export function DataScraper() {
           </Button>
           {singleMessage && (
             <div
-              className={`p-3 rounded-md text-sm ${
+              className={`p-4 text-sm font-bold border-3 ${
                 singleMessage.type === 'success'
-                  ? 'bg-green-100 text-green-800 border border-green-200'
-                  : 'bg-red-100 text-red-800 border border-red-200'
+                  ? 'bg-green-100 text-green-800 border-green-700'
+                  : 'bg-red-100 text-red-800 border-red-700'
               }`}
             >
               {singleMessage.text}
@@ -263,11 +264,11 @@ export function DataScraper() {
       </div>
 
       {/* Bulk Scraper */}
-      <div className="p-6 border rounded-lg bg-card">
-        <h3 className="text-lg font-semibold mb-4">Bulk Scraper</h3>
+      <div className="p-6 border-4 border-foreground bg-card shadow-neo">
+        <h3 className="text-xl font-display font-black uppercase mb-4">Bulk Scraper</h3>
         <div className="space-y-4">
           <div>
-            <Label htmlFor="bulk-codes">Subject Codes (comma-separated, max 100)</Label>
+            <Label htmlFor="bulk-codes" className="font-bold uppercase text-sm">Subject Codes (comma-separated, max 100)</Label>
             <Textarea
               id="bulk-codes"
               placeholder="e.g., 31251, 31252, 31271"
@@ -275,12 +276,13 @@ export function DataScraper() {
               onChange={(e) => setBulkCodes(e.target.value)}
               disabled={bulkMutation.isPending}
               rows={4}
+              className="border-3 font-mono"
             />
           </div>
-          <Button onClick={handleBulkScrape} disabled={bulkMutation.isPending}>
+          <Button onClick={handleBulkScrape} disabled={bulkMutation.isPending} className="h-12 border-4 font-bold">
             {bulkMutation.isPending ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
                 Scraping...
               </>
             ) : (
@@ -288,17 +290,17 @@ export function DataScraper() {
             )}
           </Button>
           {bulkMutation.isPending && (
-            <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
+            <div className="p-4 bg-blue-100 border-3 border-blue-700">
               <LoadingSpinner className="h-5 w-5" />
-              <p className="text-sm text-blue-800 mt-2">Scraping in progress. This may take a few minutes...</p>
+              <p className="text-sm font-bold text-blue-800 mt-2">Scraping in progress. This may take a few minutes...</p>
             </div>
           )}
           {bulkMessage && (
             <div
-              className={`p-3 rounded-md text-sm ${
+              className={`p-4 text-sm font-bold border-3 ${
                 bulkMessage.type === 'success'
-                  ? 'bg-green-100 text-green-800 border border-green-200'
-                  : 'bg-red-100 text-red-800 border border-red-200'
+                  ? 'bg-green-100 text-green-800 border-green-700'
+                  : 'bg-red-100 text-red-800 border-red-700'
               }`}
             >
               {bulkMessage.text}
@@ -308,41 +310,43 @@ export function DataScraper() {
       </div>
 
       {/* Range Scraper */}
-      <div className="p-6 border rounded-lg bg-card">
-        <h3 className="text-lg font-semibold mb-4">Range Scraper</h3>
+      <div className="p-6 border-4 border-foreground bg-card shadow-neo">
+        <h3 className="text-xl font-display font-black uppercase mb-4">Range Scraper</h3>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="start-code">Start Code (5 digits)</Label>
+              <Label htmlFor="start-code" className="font-bold uppercase text-sm">Start Code (5 digits)</Label>
               <Input
                 id="start-code"
                 placeholder="e.g., 31000"
                 value={startCode}
                 onChange={(e) => setStartCode(e.target.value)}
                 disabled={rangeMutation.isPending}
+                className="h-12 border-3 font-mono"
               />
             </div>
             <div>
-              <Label htmlFor="end-code">End Code (5 digits)</Label>
+              <Label htmlFor="end-code" className="font-bold uppercase text-sm">End Code (5 digits)</Label>
               <Input
                 id="end-code"
                 placeholder="e.g., 32000"
                 value={endCode}
                 onChange={(e) => setEndCode(e.target.value)}
                 disabled={rangeMutation.isPending}
+                className="h-12 border-3 font-mono"
               />
             </div>
           </div>
-          <div className="p-3 rounded-md bg-yellow-50 border border-yellow-200">
-            <p className="text-sm text-yellow-800">
+          <div className="p-4 bg-yellow-100 border-3 border-yellow-700">
+            <p className="text-sm font-bold text-yellow-800">
               Warning: Range scraping may take a long time depending on the range size. The operation will process
               all codes in the specified range.
             </p>
           </div>
-          <Button onClick={handleRangeScrape} disabled={rangeMutation.isPending}>
+          <Button onClick={handleRangeScrape} disabled={rangeMutation.isPending} className="h-12 border-4 font-bold">
             {rangeMutation.isPending ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
                 Scraping...
               </>
             ) : (
@@ -350,17 +354,17 @@ export function DataScraper() {
             )}
           </Button>
           {rangeMutation.isPending && (
-            <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
+            <div className="p-4 bg-blue-100 border-3 border-blue-700">
               <LoadingSpinner className="h-5 w-5" />
-              <p className="text-sm text-blue-800 mt-2">Range scraping in progress. This may take several minutes...</p>
+              <p className="text-sm font-bold text-blue-800 mt-2">Range scraping in progress. This may take several minutes...</p>
             </div>
           )}
           {rangeMessage && (
             <div
-              className={`p-3 rounded-md text-sm ${
+              className={`p-4 text-sm font-bold border-3 ${
                 rangeMessage.type === 'success'
-                  ? 'bg-green-100 text-green-800 border border-green-200'
-                  : 'bg-red-100 text-red-800 border border-red-200'
+                  ? 'bg-green-100 text-green-800 border-green-700'
+                  : 'bg-red-100 text-red-800 border-red-700'
               }`}
             >
               {rangeMessage.text}
@@ -370,40 +374,40 @@ export function DataScraper() {
       </div>
 
       {/* Recent Scrapes Table */}
-      <div className="p-6 border rounded-lg bg-card">
-        <h3 className="text-lg font-semibold mb-4">Recent Scrapes</h3>
+      <div className="p-6 border-4 border-foreground bg-card shadow-neo">
+        <h3 className="text-xl font-display font-black uppercase mb-4">Recent Scrapes</h3>
         {!recentScrapes ? (
           <LoadingSpinner />
         ) : recentScrapes.length === 0 ? (
-          <p className="text-center py-8 text-muted-foreground">No scrapes yet.</p>
+          <p className="text-center py-8 font-bold">No scrapes yet.</p>
         ) : (
-          <div className="border rounded-lg overflow-hidden">
+          <div className="border-3 border-foreground overflow-hidden">
             <table className="w-full text-left text-sm">
-              <thead className="bg-muted text-muted-foreground font-medium border-b">
+              <thead className="bg-muted font-bold border-b-3 border-foreground">
                 <tr>
-                  <th className="px-4 py-3">Subject Code</th>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Timestamp</th>
+                  <th className="px-4 py-4 uppercase">Subject Code</th>
+                  <th className="px-4 py-4 uppercase">Name</th>
+                  <th className="px-4 py-4 uppercase">Status</th>
+                  <th className="px-4 py-4 uppercase">Timestamp</th>
                 </tr>
               </thead>
-              <tbody className="divide-y">
+              <tbody className="divide-y-3 divide-foreground">
                 {recentScrapes.map((scrape) => (
                   <tr key={scrape.id} className="hover:bg-muted/50">
-                    <td className="px-4 py-3 font-mono">{scrape.unitCode}</td>
-                    <td className="px-4 py-3">{scrape.unitName}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-4 font-mono font-bold">{scrape.unitCode}</td>
+                    <td className="px-4 py-4 font-medium">{scrape.unitName}</td>
+                    <td className="px-4 py-4">
                       {scrape.scrapedAt ? (
-                        <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs">
+                        <span className="px-3 py-1 bg-green-500 text-white text-xs font-black uppercase border-2 border-foreground">
                           Success
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs">
+                        <span className="px-3 py-1 bg-gray-400 text-white text-xs font-black uppercase border-2 border-foreground">
                           Manual
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">
+                    <td className="px-4 py-4 font-medium text-muted-foreground">
                       {scrape.scrapedAt
                         ? formatDistanceToNow(new Date(scrape.scrapedAt), { addSuffix: true })
                         : 'Not scraped'}

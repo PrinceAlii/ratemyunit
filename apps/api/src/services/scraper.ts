@@ -33,7 +33,7 @@ export class ScraperService {
     const selectorsObj = (scraperSelectors as any) || {};
     const searchConfig = selectorsObj.search;
     
-    // Create clean selectors object (remove search config to pass Zod record<string> check)
+    // Filter out nested configurations to ensure compatibility with string-based selector records
     const cleanSelectors: Record<string, string> = {};
     for (const [key, value] of Object.entries(selectorsObj)) {
         if (key !== 'search' && typeof value === 'string') {

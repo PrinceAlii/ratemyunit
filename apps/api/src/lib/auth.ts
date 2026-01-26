@@ -3,7 +3,6 @@ import { DrizzlePostgreSQLAdapter } from '@lucia-auth/adapter-drizzle';
 import { db } from '@ratemyunit/db/client';
 import { users, sessions } from '@ratemyunit/db/schema';
 
-// Create Lucia adapter.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const adapter = new DrizzlePostgreSQLAdapter(db, sessions as any, users as any);
 

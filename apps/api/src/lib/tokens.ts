@@ -43,12 +43,10 @@ export async function verifyEmailToken(token: string): Promise<string | null> {
   }
 
   if (record.expiresAt < new Date()) {
-    // Token expired, delete it.
     await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.id, record.id));
     return null;
   }
 
-  // Delete token after successful verification (single-use).
   await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.id, record.id));
 
   return record.userId;
@@ -61,7 +59,6 @@ export async function createPasswordResetToken(userId: string): Promise<string> 
   const token = generateToken();
   const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
 
-  // Delete any existing tokens for this user.
   await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, userId));
 
   await db.insert(passwordResetTokens).values({
@@ -88,12 +85,11 @@ export async function verifyPasswordResetToken(token: string): Promise<string | 
   }
 
   if (record.expiresAt < new Date()) {
-    // Token expired, delete it.
     await db.delete(passwordResetTokens).where(eq(passwordResetTokens.id, record.id));
     return null;
   }
 
-  // Don't delete token yet - wait until password is actually reset.
+  // Single-use token logic handled by the caller after password reset
   return record.userId;
 }
 

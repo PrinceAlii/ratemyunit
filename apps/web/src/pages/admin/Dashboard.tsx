@@ -16,7 +16,6 @@ export function AdminDashboard() {
   const [banDialogOpen, setBanDialogOpen] = useState(false);
   const [userToBan, setUserToBan] = useState<{ id: string; email: string; banned: boolean } | null>(null);
 
-  // Queries
   const { data: stats } = useQuery({
     queryKey: ['admin', 'stats'],
     queryFn: () => api.get<any>('/api/admin/stats'),
@@ -35,7 +34,6 @@ export function AdminDashboard() {
     enabled: activeTab === 'users',
   });
 
-  // Mutations
   const moderateMutation = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'remove' | 'restore' }) =>
       api.post(`/api/admin/reviews/${id}/moderate`, { action }),
@@ -128,7 +126,6 @@ export function AdminDashboard() {
         </Button>
       </div>
 
-      {/* Overview Tab */}
       {activeTab === 'overview' && stats && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="p-6 border-4 border-foreground bg-primary text-primary-foreground shadow-neo">
@@ -154,7 +151,6 @@ export function AdminDashboard() {
         </div>
       )}
 
-      {/* Moderation Tab */}
       {activeTab === 'moderation' && (
         <div className="space-y-4">
           <h2 className="text-2xl font-display font-black uppercase">Flagged Reviews Queue</h2>
@@ -202,7 +198,6 @@ export function AdminDashboard() {
         </div>
       )}
 
-      {/* Users Tab */}
       {activeTab === 'users' && (
         <div className="space-y-4">
           <h2 className="text-2xl font-display font-black uppercase">User Management</h2>
@@ -262,10 +257,8 @@ export function AdminDashboard() {
         </div>
       )}
 
-      {/* Data Scraping Tab */}
       {activeTab === 'scraper' && <DataScraper />}
 
-      {/* Ban Confirmation Dialog */}
       <ConfirmDialog
         open={banDialogOpen}
         onOpenChange={setBanDialogOpen}

@@ -107,7 +107,6 @@ export function UnitDetails() {
 
   return (
     <div className="container max-w-5xl mx-auto px-4 py-8 space-y-8">
-      {/* Header Section */}
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
           <div className="flex-1">
@@ -159,7 +158,6 @@ export function UnitDetails() {
         </div>
       </div>
 
-      {/* Stats Section */}
       {averages && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-5 border-4 border-foreground bg-primary text-primary-foreground shadow-neo">
@@ -183,7 +181,6 @@ export function UnitDetails() {
 
       <hr className="border-t-4 border-foreground" />
 
-      {/* Review Form */}
       {showReviewForm && (
         <div className="mb-8">
           <ReviewForm 
@@ -194,7 +191,6 @@ export function UnitDetails() {
         </div>
       )}
 
-      {/* Reviews List */}
       <div className="space-y-6">
         <h2 className="text-3xl font-display font-black uppercase">Student Reviews</h2>
 

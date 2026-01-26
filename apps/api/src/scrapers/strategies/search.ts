@@ -25,10 +25,8 @@ export class SearchDomScraper extends GenericDomScraper {
     const page = await browser.newPage();
 
     try {
-      // 1. Go to Search Page
       await page.goto(fullSearchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-      // 2. Perform Search
       await page.fill(searchConfig.input, cleanCode);
       
       if (searchConfig.btn) {
@@ -37,18 +35,14 @@ export class SearchDomScraper extends GenericDomScraper {
         await page.press(searchConfig.input, 'Enter');
       }
 
-      // 3. Wait for Results
       const resultSelector = searchConfig.result;
       await page.waitForSelector(resultSelector, { timeout: 10000 });
 
-      // 4. Click first result
-      // We need to ensure the result is relevant, but for now blind faith in top 1
       await Promise.all([
         page.waitForLoadState('domcontentloaded'),
-        page.click(resultSelector) // Clicks the first one
+        page.click(resultSelector)
       ]);
 
-      // 5. Extract using GenericDomScraper logic
       return await this.extractFromPage(page, cleanCode);
 
     } catch (error) {

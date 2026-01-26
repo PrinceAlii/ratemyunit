@@ -20,9 +20,7 @@ export function HomePage() {
 
   return (
     <div className="container mx-auto px-4 py-16">
-      {/* Hero Section - Asymmetrical Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-16">
-        {/* Text Column - 7 cols */}
         <div className="lg:col-span-7 space-y-6">
           <div>
             <h1 className="text-6xl md:text-8xl font-display font-black uppercase leading-none mb-4">
@@ -41,7 +39,6 @@ export function HomePage() {
           </div>
         </div>
 
-        {/* Search Column - 5 cols */}
         <div className="lg:col-span-5 flex flex-col justify-center">
           <form onSubmit={handleSearch} className="w-full">
             <div className="relative">
@@ -73,7 +70,6 @@ export function HomePage() {
         </div>
       </div>
 
-      {/* Feature Cards - Different Colors & Offset */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl mx-auto">
         <div className="p-6 border-4 border-foreground bg-primary text-primary-foreground shadow-neo hover:shadow-neo-lg transition-all">
           <h3 className="text-xl font-display font-black uppercase mb-3">Anonymous Reviews</h3>

@@ -178,12 +178,6 @@ export async function adminRoutes(app: FastifyInstance) {
     const { unitCodes, universityId } = result.data;
 
     try {
-      // We need universityId. If optional in schema, we need to handle it.
-      // Schema: universityId: z.string().uuid().optional()
-      // If undefined, queue worker will fail or scrapeUnit will handle default (UTS).
-      // Worker expects universityId string.
-      // Let's enforce it or default it here.
-      
       const effectiveUniId = universityId || (await db.select().from(universities).where(eq(universities.abbreviation, 'UTS')).limit(1).then(r => r[0]?.id));
       
       if (!effectiveUniId) return reply.status(400).send({ success: false, error: 'University ID required or default UTS not found' });

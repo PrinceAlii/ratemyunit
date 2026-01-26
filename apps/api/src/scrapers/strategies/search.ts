@@ -1,0 +1,65 @@
+import { Browser } from 'playwright';
+import { GenericDomScraper } from './generic';
+import { ScraperResult } from '../uts/types';
+
+export class SearchDomScraper extends GenericDomScraper {
+
+  async scrapeSubject(browser: Browser, subjectCode: string): Promise<ScraperResult> {
+    const scrapedAt = new Date();
+    const cleanCode = subjectCode.trim();
+    
+    // Check search config
+    const searchConfig = this.config.search;
+    const searchUrl = this.config.routes?.search;
+
+    if (!searchConfig || !searchUrl) {
+      return { 
+        success: false, 
+        subjectCode: cleanCode, 
+        error: 'Search configuration missing (routes.search or search object)', 
+        scrapedAt 
+      };
+    }
+
+    const fullSearchUrl = `${this.config.baseUrl}${searchUrl}`;
+    const page = await browser.newPage();
+
+    try {
+      // 1. Go to Search Page
+      await page.goto(fullSearchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+      // 2. Perform Search
+      await page.fill(searchConfig.input, cleanCode);
+      
+      if (searchConfig.btn) {
+        await page.click(searchConfig.btn);
+      } else {
+        await page.press(searchConfig.input, 'Enter');
+      }
+
+      // 3. Wait for Results
+      const resultSelector = searchConfig.result;
+      await page.waitForSelector(resultSelector, { timeout: 10000 });
+
+      // 4. Click first result
+      // We need to ensure the result is relevant, but for now blind faith in top 1
+      await Promise.all([
+        page.waitForLoadState('domcontentloaded'),
+        page.click(resultSelector) // Clicks the first one
+      ]);
+
+      // 5. Extract using GenericDomScraper logic
+      return await this.extractFromPage(page, cleanCode);
+
+    } catch (error) {
+      return { 
+        success: false, 
+        subjectCode: cleanCode, 
+        error: `Search/Scrape failed: ${error instanceof Error ? error.message : String(error)}`, 
+        scrapedAt 
+      };
+    } finally {
+      await page.close();
+    }
+  }
+}

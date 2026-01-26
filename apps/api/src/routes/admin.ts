@@ -1,12 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '@ratemyunit/db/client';
-import { units, reviews, users } from '@ratemyunit/db/schema';
+import { units, reviews, users, universities } from '@ratemyunit/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
 import { requireAdmin } from '../middleware/auth.js';
 import { scraperQueue } from '../lib/queue.js';
 import { moderateReviewSchema, banUserSchema } from '@ratemyunit/validators';
-import { scraperService } from '../services/scraper.js';
 
 const scrapeSchema = z.object({
   unitCode: z.string().min(1),
@@ -15,7 +14,6 @@ const scrapeSchema = z.object({
 
 const bulkScrapeSchema = z.object({
   unitCodes: z.array(z.string().min(1)).min(1).max(100),
-  delayMs: z.number().int().min(500).max(10000).optional(),
   universityId: z.string().uuid().optional(),
 });
 
@@ -154,9 +152,14 @@ export async function adminRoutes(app: FastifyInstance) {
     }
 
     const { unitCode, universityId } = result.data;
+    if (!universityId) return reply.status(400).send({ success: false, error: 'University ID required' });
 
     // Add to queue with university ID
-    await scraperQueue.add('scrape-unit', { unitCode, universityId });
+    await scraperQueue.add('scrape-unit', { 
+        type: 'scrape',
+        unitCode, 
+        universityId 
+    });
 
     return reply.send({
       success: true,
@@ -172,26 +175,37 @@ export async function adminRoutes(app: FastifyInstance) {
     const result = bulkScrapeSchema.safeParse(request.body);
     if (!result.success) return reply.status(400).send(result.error);
 
-    const { unitCodes, delayMs, universityId } = result.data;
+    const { unitCodes, universityId } = result.data;
 
     try {
-      const results = await scraperService.scrapeUnits(unitCodes, {
-        delayMs,
-        universityId,
-        continueOnError: true
-      });
+      // We need universityId. If optional in schema, we need to handle it.
+      // Schema: universityId: z.string().uuid().optional()
+      // If undefined, queue worker will fail or scrapeUnit will handle default (UTS).
+      // Worker expects universityId string.
+      // Let's enforce it or default it here.
+      
+      const effectiveUniId = universityId || (await db.select().from(universities).where(eq(universities.abbreviation, 'UTS')).limit(1).then(r => r[0]?.id));
+      
+      if (!effectiveUniId) return reply.status(400).send({ success: false, error: 'University ID required or default UTS not found' });
 
-      const successful = results.filter(r => r.success).length;
-      const failed = results.filter(r => !r.success).length;
-      const errors = results.filter(r => !r.success).map(r => ({ subjectCode: r.subjectCode, error: r.error || 'Unknown' }));
+      const finalJobs = unitCodes.map(code => ({
+        name: 'scrape-unit',
+        data: {
+            type: 'scrape' as const,
+            unitCode: code,
+            universityId: effectiveUniId
+        },
+        opts: { jobId: `scrape-${effectiveUniId}-${code}` }
+      }));
+
+      await scraperQueue.addBulk(finalJobs);
 
       return reply.send({
         success: true,
         data: {
           total: unitCodes.length,
-          successful,
-          failed,
-          errors,
+          queued: unitCodes.length,
+          message: `Queued ${unitCodes.length} jobs for background processing.`
         },
       });
     } catch (error) {
@@ -211,23 +225,30 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   /**
-   * GET /api/admin/scrape/status
+   * GET /api/admin/queue-stats
    * Get scraping job status from queue.
    */
-  app.get('/scrape/status', async () => {
-    const waiting = await scraperQueue.getWaiting();
-    const active = await scraperQueue.getActive();
-    const completed = await scraperQueue.getCompleted();
-    const failed = await scraperQueue.getFailed();
-
+  app.get('/queue-stats', async () => {
+    const counts = await scraperQueue.getJobCounts('waiting', 'active', 'completed', 'failed');
     return {
       success: true,
-      data: {
-        waiting: waiting.length,
-        active: active.length,
-        completed: completed.length,
-        failed: failed.length,
-      },
+      data: counts,
     };
+  });
+
+  /**
+   * POST /api/admin/university/:id/scan
+   * Trigger a discovery scan for a university.
+   */
+  app.post('/university/:id/scan', async (request) => {
+    const { id } = request.params as { id: string };
+    
+    // Add discovery job
+    await scraperQueue.add('discovery', { 
+      type: 'discovery',
+      universityId: id 
+    });
+
+    return { success: true, message: 'Discovery scan queued' };
   });
 }

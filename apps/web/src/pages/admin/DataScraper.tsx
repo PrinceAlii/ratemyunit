@@ -9,7 +9,8 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { LoadingSpinner } from '../../components/ui/loading-spinner';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
-import { Database, AlertCircle, CheckCircle, Clock, Loader2 } from 'lucide-react';
+import { Database, AlertCircle, CheckCircle, Clock, Loader2, School, Search } from 'lucide-react';
+import type { University } from '@ratemyunit/types';
 
 interface ScrapeStatus {
   waiting: number;
@@ -25,29 +26,29 @@ interface BulkScrapeResult {
   errors: Array<{ code: string; error: string }>;
 }
 
-interface RangeScrapeResult extends BulkScrapeResult {
-  durationMs: number;
-}
-
 export function DataScraper() {
   const queryClient = useQueryClient();
 
   // Form states.
+  const [selectedUni, setSelectedUni] = useState('');
   const [singleCode, setSingleCode] = useState('');
   const [bulkCodes, setBulkCodes] = useState('');
-  const [startCode, setStartCode] = useState('');
-  const [endCode, setEndCode] = useState('');
 
   // Message states.
   const [singleMessage, setSingleMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [bulkMessage, setBulkMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [rangeMessage, setRangeMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [scanMessage, setScanMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Confirmation dialog states.
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
-  const [rangeDialogOpen, setRangeDialogOpen] = useState(false);
+  const [scanDialogOpen, setScanDialogOpen] = useState(false);
   const [pendingBulkCodes, setPendingBulkCodes] = useState<string[]>([]);
-  const [pendingRange, setPendingRange] = useState<{ start: string; end: string } | null>(null);
+
+  // Fetch universities.
+  const { data: universities } = useQuery({
+    queryKey: ['universities'],
+    queryFn: () => api.get<University[]>('/api/public/universities'),
+  });
 
   // Fetch queue status with polling every 5 seconds.
   const { data: status, isLoading: statusLoading } = useQuery({
@@ -65,6 +66,7 @@ export function DataScraper() {
         unitCode: string;
         unitName: string;
         scrapedAt: string | null;
+        universityName?: string;
       }>>('/api/units/search', { limit: 10, sort: 'recent' });
       return response;
     },
@@ -73,7 +75,10 @@ export function DataScraper() {
 
   // Single scrape mutation.
   const singleMutation = useMutation({
-    mutationFn: (code: string) => api.post('/api/admin/scrape', { unitCode: code }),
+    mutationFn: (code: string) => api.post('/api/admin/scrape', { 
+      unitCode: code,
+      universityId: selectedUni || undefined 
+    }),
     onSuccess: (_, code) => {
       setSingleMessage({ type: 'success', text: `Scrape job queued for unit ${code}` });
       toast.success(`Scrape job queued for unit ${code}`);
@@ -88,7 +93,10 @@ export function DataScraper() {
 
   // Bulk scrape mutation.
   const bulkMutation = useMutation({
-    mutationFn: (codes: string[]) => api.post<BulkScrapeResult>('/api/admin/scrape/bulk', { unitCodes: codes }),
+    mutationFn: (codes: string[]) => api.post<BulkScrapeResult>('/api/admin/scrape/bulk', { 
+      unitCodes: codes,
+      universityId: selectedUni || undefined
+    }),
     onSuccess: (data) => {
       const message = `Scraped ${data.successful}/${data.total} units successfully. ${data.failed} failed.`;
       setBulkMessage({ type: 'success', text: message });
@@ -104,24 +112,20 @@ export function DataScraper() {
     },
   });
 
-  // Range scrape mutation.
-  const rangeMutation = useMutation({
-    mutationFn: ({ start, end }: { start: string; end: string }) =>
-      api.post<RangeScrapeResult>('/api/admin/scrape/range', { startCode: start, endCode: end }),
-    onSuccess: (data) => {
-      const durationSec = Math.round(data.durationMs / 1000);
-      const message = `Scraped ${data.successful}/${data.total} units in ${durationSec}s. ${data.failed} failed.`;
-      setRangeMessage({ type: 'success', text: message });
+  // Discovery Scan mutation.
+  const scanMutation = useMutation({
+    mutationFn: (uniId: string) => api.post(`/api/admin/university/${uniId}/scan`, {}),
+    onSuccess: () => {
+      const message = `Discovery scan queued. The system will now crawl the university site for unit codes.`;
+      setScanMessage({ type: 'success', text: message });
       toast.success(message);
-      setStartCode('');
-      setEndCode('');
-      setRangeDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['admin'] });
+      setScanDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'scrape', 'status'] });
     },
     onError: (error: Error) => {
-      setRangeMessage({ type: 'error', text: error.message });
-      toast.error(`Range scrape failed: ${error.message}`);
-      setRangeDialogOpen(false);
+      setScanMessage({ type: 'error', text: error.message });
+      toast.error(`Scan failed: ${error.message}`);
+      setScanDialogOpen(false);
     },
   });
 
@@ -160,25 +164,18 @@ export function DataScraper() {
     bulkMutation.mutate(pendingBulkCodes);
   };
 
-  const handleRangeScrape = () => {
-    if (!startCode.trim() || !endCode.trim()) {
-      setRangeMessage({ type: 'error', text: 'Please enter both start and end codes' });
-      return;
+  const handleScanClick = () => {
+    if (!selectedUni) {
+        toast.error("Please select a target university first");
+        return;
     }
-
-    if (!/^\d{5}$/.test(startCode.trim()) || !/^\d{5}$/.test(endCode.trim())) {
-      setRangeMessage({ type: 'error', text: 'Codes must be 5 digits' });
-      return;
-    }
-
-    setRangeMessage(null);
-    setPendingRange({ start: startCode.trim(), end: endCode.trim() });
-    setRangeDialogOpen(true);
+    setScanMessage(null);
+    setScanDialogOpen(true);
   };
 
-  const confirmRangeScrape = () => {
-    if (pendingRange) {
-      rangeMutation.mutate(pendingRange);
+  const confirmScan = () => {
+    if (selectedUni) {
+        scanMutation.mutate(selectedUni);
     }
   };
 
@@ -224,6 +221,75 @@ export function DataScraper() {
         </div>
       </div>
 
+      {/* Global University Selector */}
+      <div className="p-6 border-4 border-foreground bg-card shadow-neo">
+        <div className="space-y-2">
+          <Label className="font-bold uppercase text-sm flex items-center gap-2">
+            <School className="h-4 w-4" />
+            Target University
+          </Label>
+          <select
+            className="flex h-12 w-full border-3 border-input bg-background px-3 py-2 text-sm font-medium shadow-neo-sm focus:outline-none focus:shadow-neo"
+            value={selectedUni}
+            onChange={(e) => setSelectedUni(e.target.value)}
+          >
+            <option value="">-- Default (UTS) --</option>
+            {universities?.map((uni) => (
+              <option key={uni.id} value={uni.id}>
+                {uni.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground font-medium">
+            Select a university to apply scraping actions to. Leave empty for default (UTS).
+          </p>
+        </div>
+      </div>
+
+      {/* Discovery Scanner (NEW) */}
+      <div className="p-6 border-4 border-foreground bg-card shadow-neo">
+        <h3 className="text-xl font-display font-black uppercase mb-4 flex items-center gap-2">
+            <Search className="h-6 w-6" />
+            Auto-Discovery Scanner
+        </h3>
+        <p className="mb-4 text-sm font-medium">
+            This tool will automatically crawl the selected university's handbook to discover unit codes and add them to the scrape queue.
+        </p>
+        
+        {!selectedUni && (
+            <div className="mb-4 p-3 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 text-sm font-bold">
+                Select a university above to enable the scanner.
+            </div>
+        )}
+
+        <Button 
+            onClick={handleScanClick} 
+            disabled={scanMutation.isPending || !selectedUni} 
+            className="h-12 border-4 font-bold bg-accent text-accent-foreground hover:bg-accent/90"
+        >
+            {scanMutation.isPending ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                Scanning...
+              </>
+            ) : (
+              'Start Discovery Scan'
+            )}
+        </Button>
+
+        {scanMessage && (
+            <div
+              className={`mt-4 p-4 text-sm font-bold border-3 ${
+                scanMessage.type === 'success'
+                  ? 'bg-green-100 text-green-800 border-green-700'
+                  : 'bg-red-100 text-red-800 border-red-700'
+              }`}
+            >
+              {scanMessage.text}
+            </div>
+        )}
+      </div>
+
       {/* Single Subject Scraper */}
       <div className="p-6 border-4 border-foreground bg-card shadow-neo">
         <h3 className="text-xl font-display font-black uppercase mb-4">Single Subject Scraper</h3>
@@ -232,7 +298,7 @@ export function DataScraper() {
             <Label htmlFor="single-code" className="font-bold uppercase text-sm">Subject Code</Label>
             <Input
               id="single-code"
-              placeholder="e.g., 31251"
+              placeholder="e.g., 31251 or FIT1008"
               value={singleCode}
               onChange={(e) => setSingleCode(e.target.value)}
               disabled={singleMutation.isPending}
@@ -309,70 +375,6 @@ export function DataScraper() {
         </div>
       </div>
 
-      {/* Range Scraper */}
-      <div className="p-6 border-4 border-foreground bg-card shadow-neo">
-        <h3 className="text-xl font-display font-black uppercase mb-4">Range Scraper</h3>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="start-code" className="font-bold uppercase text-sm">Start Code (5 digits)</Label>
-              <Input
-                id="start-code"
-                placeholder="e.g., 31000"
-                value={startCode}
-                onChange={(e) => setStartCode(e.target.value)}
-                disabled={rangeMutation.isPending}
-                className="h-12 border-3 font-mono"
-              />
-            </div>
-            <div>
-              <Label htmlFor="end-code" className="font-bold uppercase text-sm">End Code (5 digits)</Label>
-              <Input
-                id="end-code"
-                placeholder="e.g., 32000"
-                value={endCode}
-                onChange={(e) => setEndCode(e.target.value)}
-                disabled={rangeMutation.isPending}
-                className="h-12 border-3 font-mono"
-              />
-            </div>
-          </div>
-          <div className="p-4 bg-yellow-100 border-3 border-yellow-700">
-            <p className="text-sm font-bold text-yellow-800">
-              Warning: Range scraping may take a long time depending on the range size. The operation will process
-              all codes in the specified range.
-            </p>
-          </div>
-          <Button onClick={handleRangeScrape} disabled={rangeMutation.isPending} className="h-12 border-4 font-bold">
-            {rangeMutation.isPending ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                Scraping...
-              </>
-            ) : (
-              'Scrape Range'
-            )}
-          </Button>
-          {rangeMutation.isPending && (
-            <div className="p-4 bg-blue-100 border-3 border-blue-700">
-              <LoadingSpinner className="h-5 w-5" />
-              <p className="text-sm font-bold text-blue-800 mt-2">Range scraping in progress. This may take several minutes...</p>
-            </div>
-          )}
-          {rangeMessage && (
-            <div
-              className={`p-4 text-sm font-bold border-3 ${
-                rangeMessage.type === 'success'
-                  ? 'bg-green-100 text-green-800 border-green-700'
-                  : 'bg-red-100 text-red-800 border-red-700'
-              }`}
-            >
-              {rangeMessage.text}
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Recent Scrapes Table */}
       <div className="p-6 border-4 border-foreground bg-card shadow-neo">
         <h3 className="text-xl font-display font-black uppercase mb-4">Recent Scrapes</h3>
@@ -385,9 +387,9 @@ export function DataScraper() {
             <table className="w-full text-left text-sm">
               <thead className="bg-muted font-bold border-b-3 border-foreground">
                 <tr>
-                  <th className="px-4 py-4 uppercase">Subject Code</th>
+                  <th className="px-4 py-4 uppercase">Code</th>
                   <th className="px-4 py-4 uppercase">Name</th>
-                  <th className="px-4 py-4 uppercase">Status</th>
+                  <th className="px-4 py-4 uppercase">University</th>
                   <th className="px-4 py-4 uppercase">Timestamp</th>
                 </tr>
               </thead>
@@ -396,17 +398,7 @@ export function DataScraper() {
                   <tr key={scrape.id} className="hover:bg-muted/50">
                     <td className="px-4 py-4 font-mono font-bold">{scrape.unitCode}</td>
                     <td className="px-4 py-4 font-medium">{scrape.unitName}</td>
-                    <td className="px-4 py-4">
-                      {scrape.scrapedAt ? (
-                        <span className="px-3 py-1 bg-green-500 text-white text-xs font-black uppercase border-2 border-foreground">
-                          Success
-                        </span>
-                      ) : (
-                        <span className="px-3 py-1 bg-gray-400 text-white text-xs font-black uppercase border-2 border-foreground">
-                          Manual
-                        </span>
-                      )}
-                    </td>
+                    <td className="px-4 py-4 font-medium">{scrape.universityName || 'Unknown'}</td>
                     <td className="px-4 py-4 font-medium text-muted-foreground">
                       {scrape.scrapedAt
                         ? formatDistanceToNow(new Date(scrape.scrapedAt), { addSuffix: true })
@@ -430,19 +422,14 @@ export function DataScraper() {
         onConfirm={confirmBulkScrape}
       />
 
-      {/* Range Scrape Confirmation Dialog */}
-      <ConfirmDialog
-        open={rangeDialogOpen}
-        onOpenChange={setRangeDialogOpen}
-        title="Confirm Range Scrape"
-        description={
-          pendingRange
-            ? `Are you sure you want to scrape all codes from ${pendingRange.start} to ${pendingRange.end}? This operation may take a long time and cannot be cancelled.`
-            : ''
-        }
-        confirmText="Start Scraping"
-        onConfirm={confirmRangeScrape}
-        variant="destructive"
+       {/* Scan Confirmation Dialog */}
+       <ConfirmDialog
+        open={scanDialogOpen}
+        onOpenChange={setScanDialogOpen}
+        title="Start Discovery Scan?"
+        description="This will start a crawler that visits the university handbook page and looks for links matching the unit code pattern. Found units will be automatically added to the scrape queue. This process runs in the background."
+        confirmText="Start Scan"
+        onConfirm={confirmScan}
       />
     </div>
   );

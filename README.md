@@ -1,156 +1,102 @@
 # RateMyUnit
 
-A platform for Australian university students to rate their units/subjects.
+RateMyUnit is an open-source platform designed to aggregate and standardize student reviews for university subjects across Australia. It aims to solve the problem of fragmented feedback by providing a centralized, searchable database of subject ratings, workload estimates, and qualitative reviews.
+
+The platform is built to be scalable and agnostic, supporting multiple universities through a configurable scraping engine that adapts to different handbook architectures (CourseLoop, Akari, legacy HTML).
 
 ## Tech Stack
 
-- **Frontend**: Vite + React 18 + TypeScript + Tailwind CSS
-- **Backend**: Fastify + TypeScript
-- **Database**: PostgreSQL 15+ with Drizzle ORM
-- **Auth**: Lucia v3
-- **Job Queue**: BullMQ + Redis
-- **Monorepo**: Turborepo + pnpm
+**Core**
+- **Runtime:** Node.js (TypeScript)
+- **Monorepo:** Turborepo
+- **Package Manager:** PNPM
 
-## Getting Started
+**Frontend (`apps/web`)**
+- React 18
+- Vite
+- Tailwind CSS (Neo-brutalist design system)
+- TanStack Query
+
+**Backend (`apps/api`)**
+- Fastify
+- BullMQ (Redis-backed job queue)
+- Playwright (Headless scraping)
+- Zod (Validation)
+
+**Data (`packages/db`)**
+- PostgreSQL
+- Drizzle ORM
+- Lucia Auth
+
+## Architecture
+
+The system uses a strategy-based scraping architecture. Instead of hardcoded parsers for every university, it utilizes a database-driven configuration to select the appropriate scraping strategy:
+
+- **CourseLoop Strategy:** For modern SPAs used by universities like UTS and Monash.
+- **Generic DOM Strategy:** For standard server-rendered handbooks.
+- **Search-First Strategy:** For sites that obscure direct linking, utilizing an automated search-and-scrape workflow.
+
+Job processing is handled asynchronously via Redis queues, allowing for bulk data ingestion and auto-discovery of new subjects without impacting API performance.
+
+## Local Development
 
 ### Prerequisites
-
 - Node.js 20+
-- pnpm 8+
+- PNPM (`npm i -g pnpm`)
 - Docker & Docker Compose
 
-### Installation
+### Setup Guide
 
-1. Install dependencies:
-```bash
-pnpm install
-```
+1. **Clone and Install**
+   ```bash
+   git clone https://github.com/your-org/ratemyunit.git
+   cd ratemyunit
+   pnpm install
+   ```
 
-2. Start PostgreSQL and Redis:
-```bash
-docker-compose up -d
-```
+2. **Environment Configuration**
+   Copy the example environment files and configure them. You typically only need to set the database URL and session secrets.
+   ```bash
+   cp apps/api/.env.example apps/api/.env
+   cp packages/db/.env.example packages/db/.env
+   ```
 
-3. Run database migrations:
-```bash
-pnpm db:migrate
-```
+3. **Infrastructure**
+   Start the PostgreSQL and Redis containers.
+   ```bash
+   docker-compose up -d
+   ```
 
-4. Seed the database:
-```bash
-pnpm db:seed
-```
+4. **Database Initialization**
+   Run migrations to set up the schema, then seed the database with university configurations and the default admin account.
+   ```bash
+   pnpm db:migrate
+   pnpm db:seed
+   ```
 
-5. Start development servers:
-```bash
-pnpm dev
-```
+5. **Start Development Server**
+   This will launch both the API and Web apps in watch mode.
+   ```bash
+   pnpm dev
+   ```
 
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:3000
-- API Docs: http://localhost:3000/documentation
+   - Frontend: http://localhost:5173
+   - API: http://localhost:3000
 
-## Project Structure
+## Scraper Usage
 
-```
-ratemyunit/
-├── apps/
-│   ├── web/              # Vite + React frontend
-│   └── api/              # Fastify backend
-├── packages/
-│   ├── db/               # Drizzle schema + migrations
-│   ├── types/            # Shared TypeScript types
-│   └── validators/       # Zod schemas
-├── docker-compose.yml    # Local postgres + redis
-└── turbo.json
-```
+Access the scraper interface via the Admin Dashboard. The system comes pre-configured with support for major Australian universities (UTS, Monash, USYD, UNSW, UQ, UWA, etc.).
 
-## Scripts
+- **Single Scrape:** Enter a specific subject code to fetch immediately.
+- **Auto-Discovery:** Use the "Scan" feature to crawl a university's handbook and populate the database with found units automatically.
 
-- `pnpm dev` - Start all apps in development mode
-- `pnpm build` - Build all apps
-- `pnpm lint` - Lint all code
-- `pnpm typecheck` - Type check all TypeScript
-- `pnpm test` - Run all tests
-- `pnpm db:migrate` - Run database migrations
-- `pnpm db:seed` - Seed database with test data
-- `pnpm db:studio` - Open Drizzle Studio
+## Contributing
 
-## Data Scraping
-
-RateMyUnit includes an automated web scraping system to populate the database with subject/unit data from university handbooks.
-
-### Supported Universities
-
-- ✅ **UTS (University of Technology Sydney)** - Fully supported
-- 🚧 **Other universities** - Planned
-
-### Quick Start
-
-#### Via Admin Panel (Recommended)
-
-1. Login to admin account at `/admin`
-2. Navigate to "Data Scraping" tab
-3. Choose scraping method:
-   - **Single Subject**: Enter one subject code (e.g., "31251")
-   - **Bulk Scrape**: Enter multiple comma-separated codes
-   - **Range Scrape**: Scrape a range of codes (e.g., 31000-31999)
-
-#### Programmatically
-
-```typescript
-import { scrapeUTSSubject, scrapeUTSSubjects } from './apps/api/src/scrapers/uts';
-
-// Scrape single subject
-const result = await scrapeUTSSubject('31251');
-
-// Scrape multiple subjects with rate limiting
-const bulkResult = await scrapeUTSSubjects(['31251', '31252', '31271'], {
-  delayMs: 2000, // 2 second delay between requests
-  continueOnError: true,
-});
-
-console.log(`Scraped ${bulkResult.successful}/${bulkResult.total} subjects`);
-```
-
-### Prerequisites for Scraping
+We welcome contributions, especially for improving scraper selectors or adding support for new institutions. Please ensure you run type checks before submitting a PR.
 
 ```bash
-# Install Playwright browsers
-npx playwright install chromium
-
-# Ensure Redis is running (for job queue)
-docker-compose up -d redis
+pnpm typecheck
 ```
-
-### Features
-
-- ✅ Type-safe with Zod validation
-- ✅ Rate limiting to respect servers
-- ✅ Comprehensive error handling
-- ✅ Background job processing with BullMQ
-- ✅ Real-time progress tracking in admin UI
-- ✅ Automatic database upserts
-- ✅ Admin-only access control
-
-### Documentation
-
-- **Project Context & Developer Handbook**: `PROJECT_CONTEXT.md` (Primary resource for developers and AI agents)
-- **UTS Scraper**: `apps/api/src/scrapers/uts/README.md`
-- **Testing Guide**: `apps/api/docs/scraper-testing-guide.md`
-
-### Extending to Other Universities
-
-To add support for a new university:
-
-1. Copy the UTS scraper template from `apps/api/src/scrapers/uts/`
-2. Implement university-specific extraction logic in `scraper.ts`
-3. Update validators and parsers for the university's data format
-4. Add university routes to `apps/api/src/routes/admin.ts`
-5. Update admin UI to include new university option
-6. Test thoroughly using the testing guide
-
-See `apps/api/src/scrapers/uts/` for a complete reference implementation.
 
 ## License
 

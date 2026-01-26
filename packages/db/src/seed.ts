@@ -5,7 +5,7 @@ import { hash } from '@node-rs/argon2';
 import { eq } from 'drizzle-orm';
 
 const AUSTRALIAN_UNIVERSITIES = [
-  // --- CourseLoop Universities (Confirmed) ---
+  // --- CourseLoop Universities (Verified) ---
   {
     name: 'University of Technology Sydney',
     abbreviation: 'UTS',
@@ -13,10 +13,10 @@ const AUSTRALIAN_UNIVERSITIES = [
     websiteUrl: 'https://www.uts.edu.au',
     handbookUrl: 'https://handbook.uts.edu.au',
     scraperType: 'courseloop',
-    scraperRoutes: JSON.stringify({
+    scraperRoutes: {
       base: 'https://handbook.uts.edu.au',
-      subject: '/subject/current/:code' // UTS specific legacy URL structure, actually handled by scraper logic but config helps
-    })
+      subject: '/subject/current/:code'
+    }
   },
   {
     name: 'Monash University',
@@ -25,22 +25,22 @@ const AUSTRALIAN_UNIVERSITIES = [
     websiteUrl: 'https://www.monash.edu',
     handbookUrl: 'https://handbook.monash.edu',
     scraperType: 'courseloop',
-    scraperRoutes: JSON.stringify({
+    scraperRoutes: {
       base: 'https://handbook.monash.edu',
       subject: '/current/units/:code'
-    })
+    }
   },
   {
     name: 'Flinders University',
     abbreviation: 'Flinders',
-    emailDomain: 'flinders.edu.au', // Check student domain
+    emailDomain: 'flinders.edu.au',
     websiteUrl: 'https://www.flinders.edu.au',
     handbookUrl: 'https://handbook.flinders.edu.au',
     scraperType: 'courseloop',
-    scraperRoutes: JSON.stringify({
+    scraperRoutes: {
       base: 'https://handbook.flinders.edu.au',
-      subject: '/current/topics/:code'
-    })
+      subject: '/topic/:code' // Singular?
+    }
   },
   {
     name: 'James Cook University',
@@ -49,126 +49,28 @@ const AUSTRALIAN_UNIVERSITIES = [
     websiteUrl: 'https://www.jcu.edu.au',
     handbookUrl: 'https://handbook.jcu.edu.au',
     scraperType: 'courseloop',
-    scraperRoutes: JSON.stringify({
+    scraperRoutes: {
       base: 'https://handbook.jcu.edu.au',
-      subject: '/current/subjects/:code'
-    })
+      subject: '/subject/:code' // Singular?
+    }
   },
+  
+  // --- CourseLeaf / Other (Using Generic Scraper) ---
   {
     name: 'Western Sydney University',
     abbreviation: 'WSU',
     emailDomain: 'student.westernsydney.edu.au',
     websiteUrl: 'https://www.westernsydney.edu.au',
     handbookUrl: 'https://hbook.westernsydney.edu.au',
-    scraperType: 'courseloop', // Often CourseLoop disguised
-    scraperRoutes: JSON.stringify({
-      base: 'https://hbook.westernsydney.edu.au',
-      subject: '/subject/:code' // Verify pattern
-    })
-  },
-  
-  // --- Akari Universities ---
-  {
-    name: 'University of Sydney',
-    abbreviation: 'USYD',
-    emailDomain: 'uni.sydney.edu.au',
-    websiteUrl: 'https://www.sydney.edu.au',
-    handbookUrl: 'https://www.sydney.edu.au/handbooks',
-    scraperType: 'akari',
-    scraperSelectors: JSON.stringify({
-      title: 'h1.pageTitle',
-      description: '.b-summary',
-      faculty: 'h4:has-text("Managing faculty") + h4',
-      creditPoints: 'th:has-text("Credit points") + td'
-    })
-  },
-  {
-    name: 'Swinburne University of Technology',
-    abbreviation: 'Swinburne',
-    emailDomain: 'student.swin.edu.au',
-    websiteUrl: 'https://www.swinburne.edu.au',
-    handbookUrl: 'https://www.swinburne.edu.au/study/courses',
-    scraperType: 'akari',
-    // Fallback selectors based on Akari patterns (USYD-like)
-    scraperSelectors: JSON.stringify({
-      title: 'h1',
-      description: '.b-summary',
-      creditPoints: 'th:has-text("Credit points") + td'
-    })
-  },
-
-  // --- Group of Eight & Major (Custom/Unknown) ---
-  {
-    name: 'University of New South Wales',
-    abbreviation: 'UNSW',
-    emailDomain: 'student.unsw.edu.au',
-    websiteUrl: 'https://www.unsw.edu.au',
-    handbookUrl: 'https://www.handbook.unsw.edu.au',
     scraperType: 'custom',
-    scraperSelectors: JSON.stringify({
-      title: 'div[data-testid^="header-"]', // Fallback, UNSW is complex
-      description: '[data-testid="readmore-content-Overview"]',
-      faculty: '[data-testid="attributes-table"] a[href*="faculties"]',
-      code: '.css-147n1q5-Box' // This is brittle, but UNSW is React-based
-    })
-  },
-  {
-    name: 'University of Melbourne',
-    abbreviation: 'UniMelb',
-    emailDomain: 'student.unimelb.edu.au',
-    websiteUrl: 'https://www.unimelb.edu.au',
-    handbookUrl: 'https://handbook.unimelb.edu.au',
-    scraperType: 'custom'
-  },
-  {
-    name: 'University of Queensland',
-    abbreviation: 'UQ',
-    emailDomain: 'student.uq.edu.au',
-    websiteUrl: 'https://www.uq.edu.au',
-    handbookUrl: 'https://my.uq.edu.au/programs-courses',
-    scraperType: 'custom'
-  },
-  {
-    name: 'Australian National University',
-    abbreviation: 'ANU',
-    emailDomain: 'anu.edu.au',
-    websiteUrl: 'https://www.anu.edu.au',
-    handbookUrl: 'https://programsandcourses.anu.edu.au',
-    scraperType: 'custom'
-  },
-  {
-    name: 'University of Western Australia',
-    abbreviation: 'UWA',
-    emailDomain: 'student.uwa.edu.au',
-    websiteUrl: 'https://www.uwa.edu.au',
-    handbookUrl: 'https://handbooks.uwa.edu.au',
-    scraperType: 'custom'
-  },
-  {
-    name: 'University of Adelaide',
-    abbreviation: 'Adelaide',
-    emailDomain: 'student.adelaide.edu.au',
-    websiteUrl: 'https://www.adelaide.edu.au',
-    handbookUrl: 'https://www.adelaide.edu.au/course-outlines',
-    scraperType: 'custom'
-  },
-  
-  // --- Others ---
-  {
-    name: 'RMIT University',
-    abbreviation: 'RMIT',
-    emailDomain: 'student.rmit.edu.au',
-    websiteUrl: 'https://www.rmit.edu.au',
-    handbookUrl: 'https://www.rmit.edu.au/students/student-essentials/program-and-course-information',
-    scraperType: 'custom'
-  },
-  {
-    name: 'Macquarie University',
-    abbreviation: 'MQ',
-    emailDomain: 'students.mq.edu.au',
-    websiteUrl: 'https://www.mq.edu.au',
-    handbookUrl: 'https://coursehandbook.mq.edu.au',
-    scraperType: 'custom' // Often CourseLoop-like actually, check later
+    scraperRoutes: {
+      base: 'https://hbook.westernsydney.edu.au',
+      subject: '/subject/:code'
+    },
+    scraperSelectors: {
+      title: 'h1',
+      description: '#coursebody'
+    }
   },
   {
     name: 'Queensland University of Technology',
@@ -176,10 +78,194 @@ const AUSTRALIAN_UNIVERSITIES = [
     emailDomain: 'student.qut.edu.au',
     websiteUrl: 'https://www.qut.edu.au',
     handbookUrl: 'https://www.qut.edu.au/study',
-    scraperType: 'courseloop', // Possible CourseLoop
-    scraperRoutes: JSON.stringify({ base: 'https://qut.edu.au', subject: '/:code' })
+    scraperType: 'custom',
+    scraperRoutes: { base: 'https://www.qut.edu.au', subject: '/study/unit?unitCode=:code' },
+    scraperSelectors: {
+      title: 'h1',
+      description: '#unit-synopsis'
+    }
   },
-  // Add more as needed...
+  
+  // --- Akari / Generic Universities ---
+  {
+    name: 'University of Sydney',
+    abbreviation: 'USYD',
+    emailDomain: 'uni.sydney.edu.au',
+    websiteUrl: 'https://www.sydney.edu.au',
+    handbookUrl: 'https://www.sydney.edu.au/handbooks',
+    scraperType: 'akari',
+    scraperRoutes: {
+      base: 'https://www.sydney.edu.au',
+      subject: '/units/:code'
+    },
+    scraperSelectors: {
+      title: 'h1.pageTitle',
+      description: '.b-summary',
+      faculty: 'h4:has-text("Managing faculty") + h4',
+      creditPoints: 'th:has-text("Credit points") + td'
+    }
+  },
+
+  // --- Search-Based Scrapers (Explicit Config) ---
+  {
+    name: 'Swinburne University of Technology',
+    abbreviation: 'Swinburne',
+    emailDomain: 'student.swin.edu.au',
+    websiteUrl: 'https://www.swinburne.edu.au',
+    handbookUrl: 'https://www.swinburne.edu.au/study/courses',
+    scraperType: 'search_dom',
+    scraperRoutes: {
+      base: 'https://www.swinburne.edu.au',
+      search: '/search?q=:code'
+    },
+    scraperSelectors: {
+      title: 'h1',
+      description: '.b-summary',
+      search: {
+        input: 'input[name="q"]',
+        result: '.result-item a'
+      }
+    }
+  },
+  {
+    name: 'RMIT University',
+    abbreviation: 'RMIT',
+    emailDomain: 'student.rmit.edu.au',
+    websiteUrl: 'https://www.rmit.edu.au',
+    handbookUrl: 'https://www.rmit.edu.au/students/student-essentials/program-and-course-information',
+    scraperType: 'search_dom',
+    scraperRoutes: {
+      base: 'https://www.rmit.edu.au',
+      search: '/search?q=:code'
+    },
+    scraperSelectors: {
+      title: 'h1',
+      search: {
+        input: 'input[name="q"]',
+        result: 'a[href*="/courses/"]'
+      }
+    }
+  },
+  {
+    name: 'University of Adelaide',
+    abbreviation: 'Adelaide',
+    emailDomain: 'student.adelaide.edu.au',
+    websiteUrl: 'https://www.adelaide.edu.au',
+    handbookUrl: 'https://www.adelaide.edu.au/course-outlines',
+    scraperType: 'search_dom',
+    scraperRoutes: {
+      base: 'https://www.adelaide.edu.au',
+      search: '/course-outlines/'
+    },
+    scraperSelectors: {
+      title: 'h1',
+      search: {
+        input: 'input[name="keyword"]',
+        btn: 'input[type="submit"]',
+        result: '.course-result a'
+      }
+    }
+  },
+
+  // --- Group of Eight & Major (Custom) ---
+  {
+    name: 'University of New South Wales',
+    abbreviation: 'UNSW',
+    emailDomain: 'student.unsw.edu.au',
+    websiteUrl: 'https://www.unsw.edu.au',
+    handbookUrl: 'https://www.handbook.unsw.edu.au',
+    scraperType: 'custom',
+    scraperRoutes: {
+      base: 'https://www.handbook.unsw.edu.au',
+      subject: '/undergraduate/courses/2025/:code' 
+    },
+    scraperSelectors: {
+      title: 'h1', 
+      description: '[data-testid="readmore-content-Overview"]'
+    }
+  },
+  {
+    name: 'University of Melbourne',
+    abbreviation: 'UniMelb',
+    emailDomain: 'student.unimelb.edu.au',
+    websiteUrl: 'https://www.unimelb.edu.au',
+    handbookUrl: 'https://handbook.unimelb.edu.au',
+    scraperType: 'custom',
+    scraperRoutes: {
+      base: 'https://handbook.unimelb.edu.au',
+      subject: '/2025/subjects/:code'
+    },
+    scraperSelectors: {
+      title: 'h1', 
+      description: '.course__overview-wrapper p'
+    }
+  },
+  {
+    name: 'University of Queensland',
+    abbreviation: 'UQ',
+    emailDomain: 'student.uq.edu.au',
+    websiteUrl: 'https://www.uq.edu.au',
+    handbookUrl: 'https://my.uq.edu.au/programs-courses',
+    scraperType: 'custom',
+    scraperRoutes: {
+      base: 'https://my.uq.edu.au',
+      subject: '/programs-courses/course.html?course_code=:code'
+    },
+    scraperSelectors: {
+      title: 'h1',
+      description: '#course-summary',
+      creditPoints: '#course-units'
+    }
+  },
+  {
+    name: 'Australian National University',
+    abbreviation: 'ANU',
+    emailDomain: 'anu.edu.au',
+    websiteUrl: 'https://www.anu.edu.au',
+    handbookUrl: 'https://programsandcourses.anu.edu.au',
+    scraperType: 'custom',
+    scraperRoutes: {
+      base: 'https://programsandcourses.anu.edu.au',
+      subject: '/2025/course/:code'
+    },
+    scraperSelectors: {
+      title: 'h1',
+      description: '.introduction p'
+    }
+  },
+  {
+    name: 'University of Western Australia',
+    abbreviation: 'UWA',
+    emailDomain: 'student.uwa.edu.au',
+    websiteUrl: 'https://www.uwa.edu.au',
+    handbookUrl: 'https://handbooks.uwa.edu.au',
+    scraperType: 'custom',
+    scraperRoutes: {
+      base: 'https://handbooks.uwa.edu.au',
+      subject: '/unitdetails?code=:code'
+    },
+    scraperSelectors: {
+      title: 'h1',
+      description: 'dt:has-text("Description") + dd',
+      creditPoints: 'dt:has-text("Credit") + dd'
+    }
+  },
+  {
+    name: 'Macquarie University',
+    abbreviation: 'MQ',
+    emailDomain: 'students.mq.edu.au',
+    websiteUrl: 'https://www.mq.edu.au',
+    handbookUrl: 'https://coursehandbook.mq.edu.au',
+    scraperType: 'custom',
+    scraperRoutes: {
+      base: 'https://coursehandbook.mq.edu.au',
+      subject: '/2025/units/:code'
+    },
+    scraperSelectors: {
+      title: 'h1',
+      description: '.description'
+    }
+  }
 ];
 
 async function seed() {
@@ -188,9 +274,7 @@ async function seed() {
   try {
     const universityMap = new Map();
 
-    // 1. Upsert Universities
     for (const uniData of AUSTRALIAN_UNIVERSITIES) {
-      // Check if exists
       let [existing] = await db
         .select()
         .from(universities)
@@ -202,18 +286,16 @@ async function seed() {
           .values({
             ...uniData,
             active: true,
-            // Cast to enum type if needed or let drizzle handle it
             scraperType: uniData.scraperType as any,
           })
           .returning();
         console.log(`✓ Created ${uniData.name}`);
       } else {
-        // Update config if needed
         await db
           .update(universities)
           .set({
             scraperType: uniData.scraperType as any,
-            scraperRoutes: uniData.scraperRoutes as any, // Cast to any to satisfy Drizzle types for JSONB if strict
+            scraperRoutes: uniData.scraperRoutes as any,
             scraperSelectors: uniData.scraperSelectors as any,
           })
           .where(eq(universities.id, existing.id));
@@ -223,7 +305,9 @@ async function seed() {
       universityMap.set(uniData.abbreviation, existing.id);
     }
 
-    // 2. Admin User
+    const utsId = universityMap.get('UTS');
+    if (!utsId) throw new Error('UTS ID not found after seeding');
+
     const passwordHash = await hash('password123', {
       memoryCost: 19456,
       timeCost: 2,
@@ -231,10 +315,6 @@ async function seed() {
       parallelism: 1,
     });
 
-    const utsId = universityMap.get('UTS');
-    if (!utsId) throw new Error('UTS ID not found after seeding');
-
-    // Upsert Admin
     const [existingAdmin] = await db.select().from(users).where(eq(users.email, 'admin@uts.edu.au'));
     if (!existingAdmin) {
       await db.insert(users).values({
@@ -248,10 +328,6 @@ async function seed() {
       });
       console.log('✓ Created Admin User');
     }
-
-    // 3. Sample Units & Reviews (Only if empty for UTS)
-    // ... (Keep existing sample logic if desired, or skip to avoid duplicates)
-    // For brevity, skipping generic sample data re-insertion unless table is empty.
     
     console.log('\n✅ Database seeded with Australian Universities!');
   } catch (error) {

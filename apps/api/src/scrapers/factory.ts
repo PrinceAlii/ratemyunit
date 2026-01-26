@@ -1,9 +1,9 @@
 import { BaseScraper, ScraperConfig } from './strategies/base';
 import { CourseLoopScraper } from './strategies/courseloop';
 import { GenericDomScraper } from './strategies/generic';
-// import { AkariScraper } from './strategies/akari'; // Future
+import { SearchDomScraper } from './strategies/search';
 
-export type ScraperType = 'courseloop' | 'akari' | 'custom' | 'legacy';
+export type ScraperType = 'courseloop' | 'akari' | 'custom' | 'legacy' | 'search_dom';
 
 export class ScraperFactory {
   static createScraper(
@@ -15,10 +15,10 @@ export class ScraperFactory {
       case 'courseloop':
         return new CourseLoopScraper(universityName, config);
       case 'custom':
+      case 'akari': // Akari maps to Generic for now
         return new GenericDomScraper(universityName, config);
-      case 'akari':
-        // Reuse generic for now or implement specific strategy
-        return new GenericDomScraper(universityName, config); 
+      case 'search_dom':
+        return new SearchDomScraper(universityName, config);
       case 'legacy':
       default:
         // Default to generic which logs error if no selectors

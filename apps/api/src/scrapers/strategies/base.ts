@@ -5,10 +5,16 @@ import { z } from 'zod';
 export const ScraperConfigSchema = z.object({
   baseUrl: z.string().url(),
   routes: z.object({
-    subject: z.string().min(1),
-    list: z.string().optional(),
+    subject: z.string().min(1).optional(),
+    search: z.string().optional(),
+    discovery: z.string().optional(), // URL to start crawling for units
   }).optional(),
   selectors: z.record(z.string()).optional(),
+  search: z.object({
+    input: z.string(),
+    btn: z.string().optional(),
+    result: z.string(),
+  }).optional()
 });
 
 export type ScraperConfig = z.infer<typeof ScraperConfigSchema>;
@@ -23,4 +29,12 @@ export abstract class BaseScraper {
    * Scrapes a single subject by its code.
    */
   abstract scrapeSubject(browser: Browser, subjectCode: string): Promise<ScraperResult>;
+
+  /**
+   * Discovers available subject codes.
+   * Default implementation returns empty list (opt-in).
+   */
+  async discoverSubjects(browser: Browser): Promise<string[]> {
+    return [];
+  }
 }

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
@@ -12,10 +14,18 @@ interface ReviewFormProps {
   onCancel?: () => void;
 }
 
+interface ValidationErrors {
+  sessionTaken?: string;
+  overallRating?: string;
+  reviewText?: string;
+  customNickname?: string;
+}
+
 export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [error, setError] = useState('');
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
 
   // Form State
   const [formData, setFormData] = useState({
@@ -31,13 +41,33 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
     wouldRecommend: true,
   });
 
+  const validateForm = (): boolean => {
+    const errors: ValidationErrors = {};
+
+    if (!formData.sessionTaken.trim()) {
+      errors.sessionTaken = 'Session taken is required';
+    }
+
+    if (formData.overallRating === 0) {
+      errors.overallRating = 'Overall rating is required';
+    }
+
+    if (formData.reviewText.length < 50) {
+      errors.reviewText = 'Review must be at least 50 characters';
+    } else if (formData.reviewText.length > 2000) {
+      errors.reviewText = 'Review must not exceed 2000 characters';
+    }
+
+    if (formData.displayNameType === 'nickname' && !formData.customNickname.trim()) {
+      errors.customNickname = 'Nickname is required';
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const mutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      // Validate basic requirements locally
-      if (!data.sessionTaken) throw new Error('Session taken is required');
-      if (data.overallRating === 0) throw new Error('Overall rating is required');
-      if (data.reviewText.length < 50) throw new Error('Review must be at least 50 characters');
-
       return api.post('/api/reviews', {
         unitId,
         ...data,
@@ -45,16 +75,24 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reviews', unitId] });
+      toast.success('Review submitted successfully!');
       onSuccess?.();
     },
     onError: (err: Error) => {
       setError(err.message);
+      toast.error(`Failed to submit review: ${err.message}`);
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!validateForm()) {
+      toast.error('Please fix the validation errors');
+      return;
+    }
+
     mutation.mutate(formData);
   };
 
@@ -85,18 +123,35 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
       {/* Ratings Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <Label>Overall Rating</Label>
-            <StarRating
-              value={formData.overallRating}
-              onChange={(v) => setFormData({ ...formData, overallRating: v })}
-            />
+          <div>
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1">
+                Overall Rating <span className="text-red-500">*</span>
+              </Label>
+              <StarRating
+                value={formData.overallRating}
+                onChange={(v) => {
+                  setFormData({ ...formData, overallRating: v });
+                  if (validationErrors.overallRating) {
+                    setValidationErrors({ ...validationErrors, overallRating: undefined });
+                  }
+                }}
+                readOnly={mutation.isPending}
+              />
+            </div>
+            {validationErrors.overallRating && (
+              <p className="text-sm text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {validationErrors.overallRating}
+              </p>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <Label>Teaching Quality</Label>
             <StarRating
               value={formData.teachingQualityRating}
               onChange={(v) => setFormData({ ...formData, teachingQualityRating: v })}
+              readOnly={mutation.isPending}
             />
           </div>
           <div className="flex items-center justify-between">
@@ -104,6 +159,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
             <StarRating
               value={formData.workloadRating}
               onChange={(v) => setFormData({ ...formData, workloadRating: v })}
+              readOnly={mutation.isPending}
             />
           </div>
         </div>
@@ -113,6 +169,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
             <StarRating
               value={formData.difficultyRating}
               onChange={(v) => setFormData({ ...formData, difficultyRating: v })}
+              readOnly={mutation.isPending}
             />
           </div>
           <div className="flex items-center justify-between">
@@ -120,6 +177,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
             <StarRating
               value={formData.usefulnessRating}
               onChange={(v) => setFormData({ ...formData, usefulnessRating: v })}
+              readOnly={mutation.isPending}
             />
           </div>
           <div className="flex items-center justify-between py-1">
@@ -130,6 +188,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
                 variant={formData.wouldRecommend ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setFormData({ ...formData, wouldRecommend: true })}
+                disabled={mutation.isPending}
               >
                 Yes
               </Button>
@@ -138,6 +197,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
                 variant={!formData.wouldRecommend ? 'destructive' : 'outline'}
                 size="sm"
                 onClick={() => setFormData({ ...formData, wouldRecommend: false })}
+                disabled={mutation.isPending}
               >
                 No
               </Button>
@@ -150,15 +210,30 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="session">Session Taken</Label>
+            <Label htmlFor="session" className="flex items-center gap-1">
+              Session Taken <span className="text-red-500">*</span>
+            </Label>
             <input
               id="session"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className={`flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+                validationErrors.sessionTaken ? 'border-red-500' : 'border-input'
+              }`}
               placeholder="e.g. Autumn 2024"
               value={formData.sessionTaken}
-              onChange={(e) => setFormData({ ...formData, sessionTaken: e.target.value })}
-              required
+              onChange={(e) => {
+                setFormData({ ...formData, sessionTaken: e.target.value });
+                if (validationErrors.sessionTaken) {
+                  setValidationErrors({ ...validationErrors, sessionTaken: undefined });
+                }
+              }}
+              disabled={mutation.isPending}
             />
+            {validationErrors.sessionTaken && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {validationErrors.sessionTaken}
+              </p>
+            )}
           </div>
           
           <div className="space-y-2">
@@ -168,6 +243,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                  value={formData.displayNameType}
                  onChange={(e) => setFormData({ ...formData, displayNameType: e.target.value as any })}
+                 disabled={mutation.isPending}
              >
                  <option value="nickname">Nickname</option>
                  <option value="anonymous">Anonymous</option>
@@ -178,32 +254,69 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
 
         {formData.displayNameType === 'nickname' && (
           <div className="space-y-2">
-            <Label htmlFor="nickname">Nickname</Label>
-             <input
+            <Label htmlFor="nickname" className="flex items-center gap-1">
+              Nickname <span className="text-red-500">*</span>
+            </Label>
+            <input
               id="nickname"
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className={`flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+                validationErrors.customNickname ? 'border-red-500' : 'border-input'
+              }`}
               placeholder="CoolStudent123"
               value={formData.customNickname || ''}
-              onChange={(e) => setFormData({ ...formData, customNickname: e.target.value })}
-              required
+              onChange={(e) => {
+                setFormData({ ...formData, customNickname: e.target.value });
+                if (validationErrors.customNickname) {
+                  setValidationErrors({ ...validationErrors, customNickname: undefined });
+                }
+              }}
+              disabled={mutation.isPending}
             />
+            {validationErrors.customNickname && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {validationErrors.customNickname}
+              </p>
+            )}
           </div>
         )}
 
         <div className="space-y-2">
-          <Label htmlFor="review">Review</Label>
+          <Label htmlFor="review" className="flex items-center gap-1">
+            Review <span className="text-red-500">*</span>
+          </Label>
           <textarea
             id="review"
-             className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className={`flex min-h-[120px] w-full rounded-md border bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+              validationErrors.reviewText ? 'border-red-500' : 'border-input'
+            }`}
             placeholder="Share your thoughts about the unit..."
             value={formData.reviewText}
-            onChange={(e) => setFormData({ ...formData, reviewText: e.target.value })}
-            required
-            minLength={50}
+            onChange={(e) => {
+              setFormData({ ...formData, reviewText: e.target.value });
+              if (validationErrors.reviewText) {
+                setValidationErrors({ ...validationErrors, reviewText: undefined });
+              }
+            }}
+            disabled={mutation.isPending}
           />
-          <p className="text-xs text-muted-foreground text-right">
-            {formData.reviewText.length} / 2000 characters (min 50)
-          </p>
+          <div className="flex items-center justify-between">
+            {validationErrors.reviewText && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {validationErrors.reviewText}
+              </p>
+            )}
+            <p className={`text-xs ml-auto ${
+              formData.reviewText.length < 50
+                ? 'text-orange-500'
+                : formData.reviewText.length > 2000
+                ? 'text-red-500'
+                : 'text-muted-foreground'
+            }`}>
+              {formData.reviewText.length} / 2000 characters (min 50)
+            </p>
+          </div>
         </div>
       </div>
 
@@ -214,6 +327,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
           </Button>
         )}
         <Button type="submit" disabled={mutation.isPending}>
+          {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
           {mutation.isPending ? 'Submitting...' : 'Submit Review'}
         </Button>
       </div>

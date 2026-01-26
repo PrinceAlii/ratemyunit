@@ -1,10 +1,10 @@
-import { pgTable, uuid, varchar, text, boolean, timestamp, integer, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, boolean, timestamp, integer, pgEnum, unique, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['student', 'admin', 'moderator']);
 export const displayNameTypeEnum = pgEnum('display_name_type', ['nickname', 'anonymous', 'verified']);
-export const reviewStatusEnum = pgEnum('review_status', ['auto-approved', 'flagged', 'removed']);
+export const reviewStatusEnum = pgEnum('review_status', ['auto-approved', 'flagged', 'removed', 'approved']);
 export const voteTypeEnum = pgEnum('vote_type', ['helpful', 'not_helpful']);
 export const flagReasonEnum = pgEnum('flag_reason', ['spam', 'inappropriate', 'inaccurate', 'other']);
 export const flagStatusEnum = pgEnum('flag_status', ['pending', 'reviewed', 'dismissed']);
@@ -77,7 +77,29 @@ export const units = pgTable('units', {
   active: boolean('active').default(true).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+
+  // Academic Structure - new fields for UTS scraper
+  level: integer('level'),
+  corequisites: text('corequisites'),
+  workload: integer('workload'),
+  assessmentStrategy: text('assessment_strategy'),
+
+  // Learning Outcomes - new fields for UTS scraper
+  learningOutcomes: text('learning_outcomes'),
+  syllabus: text('syllabus'),
+
+  // Status Tracking - new fields for UTS scraper
+  approvalStatus: varchar('approval_status', { length: 50 }),
+  department: varchar('department', { length: 255 }),
+  lastModifiedCourseLoop: timestamp('last_modified_course_loop'),
+
+  // Delivery Information - new fields for UTS scraper
+  deliveryModes: text('delivery_modes'),
+}, (t) => ({
+  unitCodeIdx: index('units_unit_code_idx').on(t.unitCode),
+  activeIdx: index('units_active_idx').on(t.active),
+  unq: unique().on(t.universityId, t.unitCode),
+}));
 
 // Reviews Table
 export const reviews = pgTable('reviews', {
@@ -94,10 +116,14 @@ export const reviews = pgTable('reviews', {
   usefulnessRating: integer('usefulness_rating').notNull(),
   reviewText: text('review_text'),
   wouldRecommend: boolean('would_recommend').notNull(),
-  status: reviewStatusEnum('status').default('auto-approved').notNull(),
+  status: reviewStatusEnum('status').default('approved').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+}, (t) => ({
+  unq: unique().on(t.unitId, t.userId),
+  unitIdIdx: index('reviews_unit_id_idx').on(t.unitId),
+  statusIdx: index('reviews_status_idx').on(t.status),
+}));
 
 // Review Votes Table
 export const reviewVotes = pgTable('review_votes', {
@@ -106,7 +132,9 @@ export const reviewVotes = pgTable('review_votes', {
   userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   voteType: voteTypeEnum('vote_type').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (t) => ({
+  unq: unique().on(t.reviewId, t.userId),
+}));
 
 // Review Flags Table
 export const reviewFlags = pgTable('review_flags', {

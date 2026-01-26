@@ -54,6 +54,24 @@ export interface Unit {
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
+
+  // Academic Structure - new fields for UTS scraper
+  level: number | null;
+  corequisites: string | null;
+  workload: number | null;
+  assessmentStrategy: string | null;
+
+  // Learning Outcomes - new fields for UTS scraper
+  learningOutcomes: string[] | null;
+  syllabus: string | null;
+
+  // Status Tracking - new fields for UTS scraper
+  approvalStatus: string | null;
+  department: string | null;
+  lastModifiedCourseLoop: Date | null;
+
+  // Delivery Information - new fields for UTS scraper
+  deliveryModes: string[] | null;
 }
 
 export interface UnitWithStats extends Unit {
@@ -64,7 +82,7 @@ export interface UnitWithStats extends Unit {
 
 // Review types
 export type DisplayNameType = 'nickname' | 'anonymous' | 'verified';
-export type ReviewStatus = 'auto-approved' | 'flagged' | 'removed';
+export type ReviewStatus = 'approved' | 'flagged' | 'removed';
 
 export interface Review {
   id: string;
@@ -98,6 +116,14 @@ export interface PublicReview extends Omit<Review, 'userId'> {
   helpfulVotes: number;
   notHelpfulVotes: number;
   userVote?: 'helpful' | 'not_helpful' | null;
+}
+
+export interface ReviewWithUser extends Review {
+  user: {
+    displayName: string;
+    role: UserRole;
+  };
+  voteCount: number;
 }
 
 // Vote types

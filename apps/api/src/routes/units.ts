@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { db } from '@ratemyunit/db/client';
 import { units, reviews, users, reviewVotes } from '@ratemyunit/db/schema';
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, inArray } from 'drizzle-orm';
 
 export async function unitsRoutes(app: FastifyInstance) {
   /**
@@ -9,28 +10,23 @@ export async function unitsRoutes(app: FastifyInstance) {
    * Search for units with filters and sorting.
    */
   app.get('/search', async (request, reply) => {
-    const { 
-      q, // Backwards compatibility or main search term
-      search, 
-      faculty, 
-      minRating, 
-      sort, 
-      limit = 20, 
-      offset = 0 
-    } = request.query as {
-      q?: string;
-      search?: string;
-      faculty?: string;
-      minRating?: string;
-      sort?: 'rating_desc' | 'rating_asc' | 'recent' | 'most_reviewed';
-      limit?: number;
-      offset?: number;
-    };
+    const searchQuerySchema = z.object({
+      q: z.string().optional(),
+      search: z.string().optional(),
+      faculty: z.string().optional(),
+      minRating: z.coerce.number().min(1).max(5).optional(),
+      sort: z.enum(['rating_desc', 'rating_asc', 'recent', 'most_reviewed']).optional(),
+      limit: z.coerce.number().int().min(1).max(50).default(20),
+      offset: z.coerce.number().int().min(0).default(0),
+    });
 
-    const searchTerm = search || q;
-    const ratingFilter = minRating ? parseInt(minRating, 10) : undefined;
-    const limitVal = Math.min(Math.max(Number(limit), 1), 50);
-    const offsetVal = Math.max(Number(offset), 0);
+    const validatedQuery = searchQuerySchema.parse(request.query);
+    const searchTerm = validatedQuery.search || validatedQuery.q;
+    const ratingFilter = validatedQuery.minRating;
+    const limitVal = validatedQuery.limit;
+    const offsetVal = validatedQuery.offset;
+    const sort = validatedQuery.sort;
+    const faculty = validatedQuery.faculty;
 
     const conditions = [eq(units.active, true)];
 
@@ -200,19 +196,15 @@ export async function unitsRoutes(app: FastifyInstance) {
       .leftJoin(users, eq(reviews.userId, users.id))
       .where(and(
         eq(reviews.unitId, unit.id),
-        eq(reviews.status, 'approved') // Only show approved reviews (or auto-approved which should be set to approved/published)
-        // Note: The seed uses 'auto-approved', let's assume 'approved' or 'auto-approved' are valid visible states.
-        // Actually, schema uses 'pending', 'approved', 'rejected', 'auto-approved'.
+        inArray(reviews.status, ['approved', 'auto-approved'])
       ))
-      .where(
-        sql`${reviews.status} IN ('approved', 'auto-approved')`
-      )
       .orderBy(desc(reviews.createdAt));
 
-    // Process display names based on privacy settings
+    // Process display names based on privacy settings.
+    // Remove internal user IDs from public responses.
     const processedReviews = unitReviews.map(review => {
       let displayName = 'Anonymous Student';
-      
+
       if (review.displayNameType === 'verified') {
         displayName = review.user?.displayName || 'Verified Student';
       } else if (review.displayNameType === 'nickname') {
@@ -222,8 +214,8 @@ export async function unitsRoutes(app: FastifyInstance) {
       return {
         ...review,
         user: {
-          id: review.user?.id,
           displayName: displayName,
+          role: review.user?.role,
         }
       };
     });

@@ -8,6 +8,7 @@ import {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  verifyEmailSchema,
 } from '@ratemyunit/validators';
 import { lucia } from '../lib/auth.js';
 import {
@@ -211,14 +212,7 @@ export async function authRoutes(app: FastifyInstance) {
    * Verify email with token.
    */
   app.post('/verify-email', async (request, reply) => {
-    const { token } = request.body as { token: string };
-
-    if (!token) {
-      return reply.status(400).send({
-        success: false,
-        error: 'Verification token is required.',
-      });
-    }
+    const { token } = verifyEmailSchema.parse(request.body);
 
     const userId = await verifyEmailToken(token);
 

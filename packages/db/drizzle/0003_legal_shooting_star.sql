@@ -1,0 +1,1 @@
+ALTER TABLE "units" ADD CONSTRAINT "units_university_id_unit_code_unique" UNIQUE("university_id","unit_code");

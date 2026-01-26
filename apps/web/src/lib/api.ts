@@ -16,6 +16,9 @@ class ApiClient {
         ...options.headers,
       },
       credentials: 'include', // Include cookies for session management.
+    }).catch(error => {
+      console.error('Fetch error:', error);
+      throw error;
     });
 
     const data: ApiResponse<T> = await response.json();

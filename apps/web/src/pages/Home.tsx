@@ -1,27 +1,20 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
 import { Input } from '../components/ui/input';
-import { Search } from 'lucide-react';
-import type { Unit } from '@ratemyunit/types';
+import { Button } from '../components/ui/button';
+import { Search, Loader2 } from 'lucide-react';
 
 export function HomePage() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Partial<Unit>[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const navigate = useNavigate();
 
-  const handleSearch = async (value: string) => {
-    setQuery(value);
-    if (value.length < 2) {
-      setResults([]);
-      return;
-    }
-
-    try {
-      const data = await api.get<Partial<Unit>[]>(`/api/units/search?q=${value}`);
-      setResults(data);
-    } catch (err) {
-      console.error(err);
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (query.trim()) {
+      setIsSearching(true);
+      navigate(`/browse?q=${encodeURIComponent(query)}`);
+      setTimeout(() => setIsSearching(false), 500);
     }
   };
 
@@ -36,31 +29,33 @@ export function HomePage() {
         </p>
       </div>
 
-      <div className="w-full max-w-xl relative">
+      <form onSubmit={handleSearch} className="w-full max-w-xl relative">
         <div className="relative">
           <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
           <Input
             className="pl-10 h-12 text-lg"
             placeholder="Search for a unit code or name (e.g. 48024)"
             value={query}
-            onChange={(e) => handleSearch(e.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
+            disabled={isSearching}
           />
+          <Button type="submit" className="absolute right-1 top-1 bottom-1" disabled={isSearching}>
+            {isSearching ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Searching...
+              </>
+            ) : (
+              'Search'
+            )}
+          </Button>
         </div>
+      </form>
 
-        {results.length > 0 && (
-          <div className="absolute w-full mt-2 bg-popover text-popover-foreground border rounded-md shadow-lg overflow-hidden z-10">
-            {results.map((unit) => (
-              <button
-                key={unit.unitCode}
-                className="w-full text-left px-4 py-3 hover:bg-accent hover:text-accent-foreground transition-colors border-b last:border-0"
-                onClick={() => navigate(`/units/${unit.unitCode}`)}
-              >
-                <div className="font-semibold">{unit.unitCode}</div>
-                <div className="text-sm text-muted-foreground">{unit.unitName}</div>
-              </button>
-            ))}
-          </div>
-        )}
+      <div className="mt-8">
+        <Button variant="link" onClick={() => navigate('/browse')}>
+          Or browse all units
+        </Button>
       </div>
 
       <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-4xl">

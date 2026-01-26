@@ -89,6 +89,24 @@ export const updateUnitSchema = z.object({
   antiRequisites: z.string().optional(),
   faculty: z.string().optional(),
   active: z.boolean().optional(),
+
+  // Academic Structure - new fields for UTS scraper
+  level: z.number().int().min(100).max(900).optional(),
+  corequisites: z.string().optional(),
+  workload: z.number().int().min(0).optional(),
+  assessmentStrategy: z.string().optional(),
+
+  // Learning Outcomes - new fields for UTS scraper
+  learningOutcomes: z.array(z.string()).optional(),
+  syllabus: z.string().optional(),
+
+  // Status Tracking - new fields for UTS scraper
+  approvalStatus: z.string().max(50).optional(),
+  department: z.string().max(255).optional(),
+  lastModifiedCourseLoop: z.date().optional(),
+
+  // Delivery Information - new fields for UTS scraper
+  deliveryModes: z.array(z.string()).optional(),
 });
 
 export const moderateReviewSchema = z.object({

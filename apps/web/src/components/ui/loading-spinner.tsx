@@ -1,4 +1,3 @@
-import { Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface LoadingSpinnerProps {
@@ -15,7 +14,10 @@ export function LoadingSpinner({ className, size = 'md', inline = false }: Loadi
   };
 
   const spinner = (
-    <Loader2 className={cn('animate-spin text-primary', sizeClasses[size], className)} />
+    <div className={cn('relative', sizeClasses[size], className)}>
+      <div className="absolute inset-0 border-3 border-black bg-primary animate-spin" />
+      <div className="absolute inset-0 border-3 border-transparent border-t-black animate-spin" />
+    </div>
   );
 
   if (inline) {

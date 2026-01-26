@@ -19,61 +19,77 @@ export function HomePage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-16 flex flex-col items-center">
-      <div className="max-w-2xl w-full text-center space-y-8 mb-12">
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tight">
-          RateMyUnit
-        </h1>
-        <p className="text-xl text-muted-foreground">
-          Find easy electives, avoid nightmare subjects, and help your fellow students at UTS.
-        </p>
-      </div>
-
-      <form onSubmit={handleSearch} className="w-full max-w-xl relative">
-        <div className="relative">
-          <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
-          <Input
-            className="pl-10 h-12 text-lg"
-            placeholder="Search for a unit code or name (e.g. 48024)"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            disabled={isSearching}
-          />
-          <Button type="submit" className="absolute right-1 top-1 bottom-1" disabled={isSearching}>
-            {isSearching ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Searching...
-              </>
-            ) : (
-              'Search'
-            )}
-          </Button>
+    <div className="container mx-auto px-4 py-16">
+      {/* Hero Section - Asymmetrical Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-16">
+        {/* Text Column - 7 cols */}
+        <div className="lg:col-span-7 space-y-6">
+          <div>
+            <h1 className="text-6xl md:text-8xl font-display font-black uppercase leading-none mb-4">
+              Rate
+              <span className="inline-block bg-secondary text-secondary-foreground px-3 py-1 border-3 border-foreground shadow-neo ml-3 -rotate-2">
+                My
+              </span>
+              <br />
+              Unit
+            </h1>
+            <div className="border-l-4 border-primary pl-4 mt-6">
+              <p className="text-xl font-medium">
+                Find easy electives, avoid nightmare subjects, and help your fellow students at UTS.
+              </p>
+            </div>
+          </div>
         </div>
-      </form>
 
-      <div className="mt-8">
-        <Button variant="link" onClick={() => navigate('/browse')}>
-          Or browse all units
-        </Button>
+        {/* Search Column - 5 cols */}
+        <div className="lg:col-span-5 flex flex-col justify-center">
+          <form onSubmit={handleSearch} className="w-full">
+            <div className="relative">
+              <Search className="absolute left-4 top-4 h-6 w-6 text-muted-foreground pointer-events-none z-10" />
+              <Input
+                className="pl-14 h-16 text-lg border-4 shadow-neo hover:shadow-neo-lg transition-shadow"
+                placeholder="Search for a unit code or name (e.g. 48024)"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                disabled={isSearching}
+              />
+            </div>
+            <Button type="submit" className="w-full mt-4 h-14 text-lg" disabled={isSearching}>
+              {isSearching ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  Searching...
+                </>
+              ) : (
+                'Search Units'
+              )}
+            </Button>
+            <div className="mt-4 text-center">
+              <Button variant="link" onClick={() => navigate('/browse')} className="font-bold">
+                Or browse all units
+              </Button>
+            </div>
+          </form>
+        </div>
       </div>
 
-      <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-4xl">
-        <div className="p-6 border rounded-lg bg-card text-card-foreground">
-          <h3 className="text-lg font-bold mb-2">Anonymous Reviews</h3>
-          <p className="text-muted-foreground">
+      {/* Feature Cards - Different Colors & Offset */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full max-w-5xl mx-auto">
+        <div className="p-6 border-4 border-foreground bg-primary text-primary-foreground shadow-neo hover:shadow-neo-lg transition-all">
+          <h3 className="text-xl font-display font-black uppercase mb-3">Anonymous Reviews</h3>
+          <p className="font-medium">
             Share your honest feedback without fear. We protect your privacy while ensuring quality.
           </p>
         </div>
-        <div className="p-6 border rounded-lg bg-card text-card-foreground">
-          <h3 className="text-lg font-bold mb-2">Detailed Ratings</h3>
-          <p className="text-muted-foreground">
+        <div className="p-6 border-4 border-foreground bg-secondary text-secondary-foreground shadow-neo hover:shadow-neo-lg transition-all md:mt-8">
+          <h3 className="text-xl font-display font-black uppercase mb-3">Detailed Ratings</h3>
+          <p className="font-medium">
             Rate teaching quality, workload, difficulty, and usefulness separately.
           </p>
         </div>
-        <div className="p-6 border rounded-lg bg-card text-card-foreground">
-          <h3 className="text-lg font-bold mb-2">Verified Students</h3>
-          <p className="text-muted-foreground">
+        <div className="p-6 border-4 border-foreground bg-accent text-accent-foreground shadow-neo hover:shadow-neo-lg transition-all">
+          <h3 className="text-xl font-display font-black uppercase mb-3">Verified Students</h3>
+          <p className="font-medium">
             See reviews from verified students to know you can trust the feedback.
           </p>
         </div>

@@ -109,44 +109,74 @@ export function UnitDetails() {
   return (
     <div className="container max-w-5xl mx-auto px-4 py-8 space-y-8">
       {/* Header Section */}
-      <div className="space-y-4">
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-          <div>
-            <div className="text-sm font-medium text-muted-foreground mb-1">
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+          <div className="flex-1">
+            <div className="text-sm font-bold uppercase text-muted-foreground mb-3">
               {unit.faculty}
             </div>
-            <h1 className="text-4xl font-bold tracking-tight mb-2">
-              {unit.unitCode} {unit.unitName}
-            </h1>
-            <div className="flex items-center gap-4">
-              <span className="bg-secondary px-2 py-1 rounded text-sm font-medium">
+            <div className="inline-block px-4 py-2 border-4 border-foreground bg-muted shadow-neo-sm mb-4">
+              <h1 className="text-3xl md:text-4xl font-mono font-black">
+                {unit.unitCode}
+              </h1>
+            </div>
+            <h2 className="text-2xl md:text-3xl font-display font-black uppercase mb-4">
+              {unit.unitName}
+            </h2>
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="bg-secondary text-secondary-foreground px-3 py-1 text-sm font-black uppercase border-3 border-foreground">
                 {unit.creditPoints} CP
               </span>
               {averages && (
                 <div className="flex items-center gap-2">
                    <StarRating value={Number(averages.overall)} readOnly />
-                   <span className="font-bold text-lg">{averages.overall}</span>
-                   <span className="text-muted-foreground">({averages.count} reviews)</span>
+                   <span className="font-black text-lg">{averages.overall}</span>
+                   <span className="font-medium">({averages.count} reviews)</span>
                 </div>
               )}
             </div>
           </div>
-          
-          <Button 
-            size="lg" 
+
+          <Button
+            size="lg"
             onClick={() => setShowReviewForm(!showReviewForm)}
             variant={showReviewForm ? "outline" : "default"}
+            className="md:min-w-[180px] h-14 text-lg border-4"
           >
             {showReviewForm ? 'Cancel Review' : 'Write a Review'}
           </Button>
         </div>
 
-        <p className="text-muted-foreground leading-relaxed max-w-3xl">
-          {unit.description}
-        </p>
+        <div className="border-l-4 border-primary pl-6 py-2">
+          <p className="leading-relaxed text-lg font-medium max-w-3xl">
+            {unit.description}
+          </p>
+        </div>
       </div>
 
-      <hr />
+      {/* Stats Section */}
+      {averages && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-5 border-4 border-foreground bg-primary text-primary-foreground shadow-neo">
+            <div className="text-4xl font-black mb-1">{averages.overall}</div>
+            <div className="text-sm font-bold uppercase">Overall</div>
+          </div>
+          <div className="p-5 border-4 border-foreground bg-secondary text-secondary-foreground shadow-neo">
+            <div className="text-4xl font-black mb-1">{averages.teaching}</div>
+            <div className="text-sm font-bold uppercase">Teaching</div>
+          </div>
+          <div className="p-5 border-4 border-foreground bg-accent text-accent-foreground shadow-neo">
+            <div className="text-4xl font-black mb-1">{averages.workload}</div>
+            <div className="text-sm font-bold uppercase">Workload</div>
+          </div>
+          <div className="p-5 border-4 border-foreground bg-card shadow-neo">
+            <div className="text-4xl font-black mb-1">{averages.count}</div>
+            <div className="text-sm font-bold uppercase">Reviews</div>
+          </div>
+        </div>
+      )}
+
+      <hr className="border-t-4 border-foreground" />
 
       {/* Review Form */}
       {showReviewForm && (
@@ -161,61 +191,66 @@ export function UnitDetails() {
 
       {/* Reviews List */}
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold">Student Reviews</h2>
-        
+        <h2 className="text-3xl font-display font-black uppercase">Student Reviews</h2>
+
         {reviewsLoading ? (
-            <p>Loading reviews...</p>
+            <p className="font-medium">Loading reviews...</p>
         ) : !reviews || reviews.length === 0 ? (
-            <div className="text-center py-12 bg-muted/30 rounded-lg">
-                <p className="text-lg text-muted-foreground mb-4">No reviews yet.</p>
-                <Button variant="outline" onClick={() => setShowReviewForm(true)}>
+            <div className="text-center py-12 border-4 border-foreground bg-muted shadow-neo">
+                <p className="text-lg font-bold mb-4">No reviews yet.</p>
+                <Button variant="outline" onClick={() => setShowReviewForm(true)} className="border-3">
                     Be the first to review
                 </Button>
             </div>
         ) : (
             <div className="grid gap-6">
-                {reviews.map((review) => (
-                    <div key={review.id} className="p-6 border rounded-lg bg-card space-y-4">
+                {reviews.map((review, index) => (
+                    <div
+                      key={review.id}
+                      className={`p-6 border-4 border-foreground bg-card space-y-4 ${
+                        index % 2 === 0 ? 'shadow-neo' : 'shadow-neo-primary'
+                      }`}
+                    >
                         <div className="flex justify-between items-start">
                             <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-semibold text-lg">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <span className="font-black text-2xl">
                                         {review.overallRating}/5
                                     </span>
                                     <StarRating value={review.overallRating} readOnly size="sm" />
-                                    <span className="text-sm font-medium ml-2">
-                                        {review.wouldRecommend ? '✅ Recommends' : '❌ Does not recommend'}
+                                    <span className="text-sm font-bold px-2 py-1 border-2 border-foreground">
+                                        {review.wouldRecommend ? '✅ Recommends' : '❌ Not Recommended'}
                                     </span>
                                 </div>
-                                <div className="text-sm text-muted-foreground">
+                                <div className="text-sm font-medium">
                                     Taken in {review.sessionTaken} • Posted by {review.user.displayName}
                                 </div>
                             </div>
-                            <div className="text-xs text-muted-foreground">
+                            <div className="text-xs font-bold text-muted-foreground">
                                 {new Date(review.createdAt).toLocaleDateString()}
                             </div>
                         </div>
 
-                        <p className="text-base leading-relaxed whitespace-pre-wrap">
+                        <p className="text-base leading-relaxed whitespace-pre-wrap font-medium">
                             {review.reviewText}
                         </p>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm bg-muted/50 p-3 rounded">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm p-4 border-3 border-foreground bg-muted">
                              <div>
-                                 <span className="text-muted-foreground block">Teaching</span>
-                                 <span className="font-medium">{review.teachingQualityRating}/5</span>
+                                 <span className="font-bold uppercase block text-xs mb-1">Teaching</span>
+                                 <span className="font-black text-lg">{review.teachingQualityRating}/5</span>
                              </div>
                              <div>
-                                 <span className="text-muted-foreground block">Workload</span>
-                                 <span className="font-medium">{review.workloadRating}/5</span>
+                                 <span className="font-bold uppercase block text-xs mb-1">Workload</span>
+                                 <span className="font-black text-lg">{review.workloadRating}/5</span>
                              </div>
                              <div>
-                                 <span className="text-muted-foreground block">Difficulty</span>
-                                 <span className="font-medium">{review.difficultyRating}/5</span>
+                                 <span className="font-bold uppercase block text-xs mb-1">Difficulty</span>
+                                 <span className="font-black text-lg">{review.difficultyRating}/5</span>
                              </div>
                              <div>
-                                 <span className="text-muted-foreground block">Usefulness</span>
-                                 <span className="font-medium">{review.usefulnessRating}/5</span>
+                                 <span className="font-bold uppercase block text-xs mb-1">Usefulness</span>
+                                 <span className="font-black text-lg">{review.usefulnessRating}/5</span>
                              </div>
                         </div>
 
@@ -224,29 +259,29 @@ export function UnitDetails() {
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-8 gap-1.5"
+                                    className="h-9 gap-1.5 border-2 border-transparent hover:border-foreground"
                                     onClick={() => voteMutation.mutate({ reviewId: review.id, voteType: 'helpful' })}
                                     disabled={!user}
                                 >
                                     <ThumbsUp className="h-4 w-4" />
-                                    <span>Helpful</span>
-                                    {review.voteCount > 0 && <span className="ml-0.5 font-bold">{review.voteCount}</span>}
+                                    <span className="font-bold">Helpful</span>
+                                    {review.voteCount > 0 && <span className="ml-0.5 font-black">{review.voteCount}</span>}
                                 </Button>
-                                <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="h-8 gap-1.5"
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-9 gap-1.5 border-2 border-transparent hover:border-foreground"
                                     onClick={() => voteMutation.mutate({ reviewId: review.id, voteType: 'not_helpful' })}
                                     disabled={!user}
                                 >
                                     <ThumbsDown className="h-4 w-4" />
                                 </Button>
                             </div>
-                            
-                            <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className="h-8 text-muted-foreground hover:text-destructive"
+
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-9 font-bold hover:text-destructive border-2 border-transparent hover:border-foreground"
                                 onClick={() => {
                                     if (confirm('Are you sure you want to flag this review?')) {
                                         flagMutation.mutate(review.id);

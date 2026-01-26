@@ -98,24 +98,24 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
 
   if (!user) {
     return (
-      <div className="p-6 text-center border rounded-lg bg-muted/50">
-        <p className="mb-4 text-muted-foreground">Please login to write a review.</p>
+      <div className="p-6 text-center border-4 border-black rounded-none bg-card shadow-neo-lg">
+        <p className="mb-4 font-bold text-foreground">Please login to write a review.</p>
         <Button disabled>Login to Review</Button>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 p-6 border rounded-lg bg-card">
+    <form onSubmit={handleSubmit} className="space-y-6 p-6 border-4 border-black rounded-none bg-card shadow-neo-lg">
       <div className="space-y-2">
-        <h3 className="text-lg font-semibold">Write a Review</h3>
-        <p className="text-sm text-muted-foreground">
+        <h3 className="text-lg font-bold uppercase">Write a Review</h3>
+        <p className="text-sm font-medium text-muted-foreground">
           Share your experience with this unit to help other students.
         </p>
       </div>
 
       {error && (
-        <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">
+        <div className="p-4 text-sm font-bold text-red-900 bg-red-100 border-3 border-red-600 rounded-none">
           {error}
         </div>
       )}
@@ -140,7 +140,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
               />
             </div>
             {validationErrors.overallRating && (
-              <p className="text-sm text-red-500 mt-1 flex items-center gap-1">
+              <p className="text-sm font-bold text-red-900 mt-2 flex items-center gap-1 p-2 bg-red-100 border-2 border-red-600 rounded-none">
                 <AlertCircle className="h-3 w-3" />
                 {validationErrors.overallRating}
               </p>
@@ -229,7 +229,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
               disabled={mutation.isPending}
             />
             {validationErrors.sessionTaken && (
-              <p className="text-sm text-red-500 flex items-center gap-1">
+              <p className="text-sm font-bold text-red-900 flex items-center gap-1 p-2 bg-red-100 border-2 border-red-600 rounded-none">
                 <AlertCircle className="h-3 w-3" />
                 {validationErrors.sessionTaken}
               </p>
@@ -240,7 +240,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
              <Label htmlFor="display-type">Post as</Label>
              <select
                 id="display-type"
-                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                 className="flex h-10 w-full rounded-none border-3 border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-medium"
                  value={formData.displayNameType}
                  onChange={(e) => setFormData({ ...formData, displayNameType: e.target.value as any })}
                  disabled={mutation.isPending}
@@ -273,7 +273,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
               disabled={mutation.isPending}
             />
             {validationErrors.customNickname && (
-              <p className="text-sm text-red-500 flex items-center gap-1">
+              <p className="text-sm font-bold text-red-900 flex items-center gap-1 p-2 bg-red-100 border-2 border-red-600 rounded-none">
                 <AlertCircle className="h-3 w-3" />
                 {validationErrors.customNickname}
               </p>
@@ -302,7 +302,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
           />
           <div className="flex items-center justify-between">
             {validationErrors.reviewText && (
-              <p className="text-sm text-red-500 flex items-center gap-1">
+              <p className="text-sm font-bold text-red-900 flex items-center gap-1 p-2 bg-red-100 border-2 border-red-600 rounded-none">
                 <AlertCircle className="h-3 w-3" />
                 {validationErrors.reviewText}
               </p>

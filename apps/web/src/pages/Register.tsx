@@ -46,20 +46,22 @@ export function Register() {
   if (success) {
     return (
       <div className="container flex items-center justify-center min-h-screen py-8">
-        <div className="w-full max-w-md space-y-6">
-          <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-bold">Check your email</h1>
-            <p className="text-muted-foreground">
-              We've sent a verification link to <strong>{email}</strong>
-            </p>
-            <p className="text-sm text-muted-foreground mt-4">
-              Please check your email and click the link to verify your account before logging in.
-            </p>
-          </div>
+        <div className="w-full max-w-md">
+          <div className="p-8 border-extra-thick border-foreground bg-card shadow-neo-xl space-y-6">
+            <div className="space-y-3 text-center">
+              <h1 className="text-4xl font-display font-black uppercase">Check Your Email</h1>
+              <p className="text-lg font-medium">
+                We've sent a verification link to <span className="font-bold">{email}</span>
+              </p>
+              <p className="text-sm font-medium mt-4">
+                Please check your email and click the link to verify your account before logging in.
+              </p>
+            </div>
 
-          <Button onClick={() => navigate('/login')} className="w-full">
-            Go to Login
-          </Button>
+            <Button onClick={() => navigate('/login')} className="w-full h-12 text-lg border-4">
+              Go to Login
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -67,70 +69,75 @@ export function Register() {
 
   return (
     <div className="container flex items-center justify-center min-h-screen py-8">
-      <div className="w-full max-w-md space-y-6">
-        <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-bold">Create an account</h1>
-          <p className="text-muted-foreground">Sign up with your university email</p>
-        </div>
+      <div className="w-full max-w-md">
+        <div className="p-8 border-extra-thick border-foreground bg-card shadow-neo-xl space-y-6">
+          <div className="space-y-3 text-center">
+            <h1 className="text-4xl font-display font-black uppercase">Create Account</h1>
+            <p className="text-lg font-medium">Sign up with your university email</p>
+          </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="p-3 text-sm text-red-500 bg-red-50 rounded-md border border-red-200">
-              {error}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="p-4 text-sm font-bold text-red-700 bg-red-100 border-3 border-red-700">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="email" className="font-bold uppercase text-sm">University Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="student@student.uts.edu.au"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading}
+                className="h-12 border-3"
+              />
+              <p className="text-xs font-medium text-muted-foreground">
+                Use your official university email address
+              </p>
             </div>
-          )}
 
-          <div className="space-y-2">
-            <Label htmlFor="email">University Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="student@student.uts.edu.au"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={loading}
-            />
-            <p className="text-xs text-muted-foreground">
-              Use your official university email address
-            </p>
+            <div className="space-y-2">
+              <Label htmlFor="password" className="font-bold uppercase text-sm">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
+                className="h-12 border-3"
+              />
+              <p className="text-xs font-medium text-muted-foreground">At least 8 characters</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword" className="font-bold uppercase text-sm">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                disabled={loading}
+                className="h-12 border-3"
+              />
+            </div>
+
+            <Button type="submit" className="w-full h-12 text-lg border-4" disabled={loading}>
+              {loading ? 'Creating account...' : 'Create account'}
+            </Button>
+          </form>
+
+          <div className="text-sm text-center font-medium pt-2 border-t-3 border-border">
+            Already have an account?{' '}
+            <Link to="/login" className="text-primary hover:underline font-bold">
+              Login
+            </Link>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              disabled={loading}
-            />
-            <p className="text-xs text-muted-foreground">At least 8 characters</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm Password</Label>
-            <Input
-              id="confirmPassword"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Creating account...' : 'Create account'}
-          </Button>
-        </form>
-
-        <div className="text-sm text-center">
-          Already have an account?{' '}
-          <Link to="/login" className="text-primary hover:underline font-medium">
-            Login
-          </Link>
         </div>
       </div>
     </div>

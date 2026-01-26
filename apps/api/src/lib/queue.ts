@@ -91,7 +91,7 @@ export function setupWorker() {
                 await recycleBrowser();
             }
           } catch (e) {
-              // If scraping fails, maybe browser is dead. Recycle.
+              // Recycle browser on failure to ensure clean state for next job
               console.error(`Scrape failed for ${unitCode}, recycling browser...`);
               await recycleBrowser();
               throw e;

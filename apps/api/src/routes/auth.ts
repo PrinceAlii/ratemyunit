@@ -65,7 +65,6 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    // Hash password.
     const passwordHash = await hash(body.password, {
       memoryCost: 19456,
       timeCost: 2,
@@ -73,7 +72,6 @@ export async function authRoutes(app: FastifyInstance) {
       parallelism: 1,
     });
 
-    // Create user.
     const [newUser] = await db
       .insert(users)
       .values({
@@ -86,10 +84,8 @@ export async function authRoutes(app: FastifyInstance) {
       })
       .returning();
 
-    // Generate email verification token.
     const verificationToken = await createEmailVerificationToken(newUser.id);
 
-    // In development, log the verification link to console.
     if (config.NODE_ENV === 'development') {
       const verificationLink = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
       console.log('\n📧 Email Verification Link:');
@@ -115,7 +111,6 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/login', async (request, reply) => {
     const body = loginSchema.parse(request.body);
 
-    // Find user.
     const [user] = await db.select().from(users).where(eq(users.email, body.email)).limit(1);
 
     if (!user) {
@@ -125,7 +120,6 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    // Verify password.
     const validPassword = await verify(user.passwordHash, body.password, {
       memoryCost: 19456,
       timeCost: 2,
@@ -147,7 +141,6 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    // Create session.
     const session = await lucia.createSession(user.id, {});
     const sessionCookie = lucia.createSessionCookie(session.id);
 

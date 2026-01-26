@@ -26,7 +26,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
 
     const body = createReviewSchema.parse(request.body);
 
-    // Check if user already reviewed this unit
     const [existingReview] = await db
       .select()
       .from(reviews)
@@ -43,8 +42,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
       });
     }
 
-    // Create review
-    // Default status: 'auto-approved' for now.
     const [newReview] = await db
       .insert(reviews)
       .values({
@@ -76,7 +73,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
     const { id } = paramsSchema.parse(request.params);
     const body = updateReviewSchema.parse(request.body);
 
-    // Check ownership
     const [review] = await db
       .select()
       .from(reviews)
@@ -97,7 +93,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
       });
     }
 
-    // Update review
     const [updatedReview] = await db
       .update(reviews)
       .set({
@@ -126,7 +121,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
     const paramsSchema = z.object({ id: z.string().uuid('Invalid review ID') });
     const { id } = paramsSchema.parse(request.params);
 
-    // Check ownership
     const [review] = await db
       .select()
       .from(reviews)

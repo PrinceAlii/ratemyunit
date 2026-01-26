@@ -18,7 +18,6 @@ export async function buildApp() {
     },
   });
 
-  // Register plugins.
   await app.register(cookie);
 
   await app.register(helmet, {
@@ -30,7 +29,6 @@ export async function buildApp() {
     credentials: true,
   });
 
-  // Register Swagger for API documentation.
   await app.register(swagger, {
     openapi: {
       info: {
@@ -55,23 +53,19 @@ export async function buildApp() {
     },
   });
 
-  // Health check endpoint.
   app.get('/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
-  // Register routes.
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(unitsRoutes, { prefix: '/api/units' });
   await app.register(reviewsRoutes, { prefix: '/api/reviews' });
   await app.register(publicDataRoutes, { prefix: '/api/public' });
 
-  // Global error handler.
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error);
 
-    // Validation errors from Zod.
     if (error.validation) {
       return reply.status(400).send({
         success: false,
@@ -80,7 +74,6 @@ export async function buildApp() {
       });
     }
 
-    // Send generic error in production.
     const statusCode = error.statusCode || 500;
     const message =
       config.NODE_ENV === 'production' ? 'Internal server error' : error.message;

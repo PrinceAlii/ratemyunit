@@ -39,7 +39,7 @@ const AUSTRALIAN_UNIVERSITIES = [
     scraperType: 'courseloop',
     scraperRoutes: {
       base: 'https://handbook.flinders.edu.au',
-      subject: '/topic/:code' // Singular?
+      subject: '/topic/:code'
     }
   },
   {
@@ -51,7 +51,7 @@ const AUSTRALIAN_UNIVERSITIES = [
     scraperType: 'courseloop',
     scraperRoutes: {
       base: 'https://handbook.jcu.edu.au',
-      subject: '/subject/:code' // Singular?
+      subject: '/subject/:code'
     }
   },
   

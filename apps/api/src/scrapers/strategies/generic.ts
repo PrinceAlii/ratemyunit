@@ -55,10 +55,8 @@ export class GenericDomScraper extends BaseScraper {
         console.log(`🔎 Discovering from: ${startUrl}`);
         await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
         
-        // Wait a bit for dynamic content
         await page.waitForTimeout(2000);
 
-        // Extract all hrefs
         const hrefs = await page.evaluate(() => {
             return Array.from(document.querySelectorAll('a')).map(a => a.getAttribute('href')).filter(Boolean) as string[];
         });

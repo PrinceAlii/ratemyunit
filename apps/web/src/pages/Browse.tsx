@@ -20,14 +20,12 @@ export function BrowsePage() {
   const navigate = useNavigate();
   const [showFilters, setShowFilters] = useState(false);
 
-  // Filter States
   const [search, setSearch] = useState(searchParams.get('q') || '');
   const [faculty, setFaculty] = useState(searchParams.get('faculty') || '');
   const [universityId, setUniversityId] = useState(searchParams.get('universityId') || '');
   const [minRating, setMinRating] = useState(searchParams.get('minRating') || '');
   const [sort, setSort] = useState(searchParams.get('sort') || 'rating_desc');
 
-  // Debounce Search
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   
   useEffect(() => {
@@ -37,7 +35,6 @@ export function BrowsePage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Sync with URL
   useEffect(() => {
     const params: Record<string, string> = {};
     if (debouncedSearch) params.q = debouncedSearch;
@@ -48,7 +45,6 @@ export function BrowsePage() {
     setSearchParams(params, { replace: true });
   }, [debouncedSearch, faculty, universityId, minRating, sort, setSearchParams]);
 
-  // Fetch Universities for Filter
   const { data: universities } = useQuery({
     queryKey: ['universities'],
     queryFn: () => api.get<University[]>('/api/public/universities'),

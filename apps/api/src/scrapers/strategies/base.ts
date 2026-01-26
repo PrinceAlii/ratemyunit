@@ -7,7 +7,7 @@ export const ScraperConfigSchema = z.object({
   routes: z.object({
     subject: z.string().min(1).optional(),
     search: z.string().optional(),
-    discovery: z.string().optional(), // URL to start crawling for units
+    discovery: z.string().optional(),
   }).optional(),
   selectors: z.record(z.string()).optional(),
   search: z.object({

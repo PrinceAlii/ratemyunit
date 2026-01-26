@@ -10,9 +10,6 @@ export class CourseLoopScraper extends BaseScraper {
     const scrapedAt = new Date();
     const cleanCode = subjectCode.trim();
     
-    // Construct URL. Default pattern is common for CourseLoop.
-    // e.g. https://handbook.monash.edu/current/units/:code or similar
-    // The config.routes.subject should be like "/subject/current/:code" or similar relative to base
     const routePattern = this.config.routes?.subject || '/subject/current/:code';
     const relativePath = routePattern.replace(':code', cleanCode);
     const url = `${this.config.baseUrl}${relativePath}`;
@@ -34,7 +31,6 @@ export class CourseLoopScraper extends BaseScraper {
         };
       }
 
-      // 1. Try __NEXT_DATA__ (Standard CourseLoop / Next.js app)
       const nextData = await page.evaluate(() => {
         const script = document.getElementById('__NEXT_DATA__');
         if (script) {
@@ -49,7 +45,6 @@ export class CourseLoopScraper extends BaseScraper {
         const content = nextData.props.pageProps.pageContent;
         data = this.extractFromNextData(content, cleanCode);
       } else {
-        // 2. Fallback to DOM Scraping
         data = await this.extractFromDom(page, cleanCode);
       }
 

@@ -5,7 +5,6 @@ import { setupWorker } from './lib/queue.js';
 
 async function start() {
   try {
-    // Start worker
     setupWorker();
 
     const app = await buildApp();

@@ -32,24 +32,20 @@ export async function unitsRoutes(app: FastifyInstance) {
 
     const conditions = [eq(units.active, true)];
 
-    // Text Search
     if (searchTerm && searchTerm.length >= 2) {
       conditions.push(
         sql`(${units.unitCode} ILIKE ${searchTerm + '%'} OR ${units.unitName} ILIKE ${'%' + searchTerm + '%'})`
       );
     }
 
-    // Faculty Filter
     if (faculty) {
       conditions.push(sql`${units.faculty} = ${faculty}`);
     }
 
-    // University Filter
     if (universityId) {
       conditions.push(eq(units.universityId, universityId));
     }
 
-    // Subquery for aggregated ratings
     const avgRatingSq = db
         .select({
             unitId: reviews.unitId,
@@ -77,14 +73,12 @@ export async function unitsRoutes(app: FastifyInstance) {
         .leftJoin(avgRatingSq, eq(units.id, avgRatingSq.unitId))
         .leftJoin(universities, eq(units.universityId, universities.id));
 
-    // Apply where clauses
     let whereClause = and(...conditions);
     
     if (ratingFilter) {
         whereClause = and(whereClause, sql`COALESCE(${avgRatingSq.avgRating}, 0) >= ${ratingFilter}`);
     }
 
-    // Apply Sort
     let orderBy = desc(units.unitCode); // Default sort
     let sortClause: any = orderBy;
     
@@ -160,7 +154,6 @@ export async function unitsRoutes(app: FastifyInstance) {
   app.get('/:unitCode/reviews', async (request, reply) => {
     const { unitCode } = request.params as { unitCode: string };
 
-    // First find the unit ID
     const [unit] = await db
       .select({ id: units.id })
       .from(units)
@@ -174,7 +167,6 @@ export async function unitsRoutes(app: FastifyInstance) {
       });
     }
 
-    // Fetch reviews with vote counts
     const unitReviews = await db
       .select({
         id: reviews.id,

@@ -29,35 +29,29 @@ interface BulkScrapeResult {
 export function DataScraper() {
   const queryClient = useQueryClient();
 
-  // Form states.
   const [selectedUni, setSelectedUni] = useState('');
   const [singleCode, setSingleCode] = useState('');
   const [bulkCodes, setBulkCodes] = useState('');
 
-  // Message states.
   const [singleMessage, setSingleMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [bulkMessage, setBulkMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [scanMessage, setScanMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Confirmation dialog states.
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [scanDialogOpen, setScanDialogOpen] = useState(false);
   const [pendingBulkCodes, setPendingBulkCodes] = useState<string[]>([]);
 
-  // Fetch universities.
   const { data: universities } = useQuery({
     queryKey: ['universities'],
     queryFn: () => api.get<University[]>('/api/public/universities'),
   });
 
-  // Fetch queue status with polling every 5 seconds.
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ['admin', 'scrape', 'status'],
-    queryFn: () => api.get<ScrapeStatus>('/api/admin/scrape/status'),
+    queryFn: () => api.get<ScrapeStatus>('/api/admin/queue-stats'),
     refetchInterval: 5000,
   });
 
-  // Fetch recent scrapes.
   const { data: recentScrapes } = useQuery({
     queryKey: ['admin', 'recent-scrapes'],
     queryFn: async () => {
@@ -70,51 +64,47 @@ export function DataScraper() {
       }>>('/api/units/search', { limit: 10, sort: 'recent' });
       return response;
     },
-    refetchInterval: 10000,
-  });
-
-  // Single scrape mutation.
-  const singleMutation = useMutation({
-    mutationFn: (code: string) => api.post('/api/admin/scrape', { 
-      unitCode: code,
-      universityId: selectedUni || undefined 
-    }),
-    onSuccess: (_, code) => {
-      setSingleMessage({ type: 'success', text: `Scrape job queued for unit ${code}` });
-      toast.success(`Scrape job queued for unit ${code}`);
-      setSingleCode('');
-      queryClient.invalidateQueries({ queryKey: ['admin', 'scrape', 'status'] });
-    },
-    onError: (error: Error) => {
-      setSingleMessage({ type: 'error', text: error.message });
-      toast.error(`Scrape failed: ${error.message}`);
-    },
-  });
-
-  // Bulk scrape mutation.
-  const bulkMutation = useMutation({
-    mutationFn: (codes: string[]) => api.post<BulkScrapeResult>('/api/admin/scrape/bulk', { 
-      unitCodes: codes,
-      universityId: selectedUni || undefined
-    }),
-    onSuccess: (data) => {
-      const message = `Scraped ${data.successful}/${data.total} units successfully. ${data.failed} failed.`;
-      setBulkMessage({ type: 'success', text: message });
-      toast.success(message);
-      setBulkCodes('');
-      setBulkDialogOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['admin'] });
-    },
-    onError: (error: Error) => {
-      setBulkMessage({ type: 'error', text: error.message });
-      toast.error(`Bulk scrape failed: ${error.message}`);
-      setBulkDialogOpen(false);
-    },
-  });
-
-  // Discovery Scan mutation.
-  const scanMutation = useMutation({
-    mutationFn: (uniId: string) => api.post(`/api/admin/university/${uniId}/scan`, {}),
+        refetchInterval: 10000,
+      });
+    
+      const singleMutation = useMutation({
+        mutationFn: (code: string) => api.post('/api/admin/scrape', {
+          unitCode: code,
+          universityId: selectedUni || undefined 
+        }),
+        onSuccess: (_, code) => {
+          setSingleMessage({ type: 'success', text: `Scrape job queued for unit ${code}` });
+          toast.success(`Scrape job queued for unit ${code}`);
+          setSingleCode('');
+          queryClient.invalidateQueries({ queryKey: ['admin', 'scrape', 'status'] });
+        },
+        onError: (error: Error) => {
+          setSingleMessage({ type: 'error', text: error.message });
+          toast.error(`Scrape failed: ${error.message}`);
+        },
+      });
+    
+      const bulkMutation = useMutation({
+        mutationFn: (codes: string[]) => api.post<BulkScrapeResult>('/api/admin/scrape/bulk', {
+          unitCodes: codes,
+          universityId: selectedUni || undefined
+        }),
+        onSuccess: (data) => {
+          const message = `Scraped ${data.successful}/${data.total} units successfully. ${data.failed} failed.`;
+          setBulkMessage({ type: 'success', text: message });
+          toast.success(message);
+          setBulkCodes('');
+          setBulkDialogOpen(false);
+          queryClient.invalidateQueries({ queryKey: ['admin'] });
+        },
+        onError: (error: Error) => {
+          setBulkMessage({ type: 'error', text: error.message });
+          toast.error(`Bulk scrape failed: ${error.message}`);
+          setBulkDialogOpen(false);
+        },
+      });
+    
+      const scanMutation = useMutation({    mutationFn: (uniId: string) => api.post(`/api/admin/university/${uniId}/scan`, {}),
     onSuccess: () => {
       const message = `Discovery scan queued. The system will now crawl the university site for unit codes.`;
       setScanMessage({ type: 'success', text: message });
@@ -129,7 +119,6 @@ export function DataScraper() {
     },
   });
 
-  // Handlers.
   const handleSingleScrape = () => {
     if (!singleCode.trim()) {
       setSingleMessage({ type: 'error', text: 'Please enter a subject code' });

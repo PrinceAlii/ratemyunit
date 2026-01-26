@@ -72,6 +72,11 @@ export interface Unit {
 
   // Delivery Information - new fields for UTS scraper
   deliveryModes: string[] | null;
+  
+  // Joined Fields (Optional)
+  universityName?: string;
+  universityAbbr?: string;
+  university?: University;
 }
 
 export interface UnitWithStats extends Unit {

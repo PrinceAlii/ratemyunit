@@ -9,6 +9,7 @@ import { authRoutes } from './routes/auth.js';
 import { adminRoutes } from './routes/admin.js';
 import { unitsRoutes } from './routes/units.js';
 import { reviewsRoutes } from './routes/reviews.js';
+import { publicDataRoutes } from './routes/public-data.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -64,10 +65,7 @@ export async function buildApp() {
   await app.register(adminRoutes, { prefix: '/api/admin' });
   await app.register(unitsRoutes, { prefix: '/api/units' });
   await app.register(reviewsRoutes, { prefix: '/api/reviews' });
-  // TODO: Register remaining routes.
-  // await app.register(unitsRoutes, { prefix: '/api/units' });
-  // await app.register(reviewsRoutes, { prefix: '/api/reviews' });
-  // await app.register(adminRoutes, { prefix: '/api/admin' });
+  await app.register(publicDataRoutes, { prefix: '/api/public' });
 
   // Global error handler.
   app.setErrorHandler((error, _request, reply) => {

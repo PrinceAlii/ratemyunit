@@ -6,9 +6,9 @@ import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { Skeleton } from '../components/ui/skeleton';
-import { Search, Filter, SlidersHorizontal } from 'lucide-react';
+import { Search, Filter, SlidersHorizontal, School } from 'lucide-react';
 import { StarRating } from '../components/StarRating';
-import type { Unit } from '@ratemyunit/types';
+import type { Unit, University } from '@ratemyunit/types';
 
 interface SearchResults extends Unit {
   averageRating: number;
@@ -23,6 +23,7 @@ export function BrowsePage() {
   // Filter States
   const [search, setSearch] = useState(searchParams.get('q') || '');
   const [faculty, setFaculty] = useState(searchParams.get('faculty') || '');
+  const [universityId, setUniversityId] = useState(searchParams.get('universityId') || '');
   const [minRating, setMinRating] = useState(searchParams.get('minRating') || '');
   const [sort, setSort] = useState(searchParams.get('sort') || 'rating_desc');
 
@@ -41,16 +42,24 @@ export function BrowsePage() {
     const params: Record<string, string> = {};
     if (debouncedSearch) params.q = debouncedSearch;
     if (faculty) params.faculty = faculty;
+    if (universityId) params.universityId = universityId;
     if (minRating) params.minRating = minRating;
     if (sort) params.sort = sort;
     setSearchParams(params, { replace: true });
-  }, [debouncedSearch, faculty, minRating, sort, setSearchParams]);
+  }, [debouncedSearch, faculty, universityId, minRating, sort, setSearchParams]);
+
+  // Fetch Universities for Filter
+  const { data: universities } = useQuery({
+    queryKey: ['universities'],
+    queryFn: () => api.get<University[]>('/api/public/universities'),
+  });
 
   const { data: units, isLoading } = useQuery({
-    queryKey: ['units', debouncedSearch, faculty, minRating, sort],
+    queryKey: ['units', debouncedSearch, faculty, universityId, minRating, sort],
     queryFn: () => api.get<SearchResults[]>('/api/units/search', {
       q: debouncedSearch,
       faculty,
+      universityId,
       minRating: minRating ? Number(minRating) : undefined,
       sort,
     }),
@@ -73,7 +82,7 @@ export function BrowsePage() {
         <div>
           <h1 className="text-4xl md:text-5xl font-display font-black uppercase mb-2">Browse Units</h1>
           <p className="text-lg font-medium">
-            Search, filter, and find the perfect subjects for your degree.
+            Search subjects across all Australian universities.
           </p>
         </div>
 
@@ -82,7 +91,7 @@ export function BrowsePage() {
           <div className="relative flex-1">
             <Search className="absolute left-4 top-4 h-5 w-5 text-muted-foreground pointer-events-none" />
             <Input
-              placeholder="Search by unit code or name..."
+              placeholder="Search by code (e.g. 31251) or name..."
               className="pl-12 h-14 text-lg border-4 shadow-neo"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -127,6 +136,21 @@ export function BrowsePage() {
               </select>
             </div>
             <div className="space-y-2">
+              <Label className="font-bold">University</Label>
+              <select
+                className="flex h-12 w-full border-3 border-input bg-background px-3 py-2 text-sm font-medium shadow-neo-sm focus:outline-none focus:shadow-neo"
+                value={universityId}
+                onChange={(e) => setUniversityId(e.target.value)}
+              >
+                <option value="">All Universities</option>
+                {universities?.map((uni) => (
+                  <option key={uni.id} value={uni.id}>
+                    {uni.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
               <Label className="font-bold">Minimum Rating</Label>
               <select
                 className="flex h-12 w-full border-3 border-input bg-background px-3 py-2 text-sm font-medium shadow-neo-sm focus:outline-none focus:shadow-neo"
@@ -155,13 +179,6 @@ export function BrowsePage() {
                     </div>
                     <Skeleton className="h-6 w-3/4" />
                     <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-5/6" />
-                    <Skeleton className="h-3 w-1/3" />
-                  </div>
-                  <div className="hidden sm:flex flex-col items-end justify-center min-w-[120px] pl-4 border-l space-y-2">
-                    <Skeleton className="h-10 w-12" />
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-3 w-16" />
                   </div>
                 </div>
               ))}
@@ -179,6 +196,7 @@ export function BrowsePage() {
                   setSearch('');
                   setFaculty('');
                   setMinRating('');
+                  setUniversityId('');
                 }}
               >
                 Clear all filters
@@ -193,8 +211,15 @@ export function BrowsePage() {
                   onClick={() => navigate(`/units/${unit.unitCode}`)}
                 >
                   <div className="flex-1 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                    {/* Header Row: University Badge & Code */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {unit.universityAbbr && (
+                          <span className="flex items-center gap-1.5 px-2 py-1 bg-primary text-primary-foreground text-xs font-black uppercase border-2 border-foreground">
+                            <School className="h-3 w-3" />
+                            {unit.universityAbbr}
+                          </span>
+                        )}
                         <span className="font-mono font-black text-lg px-2 py-1 border-3 border-foreground bg-muted inline-block">
                           {unit.unitCode}
                         </span>

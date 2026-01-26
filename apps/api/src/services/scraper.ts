@@ -1,55 +1,163 @@
-import { scrapeUTSSubject, scrapeUTSSubjects } from '../scrapers/uts';
+import { db } from '@ratemyunit/db/client';
+import { units, universities } from '@ratemyunit/db/schema';
+import { eq } from 'drizzle-orm';
+import { chromium } from 'playwright';
+import { ScraperFactory } from '../scrapers/factory';
+import { ScraperConfigSchema } from '../scrapers/strategies/base';
 import type { ScraperResult } from '../scrapers/uts/types';
 
-/**
- * Legacy ScraperService maintained for backward compatibility. This now
- * delegates to the new modular UTS scraper implementation which provides
- * better structure, validation, and error handling.
- */
 export class ScraperService {
-  /**
-   * Scrapes a single unit by its code. This method now uses the new UTS
-   * scraper implementation.
-   *
-   * @param unitCode - The unit code to scrape (e.g., "31251")
-   * @returns Scraper result with success status
-   * @throws Error if scraping fails
-   */
-  async scrapeUnit(unitCode: string): Promise<{
+  
+  private async getUniversityScraper(uniId?: string) {
+    let uni;
+    if (!uniId) {
+      // Default to UTS if not specified
+      const [uts] = await db.select().from(universities).where(eq(universities.abbreviation, 'UTS')).limit(1);
+      if (!uts) throw new Error('UTS university not found for default scraping');
+      uni = uts;
+    } else {
+      const [found] = await db.select().from(universities).where(eq(universities.id, uniId)).limit(1);
+      if (!found) throw new Error(`University not found: ${uniId}`);
+      uni = found;
+    }
+
+    // Check if scraperRoutes has base property (legacy seed format check)
+    const routesObj = uni.scraperRoutes as any || {};
+    const baseUrl = routesObj.base || uni.handbookUrl || '';
+    
+    const configToValidate = {
+      baseUrl,
+      routes: uni.scraperRoutes,
+      selectors: uni.scraperSelectors
+    };
+
+    const parseResult = ScraperConfigSchema.safeParse(configToValidate);
+
+    if (!parseResult.success) {
+      throw new Error(`Invalid scraper configuration for ${uni.name}: ${parseResult.error.message}`);
+    }
+
+    return { uni, scraper: ScraperFactory.createScraper(uni.scraperType as any, uni.name, parseResult.data) };
+  }
+
+  async scrapeUnit(unitCode: string, universityId?: string): Promise<{
     success: boolean;
     unitCode: string;
     unitName?: string;
+    error?: string;
   }> {
-    const result = await scrapeUTSSubject(unitCode);
+    const { uni, scraper } = await this.getUniversityScraper(universityId);
+    const browser = await chromium.launch({ headless: true });
 
-    if (!result.success) {
-      throw new Error(result.error || 'Scraping failed');
+    try {
+      const result = await scraper.scrapeSubject(browser, unitCode);
+
+      if (!result.success || !result.data) {
+        return {
+          success: false,
+          unitCode,
+          error: result.error,
+        };
+      }
+
+      // Persist to DB
+      await db
+        .insert(units)
+        .values({
+          universityId: uni.id,
+          unitCode: result.data.code,
+          unitName: result.data.name,
+          description: result.data.description,
+          creditPoints: result.data.creditPoints,
+          faculty: result.data.faculty,
+          sessions: JSON.stringify(result.data.sessions),
+          scrapedAt: new Date(),
+          active: true,
+        })
+        .onConflictDoUpdate({
+          target: [units.universityId, units.unitCode],
+          set: {
+            unitName: result.data.name,
+            description: result.data.description,
+            creditPoints: result.data.creditPoints,
+            faculty: result.data.faculty,
+            sessions: JSON.stringify(result.data.sessions),
+            scrapedAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+      return {
+        success: true,
+        unitCode: result.subjectCode,
+        unitName: result.data.name,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        unitCode,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    } finally {
+      await browser.close();
     }
-
-    return {
-      success: true,
-      unitCode: result.subjectCode,
-      unitName: result.data?.name,
-    };
   }
 
-  /**
-   * Scrapes multiple units in bulk. This is a new method that leverages the
-   * bulk scraping capabilities of the new UTS scraper.
-   *
-   * @param unitCodes - Array of unit codes to scrape
-   * @param options - Scraping options
-   * @returns Array of scraper results
-   */
   async scrapeUnits(
     unitCodes: string[],
     options?: {
       delayMs?: number;
       continueOnError?: boolean;
+      universityId?: string;
     }
   ): Promise<ScraperResult[]> {
-    const result = await scrapeUTSSubjects(unitCodes, options);
-    return result.results;
+    const { delayMs = 2000, universityId } = options || {};
+    const { uni, scraper } = await this.getUniversityScraper(universityId);
+    
+    const browser = await chromium.launch({ headless: true });
+    const results: ScraperResult[] = [];
+
+    try {
+      for (let i = 0; i < unitCodes.length; i++) {
+        const code = unitCodes[i];
+        if (i > 0) await new Promise(r => setTimeout(r, delayMs));
+
+        const res = await scraper.scrapeSubject(browser, code);
+        
+        if (res.success && res.data) {
+           await db
+            .insert(units)
+            .values({
+                universityId: uni.id,
+                unitCode: res.data.code,
+                unitName: res.data.name,
+                description: res.data.description,
+                creditPoints: res.data.creditPoints,
+                faculty: res.data.faculty,
+                sessions: JSON.stringify(res.data.sessions),
+                scrapedAt: new Date(),
+                active: true,
+            })
+            .onConflictDoUpdate({
+                target: [units.universityId, units.unitCode],
+                set: {
+                unitName: res.data.name,
+                description: res.data.description,
+                creditPoints: res.data.creditPoints,
+                faculty: res.data.faculty,
+                sessions: JSON.stringify(res.data.sessions),
+                scrapedAt: new Date(),
+                updatedAt: new Date(),
+                },
+            });
+        }
+        results.push(res);
+      }
+    } finally {
+      await browser.close();
+    }
+    
+    return results;
   }
 }
 

@@ -29,6 +29,20 @@
       "when": 1769312380527,
       "tag": "0003_legal_shooting_star",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1769393565896,
+      "tag": "0004_peaceful_korvac",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1769395711285,
+      "tag": "0005_flowery_king_bedlam",
+      "breakpoints": true
     }
   ]
 }

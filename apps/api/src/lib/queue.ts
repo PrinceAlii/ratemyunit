@@ -16,6 +16,7 @@ export const scraperQueue = new Queue(QUEUE_NAME, {
 
 export interface ScrapeJobData {
   unitCode: string;
+  universityId?: string;
 }
 
 // Worker setup
@@ -25,8 +26,9 @@ export function setupWorker() {
   const worker = new Worker<ScrapeJobData>(
     QUEUE_NAME,
     async (job) => {
-      console.log(`Processing job ${job.id}: Scrape ${job.data.unitCode}`);
-      await scraperService.scrapeUnit(job.data.unitCode);
+      const { unitCode, universityId } = job.data;
+      console.log(`Processing job ${job.id}: Scrape ${unitCode} (Uni: ${universityId || 'Default'})`);
+      await scraperService.scrapeUnit(unitCode, universityId);
     },
     {
       connection,

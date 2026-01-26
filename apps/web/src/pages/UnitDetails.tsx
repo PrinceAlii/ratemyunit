@@ -6,7 +6,6 @@ import { ReviewForm } from '../components/ReviewForm';
 import { StarRating } from '../components/StarRating';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
-import { LoadingSpinner } from '../components/ui/loading-spinner';
 import { useState } from 'react';
 import { useAuth } from '../lib/auth-context';
 import { ThumbsUp, ThumbsDown, Flag } from 'lucide-react';
@@ -112,8 +111,14 @@ export function UnitDetails() {
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
           <div className="flex-1">
-            <div className="text-sm font-bold uppercase text-muted-foreground mb-3">
-              {unit.faculty}
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-sm font-bold uppercase text-muted-foreground">
+                {unit.university?.name}
+              </span>
+              <span className="text-muted-foreground">•</span>
+              <span className="text-sm font-bold uppercase text-muted-foreground">
+                {unit.faculty}
+              </span>
             </div>
             <div className="inline-block px-4 py-2 border-4 border-foreground bg-muted shadow-neo-sm mb-4">
               <h1 className="text-3xl md:text-4xl font-mono font-black">

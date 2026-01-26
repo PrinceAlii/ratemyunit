@@ -1,0 +1,2 @@
+ALTER TABLE "universities" ALTER COLUMN "scraper_routes" SET DATA TYPE jsonb USING scraper_routes::jsonb;--> statement-breakpoint
+ALTER TABLE "universities" ALTER COLUMN "scraper_selectors" SET DATA TYPE jsonb USING scraper_selectors::jsonb;

@@ -1,0 +1,971 @@
+{
+  "id": "7ee8e7fc-3943-4c4b-a844-1eb30832820d",
+  "prevId": "ebf709bb-9a0b-498b-b414-d40a95a5712f",
+  "version": "5",
+  "dialect": "pg",
+  "tables": {
+    "email_verification_tokens": {
+      "name": "email_verification_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "email_verification_tokens_user_id_users_id_fk": {
+          "name": "email_verification_tokens_user_id_users_id_fk",
+          "tableFrom": "email_verification_tokens",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "email_verification_tokens_token_unique": {
+          "name": "email_verification_tokens_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      }
+    },
+    "password_reset_tokens": {
+      "name": "password_reset_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "password_reset_tokens_user_id_users_id_fk": {
+          "name": "password_reset_tokens_user_id_users_id_fk",
+          "tableFrom": "password_reset_tokens",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "password_reset_tokens_token_unique": {
+          "name": "password_reset_tokens_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token"
+          ]
+        }
+      }
+    },
+    "review_flags": {
+      "name": "review_flags",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "review_id": {
+          "name": "review_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "flag_reason",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "flag_status",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "review_flags_review_id_reviews_id_fk": {
+          "name": "review_flags_review_id_reviews_id_fk",
+          "tableFrom": "review_flags",
+          "tableTo": "reviews",
+          "columnsFrom": [
+            "review_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "review_flags_user_id_users_id_fk": {
+          "name": "review_flags_user_id_users_id_fk",
+          "tableFrom": "review_flags",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "review_votes": {
+      "name": "review_votes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "review_id": {
+          "name": "review_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vote_type": {
+          "name": "vote_type",
+          "type": "vote_type",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "review_votes_review_id_reviews_id_fk": {
+          "name": "review_votes_review_id_reviews_id_fk",
+          "tableFrom": "review_votes",
+          "tableTo": "reviews",
+          "columnsFrom": [
+            "review_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "review_votes_user_id_users_id_fk": {
+          "name": "review_votes_user_id_users_id_fk",
+          "tableFrom": "review_votes",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "review_votes_review_id_user_id_unique": {
+          "name": "review_votes_review_id_user_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "review_id",
+            "user_id"
+          ]
+        }
+      }
+    },
+    "reviews": {
+      "name": "reviews",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_taken": {
+          "name": "session_taken",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name_type": {
+          "name": "display_name_type",
+          "type": "display_name_type",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'anonymous'"
+        },
+        "custom_nickname": {
+          "name": "custom_nickname",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "overall_rating": {
+          "name": "overall_rating",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "teaching_quality_rating": {
+          "name": "teaching_quality_rating",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "workload_rating": {
+          "name": "workload_rating",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "difficulty_rating": {
+          "name": "difficulty_rating",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "usefulness_rating": {
+          "name": "usefulness_rating",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "review_text": {
+          "name": "review_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "would_recommend": {
+          "name": "would_recommend",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "review_status",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'approved'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "reviews_unit_id_idx": {
+          "name": "reviews_unit_id_idx",
+          "columns": [
+            "unit_id"
+          ],
+          "isUnique": false
+        },
+        "reviews_status_idx": {
+          "name": "reviews_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "reviews_unit_id_units_id_fk": {
+          "name": "reviews_unit_id_units_id_fk",
+          "tableFrom": "reviews",
+          "tableTo": "units",
+          "columnsFrom": [
+            "unit_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "reviews_user_id_users_id_fk": {
+          "name": "reviews_user_id_users_id_fk",
+          "tableFrom": "reviews",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "reviews_unit_id_user_id_unique": {
+          "name": "reviews_unit_id_user_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "unit_id",
+            "user_id"
+          ]
+        }
+      }
+    },
+    "sessions": {
+      "name": "sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(255)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "sessions_user_id_users_id_fk": {
+          "name": "sessions_user_id_users_id_fk",
+          "tableFrom": "sessions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "units": {
+      "name": "units",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "university_id": {
+          "name": "university_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_code": {
+          "name": "unit_code",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unit_name": {
+          "name": "unit_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "credit_points": {
+          "name": "credit_points",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prerequisites": {
+          "name": "prerequisites",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anti_requisites": {
+          "name": "anti_requisites",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sessions": {
+          "name": "sessions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "faculty": {
+          "name": "faculty",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scraped_at": {
+          "name": "scraped_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "level": {
+          "name": "level",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "corequisites": {
+          "name": "corequisites",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "workload": {
+          "name": "workload",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "assessment_strategy": {
+          "name": "assessment_strategy",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "learning_outcomes": {
+          "name": "learning_outcomes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "syllabus": {
+          "name": "syllabus",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "approval_status": {
+          "name": "approval_status",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "department": {
+          "name": "department",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_modified_course_loop": {
+          "name": "last_modified_course_loop",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delivery_modes": {
+          "name": "delivery_modes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "units_unit_code_idx": {
+          "name": "units_unit_code_idx",
+          "columns": [
+            "unit_code"
+          ],
+          "isUnique": false
+        },
+        "units_unit_name_idx": {
+          "name": "units_unit_name_idx",
+          "columns": [
+            "unit_name"
+          ],
+          "isUnique": false
+        },
+        "units_university_id_idx": {
+          "name": "units_university_id_idx",
+          "columns": [
+            "university_id"
+          ],
+          "isUnique": false
+        },
+        "units_active_idx": {
+          "name": "units_active_idx",
+          "columns": [
+            "active"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "units_university_id_universities_id_fk": {
+          "name": "units_university_id_universities_id_fk",
+          "tableFrom": "units",
+          "tableTo": "universities",
+          "columnsFrom": [
+            "university_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "units_university_id_unit_code_unique": {
+          "name": "units_university_id_unit_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "university_id",
+            "unit_code"
+          ]
+        }
+      }
+    },
+    "universities": {
+      "name": "universities",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "abbreviation": {
+          "name": "abbreviation",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_domain": {
+          "name": "email_domain",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "website_url": {
+          "name": "website_url",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "handbook_url": {
+          "name": "handbook_url",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scraper_type": {
+          "name": "scraper_type",
+          "type": "scraper_type",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'custom'"
+        },
+        "scraper_routes": {
+          "name": "scraper_routes",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scraper_selectors": {
+          "name": "scraper_selectors",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "universities_email_domain_unique": {
+          "name": "universities_email_domain_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email_domain"
+          ]
+        }
+      }
+    },
+    "users": {
+      "name": "users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "user_role",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'student'"
+        },
+        "university_id": {
+          "name": "university_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email_verified": {
+          "name": "email_verified",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "banned": {
+          "name": "banned",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "users_university_id_universities_id_fk": {
+          "name": "users_university_id_universities_id_fk",
+          "tableFrom": "users",
+          "tableTo": "universities",
+          "columnsFrom": [
+            "university_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "users_email_unique": {
+          "name": "users_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      }
+    }
+  },
+  "enums": {
+    "display_name_type": {
+      "name": "display_name_type",
+      "values": {
+        "nickname": "nickname",
+        "anonymous": "anonymous",
+        "verified": "verified"
+      }
+    },
+    "flag_reason": {
+      "name": "flag_reason",
+      "values": {
+        "spam": "spam",
+        "inappropriate": "inappropriate",
+        "inaccurate": "inaccurate",
+        "other": "other"
+      }
+    },
+    "flag_status": {
+      "name": "flag_status",
+      "values": {
+        "pending": "pending",
+        "reviewed": "reviewed",
+        "dismissed": "dismissed"
+      }
+    },
+    "review_status": {
+      "name": "review_status",
+      "values": {
+        "auto-approved": "auto-approved",
+        "flagged": "flagged",
+        "removed": "removed",
+        "approved": "approved"
+      }
+    },
+    "scraper_type": {
+      "name": "scraper_type",
+      "values": {
+        "courseloop": "courseloop",
+        "akari": "akari",
+        "custom": "custom",
+        "cusp": "cusp",
+        "legacy": "legacy",
+        "search_dom": "search_dom"
+      }
+    },
+    "user_role": {
+      "name": "user_role",
+      "values": {
+        "student": "student",
+        "admin": "admin",
+        "moderator": "moderator"
+      }
+    },
+    "vote_type": {
+      "name": "vote_type",
+      "values": {
+        "helpful": "helpful",
+        "not_helpful": "not_helpful"
+      }
+    }
+  },
+  "schemas": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

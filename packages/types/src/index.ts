@@ -163,6 +163,38 @@ export interface Session {
   expiresAt: Date;
 }
 
+// Subject Code Template types
+export type TemplateType = 'range' | 'list' | 'pattern';
+
+export interface SubjectCodeTemplate {
+  id: string;
+  universityId: string;
+  name: string;
+  templateType: TemplateType;
+  startCode: string | null;
+  endCode: string | null;
+  codeList: string[] | null;
+  pattern: string | null;
+  description: string | null;
+  faculty: string | null;
+  active: boolean;
+  priority: number;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string | null;
+}
+
+export interface SubjectCodeTemplateWithUniversity extends SubjectCodeTemplate {
+  universityName: string;
+  universityAbbr: string;
+}
+
+export interface TemplatePreviewResponse {
+  codes: string[];
+  total: number;
+  truncated: boolean;
+}
+
 // API Response types
 export interface ApiResponse<T = unknown> {
   success: boolean;

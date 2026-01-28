@@ -222,7 +222,7 @@ export async function reviewsRoutes(app: FastifyInstance) {
       .from(reviewFlags)
       .where(eq(reviewFlags.reviewId, id));
 
-    if (flagCount.value >= 3) {
+    if (flagCount.value >= 1) {
       await db
         .update(reviews)
         .set({ status: 'flagged' })

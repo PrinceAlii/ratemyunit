@@ -9,8 +9,17 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { LoadingSpinner } from '../../components/ui/loading-spinner';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
-import { Database, AlertCircle, CheckCircle, Clock, Loader2, School, Search } from 'lucide-react';
+import { Database, AlertCircle, CheckCircle, Clock, Loader2, School, Search, Pause, Play, List, Trash2, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { University } from '@ratemyunit/types';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from '../../components/ui/alert-dialog';
 
 interface ScrapeStatus {
   waiting: number;
@@ -25,6 +34,37 @@ interface BulkScrapeResult {
   failed: number;
   errors: Array<{ code: string; error: string }>;
 }
+
+interface QueueStatus {
+  paused: boolean;
+  counts: {
+    waiting: number;
+    active: number;
+    completed: number;
+    failed: number;
+  };
+}
+
+interface Job {
+  id: string;
+  unitCode: string;
+  universityId: string;
+  universityName?: string;
+  attempts: number;
+  state: 'waiting' | 'active' | 'completed' | 'failed';
+  createdAt: string;
+  processedAt?: string;
+  error?: string;
+}
+
+interface JobsResponse {
+  jobs: Job[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+type JobState = 'waiting' | 'active' | 'completed' | 'failed';
 
 export function DataScraper() {
   const queryClient = useQueryClient();
@@ -41,6 +81,12 @@ export function DataScraper() {
   const [scanDialogOpen, setScanDialogOpen] = useState(false);
   const [pendingBulkCodes, setPendingBulkCodes] = useState<string[]>([]);
 
+  // Queue management state
+  const [jobsDialogOpen, setJobsDialogOpen] = useState(false);
+  const [selectedJobState, setSelectedJobState] = useState<JobState>('waiting');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [clearQueueDialogOpen, setClearQueueDialogOpen] = useState(false);
+
   const { data: universities } = useQuery({
     queryKey: ['universities'],
     queryFn: () => api.get<University[]>('/api/public/universities'),
@@ -50,6 +96,25 @@ export function DataScraper() {
     queryKey: ['admin', 'scrape', 'status'],
     queryFn: () => api.get<ScrapeStatus>('/api/admin/queue-stats'),
     refetchInterval: 5000,
+  });
+
+  // Queue status query
+  const { data: queueStatus, isLoading: queueStatusLoading } = useQuery({
+    queryKey: ['admin', 'queue', 'status'],
+    queryFn: () => api.get<QueueStatus>('/api/admin/queue/status'),
+    refetchInterval: 5000,
+  });
+
+  // Jobs query - only fetch when dialog is open
+  const { data: jobsData, isLoading: jobsLoading } = useQuery({
+    queryKey: ['admin', 'queue', 'jobs', selectedJobState, currentPage],
+    queryFn: () => api.get<JobsResponse>('/api/admin/queue/jobs', {
+      state: selectedJobState,
+      page: currentPage,
+      pageSize: 20,
+    }),
+    enabled: jobsDialogOpen,
+    refetchInterval: jobsDialogOpen ? 5000 : false,
   });
 
   const { data: recentScrapes } = useQuery({
@@ -104,7 +169,8 @@ export function DataScraper() {
         },
       });
     
-      const scanMutation = useMutation({    mutationFn: (uniId: string) => api.post(`/api/admin/university/${uniId}/scan`, {}),
+      const scanMutation = useMutation({
+    mutationFn: (uniId: string) => api.post(`/api/admin/university/${uniId}/scan`, {}),
     onSuccess: () => {
       const message = `Discovery scan queued. The system will now crawl the university site for unit codes.`;
       setScanMessage({ type: 'success', text: message });
@@ -116,6 +182,54 @@ export function DataScraper() {
       setScanMessage({ type: 'error', text: error.message });
       toast.error(`Scan failed: ${error.message}`);
       setScanDialogOpen(false);
+    },
+  });
+
+  // Queue control mutations
+  const pauseQueueMutation = useMutation({
+    mutationFn: () => api.post('/api/admin/queue/pause', {}),
+    onSuccess: () => {
+      toast.success('Queue paused successfully');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'queue', 'status'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to pause queue: ${error.message}`);
+    },
+  });
+
+  const resumeQueueMutation = useMutation({
+    mutationFn: () => api.post('/api/admin/queue/resume', {}),
+    onSuccess: () => {
+      toast.success('Queue resumed successfully');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'queue', 'status'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to resume queue: ${error.message}`);
+    },
+  });
+
+  const clearQueueMutation = useMutation({
+    mutationFn: () => api.post('/api/admin/queue/clear', { confirm: true }),
+    onSuccess: () => {
+      toast.success('Queue cleared successfully');
+      setClearQueueDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'queue'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'scrape', 'status'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to clear queue: ${error.message}`);
+      setClearQueueDialogOpen(false);
+    },
+  });
+
+  const cancelJobMutation = useMutation({
+    mutationFn: (jobId: string) => api.post(`/api/admin/queue/jobs/${jobId}/cancel`, {}),
+    onSuccess: () => {
+      toast.success('Job cancelled successfully');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'queue'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to cancel job: ${error.message}`);
     },
   });
 
@@ -168,6 +282,39 @@ export function DataScraper() {
     }
   };
 
+  // Queue control handlers
+  const handlePauseResume = () => {
+    if (queueStatus?.paused) {
+      resumeQueueMutation.mutate();
+    } else {
+      pauseQueueMutation.mutate();
+    }
+  };
+
+  const handleClearQueue = () => {
+    setClearQueueDialogOpen(true);
+  };
+
+  const confirmClearQueue = () => {
+    clearQueueMutation.mutate();
+  };
+
+  const handleViewJobs = () => {
+    setJobsDialogOpen(true);
+    setCurrentPage(1);
+  };
+
+  const handleJobStateChange = (state: JobState) => {
+    setSelectedJobState(state);
+    setCurrentPage(1);
+  };
+
+  const handleCancelJob = (jobId: string) => {
+    cancelJobMutation.mutate(jobId);
+  };
+
+  const totalPages = jobsData ? Math.ceil(jobsData.total / 20) : 1;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -207,6 +354,80 @@ export function DataScraper() {
             <span className="text-sm font-bold uppercase">Failed</span>
           </div>
           <div className="text-4xl font-black">{statusLoading ? '-' : status?.failed || 0}</div>
+        </div>
+      </div>
+
+      {/* Queue Management Controls */}
+      <div className="p-6 border-4 border-foreground bg-card shadow-neo">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-display font-black uppercase flex items-center gap-2">
+            <List className="h-6 w-6" />
+            Queue Management
+          </h3>
+          {!queueStatusLoading && queueStatus && (
+            <div
+              className={`px-4 py-2 border-3 border-foreground font-bold text-sm uppercase ${
+                queueStatus.paused
+                  ? 'bg-yellow-500 text-white'
+                  : 'bg-green-500 text-white'
+              }`}
+            >
+              {queueStatus.paused ? 'Paused' : 'Active'}
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Button
+            onClick={handlePauseResume}
+            disabled={pauseQueueMutation.isPending || resumeQueueMutation.isPending || queueStatusLoading}
+            variant="secondary"
+            className="h-12 border-4 font-bold"
+          >
+            {pauseQueueMutation.isPending || resumeQueueMutation.isPending ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                {queueStatus?.paused ? 'Resuming...' : 'Pausing...'}
+              </>
+            ) : (
+              <>
+                {queueStatus?.paused ? (
+                  <Play className="h-5 w-5 mr-2" />
+                ) : (
+                  <Pause className="h-5 w-5 mr-2" />
+                )}
+                {queueStatus?.paused ? 'Resume Queue' : 'Pause Queue'}
+              </>
+            )}
+          </Button>
+
+          <Button
+            onClick={handleViewJobs}
+            variant="outline"
+            className="h-12 border-4 font-bold"
+          >
+            <List className="h-5 w-5 mr-2" />
+            View Jobs
+          </Button>
+
+          <Button
+            onClick={handleClearQueue}
+            disabled={clearQueueMutation.isPending}
+            variant="destructive"
+            className="h-12 border-4 font-bold"
+          >
+            {clearQueueMutation.isPending ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                Clearing...
+              </>
+            ) : (
+              <>
+                <Trash2 className="h-5 w-5 mr-2" />
+                Clear Queue
+              </>
+            )}
+          </Button>
         </div>
       </div>
 
@@ -420,6 +641,149 @@ export function DataScraper() {
         confirmText="Start Scan"
         onConfirm={confirmScan}
       />
+
+      {/* Clear Queue Confirmation Dialog */}
+      <ConfirmDialog
+        open={clearQueueDialogOpen}
+        onOpenChange={setClearQueueDialogOpen}
+        title="Clear Queue?"
+        description={`Are you sure you want to clear the queue? This will remove ${status?.waiting || 0} waiting job${(status?.waiting || 0) !== 1 ? 's' : ''} and cannot be undone.`}
+        confirmText="Clear Queue"
+        variant="destructive"
+        onConfirm={confirmClearQueue}
+      />
+
+      {/* Jobs Dialog */}
+      <AlertDialog open={jobsDialogOpen} onOpenChange={setJobsDialogOpen}>
+        <AlertDialogContent className="max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <List className="h-6 w-6" />
+              Queue Jobs
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              View and manage jobs in the scraping queue
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {/* Tab Navigation */}
+          <div className="flex gap-2 border-b-3 border-foreground pb-2">
+            {(['waiting', 'active', 'completed', 'failed'] as JobState[]).map((state) => (
+              <button
+                key={state}
+                onClick={() => handleJobStateChange(state)}
+                className={`px-4 py-2 font-bold text-sm uppercase border-3 border-foreground transition-all ${
+                  selectedJobState === state
+                    ? 'bg-primary text-primary-foreground shadow-neo'
+                    : 'bg-background hover:bg-muted'
+                }`}
+              >
+                {state}
+                {queueStatus && (
+                  <span className="ml-2 text-xs">
+                    ({queueStatus.counts[state]})
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Jobs Table */}
+          <div className="flex-1 overflow-y-auto">
+            {jobsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <LoadingSpinner className="h-8 w-8" />
+              </div>
+            ) : !jobsData || jobsData.jobs.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground font-bold">
+                No {selectedJobState} jobs found
+              </div>
+            ) : (
+              <div className="border-3 border-foreground">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-muted font-bold border-b-3 border-foreground">
+                    <tr>
+                      <th className="px-4 py-3 uppercase">Job ID</th>
+                      <th className="px-4 py-3 uppercase">Unit Code</th>
+                      <th className="px-4 py-3 uppercase">University</th>
+                      <th className="px-4 py-3 uppercase">Attempts</th>
+                      <th className="px-4 py-3 uppercase">Timestamp</th>
+                      {(selectedJobState === 'waiting' || selectedJobState === 'active') && (
+                        <th className="px-4 py-3 uppercase">Actions</th>
+                      )}
+                      {selectedJobState === 'failed' && (
+                        <th className="px-4 py-3 uppercase">Error</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y-3 divide-foreground">
+                    {jobsData.jobs.map((job) => (
+                      <tr key={job.id} className="hover:bg-muted/50">
+                        <td className="px-4 py-3 font-mono text-xs">{job.id.substring(0, 8)}...</td>
+                        <td className="px-4 py-3 font-mono font-bold">{job.unitCode}</td>
+                        <td className="px-4 py-3 font-medium">{job.universityName || 'Unknown'}</td>
+                        <td className="px-4 py-3 font-medium">{job.attempts}</td>
+                        <td className="px-4 py-3 font-medium text-muted-foreground text-xs">
+                          {formatDistanceToNow(new Date(job.processedAt || job.createdAt), { addSuffix: true })}
+                        </td>
+                        {(selectedJobState === 'waiting' || selectedJobState === 'active') && (
+                          <td className="px-4 py-3">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleCancelJob(job.id)}
+                              disabled={cancelJobMutation.isPending}
+                            >
+                              <X className="h-4 w-4 mr-1" />
+                              Cancel
+                            </Button>
+                          </td>
+                        )}
+                        {selectedJobState === 'failed' && (
+                          <td className="px-4 py-3 text-xs text-red-700 font-medium max-w-xs truncate">
+                            {job.error || 'Unknown error'}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {jobsData && jobsData.total > 20 && (
+            <div className="flex items-center justify-between border-t-3 border-foreground pt-4">
+              <div className="text-sm font-medium text-muted-foreground">
+                Page {currentPage} of {totalPages} ({jobsData.total} total)
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

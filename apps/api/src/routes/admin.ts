@@ -79,7 +79,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const status = action === 'restore' ? 'approved' : 'removed';
 
     await db.update(reviews)
-      .set({ status: status as any, updatedAt: new Date() })
+      .set({ status, updatedAt: new Date() })
       .where(eq(reviews.id, id));
 
     return reply.send({ success: true, message: `Review ${action}d.` });
@@ -224,9 +224,25 @@ export async function adminRoutes(app: FastifyInstance) {
    */
   app.get('/queue-stats', async () => {
     const counts = await scraperQueue.getJobCounts('waiting', 'active', 'completed', 'failed');
+    const isPaused = await scraperQueue.isPaused();
+    
+    // Add computed status field
+    let status = 'idle';
+    if (isPaused) {
+        status = 'paused';
+    } else if (counts.active > 0) {
+        status = 'busy';
+    } else if (counts.waiting > 0) {
+        status = 'queued';
+    }
+
     return {
       success: true,
-      data: counts,
+      data: {
+          ...counts,
+          status,
+          paused: isPaused
+      },
     };
   });
 
@@ -236,13 +252,222 @@ export async function adminRoutes(app: FastifyInstance) {
    */
   app.post('/university/:id/scan', async (request) => {
     const { id } = request.params as { id: string };
-    
-    // Add discovery job
-    await scraperQueue.add('discovery', { 
+
+    // Add discovery job with jobId for deduplication
+    await scraperQueue.add('discovery', {
       type: 'discovery',
-      universityId: id 
+      universityId: id
+    }, {
+      jobId: `discovery-${id}` // Deduplicate discovery jobs
     });
 
     return { success: true, message: 'Discovery scan queued' };
+  });
+
+  // --- Queue Management Routes ---
+
+  /**
+   * POST /api/admin/queue/pause
+   * Pause queue processing.
+   */
+  app.post('/queue/pause', async (_request, reply) => {
+    try {
+      await scraperQueue.pause();
+      return { success: true, message: 'Queue paused successfully' };
+    } catch (error) {
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to pause queue',
+      });
+    }
+  });
+
+  /**
+   * POST /api/admin/queue/resume
+   * Resume queue processing.
+   */
+  app.post('/queue/resume', async (_request, reply) => {
+    try {
+      await scraperQueue.resume();
+      return { success: true, message: 'Queue resumed successfully' };
+    } catch (error) {
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to resume queue',
+      });
+    }
+  });
+
+  /**
+   * POST /api/admin/queue/clear
+   * Clear all waiting jobs (requires confirmation).
+   */
+  app.post('/queue/clear', async (request, reply) => {
+    const clearSchema = z.object({
+      confirm: z.literal(true),
+    });
+
+    const result = clearSchema.safeParse(request.body);
+
+    if (!result.success) {
+      return reply.status(400).send({
+        success: false,
+        error: 'Confirmation required. Send { "confirm": true } to clear queue.',
+        details: result.error,
+      });
+    }
+
+    try {
+      // Only clear waiting jobs, not active/completed/failed
+      const cleared = await scraperQueue.clean(0, 0, 'wait');
+      return {
+        success: true,
+        message: `Cleared ${cleared.length} waiting jobs`,
+        data: { clearedCount: cleared.length }
+      };
+    } catch (error) {
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to clear queue',
+      });
+    }
+  });
+
+  /**
+   * DELETE /api/admin/queue/job/:jobId
+   * Cancel a specific job.
+   */
+  app.delete('/queue/job/:jobId', async (request, reply) => {
+    const { jobId } = request.params as { jobId: string };
+
+    try {
+      const job = await scraperQueue.getJob(jobId);
+
+      if (!job) {
+        return reply.status(404).send({
+          success: false,
+          error: `Job ${jobId} not found`,
+        });
+      }
+
+      const state = await job.getState();
+
+      // Only allow canceling waiting or active jobs
+      if (state !== 'waiting' && state !== 'active' && state !== 'delayed') {
+        return reply.status(400).send({
+          success: false,
+          error: `Cannot cancel job in state: ${state}. Only waiting, active, or delayed jobs can be cancelled.`,
+        });
+      }
+
+      await job.remove();
+
+      return {
+        success: true,
+        message: `Job ${jobId} cancelled successfully`,
+        data: { jobId, previousState: state }
+      };
+    } catch (error) {
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to cancel job',
+      });
+    }
+  });
+
+  /**
+   * GET /api/admin/queue/jobs
+   * List jobs with pagination.
+   */
+  app.get('/queue/jobs', async (request, reply) => {
+    const jobsQuerySchema = z.object({
+      state: z.enum(['waiting', 'active', 'completed', 'failed', 'delayed']).default('waiting'),
+      page: z.coerce.number().int().min(1).max(1000).default(1), // Added max page
+      limit: z.coerce.number().int().min(1).max(100).default(20),
+    });
+
+    const result = jobsQuerySchema.safeParse(request.query);
+
+    if (!result.success) {
+      return reply.status(400).send({
+        success: false,
+        error: 'Invalid query parameters',
+        details: result.error,
+      });
+    }
+
+    const { state, page, limit } = result.data;
+    const start = (page - 1) * limit;
+    const end = start + limit - 1;
+
+    try {
+      const jobs = await scraperQueue.getJobs(state, start, end);
+
+      const jobsData = jobs.map((job) => ({
+        id: job.id,
+        name: job.name,
+        data: job.data,
+        progress: job.progress,
+        attemptsMade: job.attemptsMade,
+        timestamp: job.timestamp,
+        processedOn: job.processedOn,
+        finishedOn: job.finishedOn,
+        failedReason: job.failedReason,
+        state: state, // Use the state we already know from the query
+      }));
+
+      // Get total count for the state
+      const counts = await scraperQueue.getJobCounts(state);
+      const total = counts[state] || 0;
+
+      return {
+        success: true,
+        data: {
+          jobs: jobsData,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
+        },
+      };
+    } catch (error) {
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch jobs',
+      });
+    }
+  });
+
+  /**
+   * GET /api/admin/queue/status
+   * Get queue status (paused/active, counts).
+   */
+  app.get('/queue/status', async (_request, reply) => {
+    try {
+      const isPaused = await scraperQueue.isPaused();
+      const counts = await scraperQueue.getJobCounts(
+        'waiting',
+        'active',
+        'completed',
+        'failed',
+        'delayed'
+      );
+
+      return {
+        success: true,
+        data: {
+          paused: isPaused,
+          status: isPaused ? 'paused' : 'active',
+          counts,
+        },
+      };
+    } catch (error) {
+      return reply.status(500).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get queue status',
+      });
+    }
   });
 }

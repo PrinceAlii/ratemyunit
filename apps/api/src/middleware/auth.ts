@@ -47,7 +47,8 @@ export async function authenticateUser(
     return;
   }
 
-  request.user = user;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  request.user = user as any;
 }
 
 /**

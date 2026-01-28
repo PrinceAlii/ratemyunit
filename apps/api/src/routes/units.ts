@@ -33,8 +33,9 @@ export async function unitsRoutes(app: FastifyInstance) {
     const conditions = [eq(units.active, true)];
 
     if (searchTerm && searchTerm.length >= 2) {
+      const escapedTerm = searchTerm.replace(/[\\%_]/g, '\\$&');
       conditions.push(
-        sql`(${units.unitCode} ILIKE ${searchTerm + '%'} OR ${units.unitName} ILIKE ${'%' + searchTerm + '%'})`
+        sql`(${units.unitCode} ILIKE ${escapedTerm + '%'} ESCAPE '\\' OR ${units.unitName} ILIKE ${'%' + escapedTerm + '%'} ESCAPE '\\')`
       );
     }
 

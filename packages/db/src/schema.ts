@@ -8,7 +8,8 @@ export const reviewStatusEnum = pgEnum('review_status', ['auto-approved', 'flagg
 export const voteTypeEnum = pgEnum('vote_type', ['helpful', 'not_helpful']);
 export const flagReasonEnum = pgEnum('flag_reason', ['spam', 'inappropriate', 'inaccurate', 'other']);
 export const flagStatusEnum = pgEnum('flag_status', ['pending', 'reviewed', 'dismissed']);
-export const scraperTypeEnum = pgEnum('scraper_type', ['courseloop', 'akari', 'custom', 'legacy', 'search_dom']);
+export const scraperTypeEnum = pgEnum('scraper_type', ['courseloop', 'akari', 'custom', 'cusp', 'legacy', 'search_dom']);
+export const templateTypeEnum = pgEnum('template_type', ['range', 'list', 'pattern']);
 
 // Universities Table
 export const universities = pgTable('universities', {
@@ -156,10 +157,34 @@ export const reviewFlags = pgTable('review_flags', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+// Subject Code Templates Table
+export const subjectCodeTemplates = pgTable('subject_code_templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  universityId: uuid('university_id').references(() => universities.id, { onDelete: 'cascade' }).notNull(),
+  name: varchar('name', { length: 255 }).notNull(),
+  templateType: templateTypeEnum('template_type').notNull(),
+  startCode: varchar('start_code', { length: 50 }),
+  endCode: varchar('end_code', { length: 50 }),
+  codeList: text('code_list').array(),
+  pattern: varchar('pattern', { length: 255 }),
+  description: text('description'),
+  faculty: varchar('faculty', { length: 255 }),
+  active: boolean('active').default(true).notNull(),
+  priority: integer('priority').default(0).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdBy: uuid('created_by').references(() => users.id),
+}, (t) => ({
+  universityIdIdx: index('subject_code_templates_university_id_idx').on(t.universityId),
+  activeIdx: index('subject_code_templates_active_idx').on(t.active),
+  priorityIdx: index('subject_code_templates_priority_idx').on(t.priority).desc(),
+}));
+
 // Relations
 export const universitiesRelations = relations(universities, ({ many }) => ({
   users: many(users),
   units: many(units),
+  subjectCodeTemplates: many(subjectCodeTemplates),
 }));
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -171,6 +196,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   reviewVotes: many(reviewVotes),
   reviewFlags: many(reviewFlags),
   sessions: many(sessions),
+  createdTemplates: many(subjectCodeTemplates),
 }));
 
 export const unitsRelations = relations(units, ({ one, many }) => ({
@@ -212,6 +238,17 @@ export const reviewFlagsRelations = relations(reviewFlags, ({ one }) => ({
   }),
   user: one(users, {
     fields: [reviewFlags.userId],
+    references: [users.id],
+  }),
+}));
+
+export const subjectCodeTemplatesRelations = relations(subjectCodeTemplates, ({ one }) => ({
+  university: one(universities, {
+    fields: [subjectCodeTemplates.universityId],
+    references: [universities.id],
+  }),
+  creator: one(users, {
+    fields: [subjectCodeTemplates.createdBy],
     references: [users.id],
   }),
 }));

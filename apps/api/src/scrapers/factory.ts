@@ -3,7 +3,7 @@ import { CourseLoopScraper } from './strategies/courseloop';
 import { GenericDomScraper } from './strategies/generic';
 import { SearchDomScraper } from './strategies/search';
 
-export type ScraperType = 'courseloop' | 'akari' | 'custom' | 'legacy' | 'search_dom';
+export type ScraperType = 'courseloop' | 'akari' | 'custom' | 'cusp' | 'legacy' | 'search_dom';
 
 export class ScraperFactory {
   static createScraper(
@@ -15,6 +15,7 @@ export class ScraperFactory {
       case 'courseloop':
         return new CourseLoopScraper(universityName, config);
       case 'custom':
+      case 'cusp': // CUSP portal (Sydney Uni)
       case 'akari': // Akari maps to Generic for now
         return new GenericDomScraper(universityName, config);
       case 'search_dom':

@@ -3,6 +3,23 @@ import { BaseScraper } from './base';
 import { ScraperResult, ScrapedSubjectData } from '../uts/types';
 import { safeValidateScrapedSubject } from '../uts/validator';
 import he from 'he';
+import { db } from '@ratemyunit/db/client';
+import { universities, subjectCodeTemplates } from '@ratemyunit/db/schema';
+import { eq, and, desc } from 'drizzle-orm';
+import { subjectTemplateService } from '../../services/template';
+import pino from 'pino';
+import { config } from '../../config.js';
+import { XMLParser } from 'fast-xml-parser';
+
+const logger = pino({
+  level: config.NODE_ENV === 'production' ? 'info' : 'debug',
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: true,
+    },
+  },
+});
 
 export class CourseLoopScraper extends BaseScraper {
   
@@ -29,6 +46,10 @@ export class CourseLoopScraper extends BaseScraper {
           error: `Subject ${cleanCode} not found (404) at ${url}`,
           scrapedAt,
         };
+      }
+
+      if (response?.status() === 429 || response?.status() === 403) {
+        throw new Error(`Blocking error: ${response.status()} at ${url}`);
       }
 
       const nextData = await page.evaluate(() => {
@@ -76,6 +97,276 @@ export class CourseLoopScraper extends BaseScraper {
     } finally {
       await page.close();
     }
+  }
+
+  async discoverSubjects(browser: Browser): Promise<string[]> {
+    const routePattern = this.config.routes?.subject || '/subject/current/:code';
+    const discoveryUrl = this.config.routes?.discovery
+      ? `${this.config.baseUrl}${this.config.routes.discovery}`
+      : this.config.baseUrl;
+
+    const page = await browser.newPage();
+    const discoveredCodes = new Set<string>();
+
+    try {
+      logger.info(`🔎 CourseLoop discovering from: ${discoveryUrl}`);
+
+      // Strategy 0: Check if discovery URL is a sitemap.xml
+      if (discoveryUrl.endsWith('.xml') || discoveryUrl.includes('sitemap')) {
+        const sitemapCodes = await this.discoverFromSitemap(page, discoveryUrl, routePattern);
+        sitemapCodes.forEach(code => discoveredCodes.add(code));
+        
+        // If sitemap yielded nothing, try templates
+        if (discoveredCodes.size === 0) {
+            await this.attemptTemplateDiscovery(discoveredCodes);
+        }
+
+        logger.info(`✅ CourseLoop discovered ${discoveredCodes.size} subjects from sitemap.`);
+        return Array.from(discoveredCodes);
+      }
+
+      await page.goto(discoveryUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await page.waitForTimeout(2000);
+
+      // Strategy 1: Try extracting from __NEXT_DATA__
+      await this.discoverFromNextData(page, discoveredCodes);
+
+      // Strategy 2: Fall back to link crawling
+      if (discoveredCodes.size === 0) {
+        await this.discoverFromLinks(page, routePattern, discoveredCodes);
+      }
+      
+      // Strategy 3: Check templates if still 0
+      if (discoveredCodes.size === 0) {
+          logger.info('📋 Link crawling found 0 codes, attempting template-based discovery as last resort');
+          await this.attemptTemplateDiscovery(discoveredCodes);
+      }
+
+      logger.info(`✅ CourseLoop discovered ${discoveredCodes.size} subjects.`);
+    } catch (e) {
+      logger.error({ err: e }, `CourseLoop discovery failed`);
+    } finally {
+      await page.close();
+    }
+
+    return Array.from(discoveredCodes);
+  }
+
+  private async discoverFromSitemap(page: Page, url: string, routePattern: string, depth: number = 0): Promise<string[]> {
+    if (depth > 3) return []; // Prevent infinite recursion
+
+    logger.info(`📑 Detected sitemap, parsing XML: ${url} (depth ${depth})`);
+    try {
+      const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      if (!response?.ok()) {
+        logger.warn(`⚠️ Sitemap fetch failed: ${url} (${response?.status()})`);
+        return [];
+      }
+
+      const xmlContent = await page.content();
+      
+      // Extract codes from this sitemap
+      const codes = new Set(this.extractCodesFromSitemap(xmlContent, routePattern));
+      
+      // Use fast-xml-parser to find nested sitemaps safely
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        processEntities: false, // Disable entity expansion to prevent XML bomb
+      });
+      const jsonObj = parser.parse(xmlContent);
+      
+      const nestedUrls: string[] = [];
+      
+      // Handle sitemap index
+      if (jsonObj.sitemapindex?.sitemap) {
+        const sitemaps = Array.isArray(jsonObj.sitemapindex.sitemap) ? jsonObj.sitemapindex.sitemap : [jsonObj.sitemapindex.sitemap];
+        nestedUrls.push(...sitemaps.map((s: any) => s.loc).filter(Boolean));
+      } 
+      
+      // Standard sitemap might also point to other sitemaps in loc
+      if (jsonObj.urlset?.url) {
+        const locs = Array.isArray(jsonObj.urlset.url) ? jsonObj.urlset.url : [jsonObj.urlset.url];
+        const possibleSitemaps = locs.map((u: any) => u.loc).filter((l: any) => typeof l === 'string' && l.endsWith('.xml'));
+        nestedUrls.push(...possibleSitemaps);
+      }
+
+      for (const nestedUrl of nestedUrls) {
+        if (nestedUrl !== url) {
+          const nestedCodes = await this.discoverFromSitemap(page, nestedUrl, routePattern, depth + 1);
+          nestedCodes.forEach(c => codes.add(c));
+        }
+      }
+
+      return Array.from(codes);
+    } catch (err) {
+      logger.error({ err }, `Sitemap processing failed: ${url}`);
+      return [];
+    }
+  }
+
+  private async attemptTemplateDiscovery(discoveredCodes: Set<string>): Promise<void> {
+      logger.info('📋 Attempting template-based discovery');
+      const templateCodes = await this.getCodesFromTemplates();
+
+      if (templateCodes.length > 0) {
+        logger.info(`📝 Generated ${templateCodes.length} codes from templates`);
+        templateCodes.forEach(code => discoveredCodes.add(code));
+      } else {
+        logger.warn('⚠️ No templates found, using hardcoded fallback if applicable');
+        if (this.config.baseUrl.includes('coursehandbook.uts.edu.au')) {
+          logger.info('📋 Using hardcoded UTS range 31001-39999 as final fallback');
+          for (let code = 31001; code <= 39999; code++) {
+            discoveredCodes.add(code.toString());
+          }
+        }
+      }
+  }
+
+  private async discoverFromNextData(page: Page, discoveredCodes: Set<string>): Promise<void> {
+      const nextData = await page.evaluate(() => {
+        const script = document.getElementById('__NEXT_DATA__');
+        if (script) {
+          try { return JSON.parse(script.innerText); } catch { return null; }
+        }
+        return null;
+      });
+
+      if (nextData?.props?.pageProps) {
+        const pageProps = nextData.props.pageProps;
+        const possibleArrays = [
+          pageProps.subjects,
+          pageProps.units,
+          pageProps.courses,
+          pageProps.data?.subjects,
+          pageProps.data?.units,
+        ];
+
+        for (const arr of possibleArrays) {
+          if (Array.isArray(arr)) {
+            for (const item of arr) {
+              if (item?.code) discoveredCodes.add(item.code);
+              if (item?.subject_code) discoveredCodes.add(item.subject_code);
+            }
+          }
+        }
+      }
+  }
+
+  private async discoverFromLinks(page: Page, routePattern: string, discoveredCodes: Set<string>): Promise<void> {
+      logger.info('📋 __NEXT_DATA__ extraction found 0 codes, falling back to link crawling');
+
+      const escapedPattern = routePattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regexString = escapedPattern.replace(':code', '([a-zA-Z0-9]{3,10})');
+      const regex = new RegExp(regexString);
+
+      const hrefs = await page.evaluate(() => {
+        return Array.from(document.querySelectorAll('a'))
+          .map(a => a.getAttribute('href'))
+          .filter(Boolean) as string[];
+      });
+
+      for (const href of hrefs) {
+        const match = href.match(regex);
+        if (match && match[1]) {
+          discoveredCodes.add(match[1]);
+        }
+      }
+  }
+
+  private async getCodesFromTemplates(): Promise<string[]> {
+    try {
+      const universityId = await this.getUniversityId();
+      if (!universityId) {
+        return [];
+      }
+
+      const templates = await db
+        .select()
+        .from(subjectCodeTemplates)
+        .where(
+          and(
+            eq(subjectCodeTemplates.universityId, universityId),
+            eq(subjectCodeTemplates.active, true)
+          )
+        )
+        .orderBy(desc(subjectCodeTemplates.priority));
+
+      if (templates.length === 0) {
+        return [];
+      }
+
+      const allCodes = new Set<string>();
+
+      for (const template of templates) {
+        try {
+          const templateData = {
+            id: template.id,
+            templateType: template.templateType,
+            startCode: template.startCode,
+            endCode: template.endCode,
+            codeList: template.codeList,
+            pattern: template.pattern,
+          };
+
+          const codes = subjectTemplateService.generateCodesFromTemplateData(templateData);
+          codes.forEach(code => allCodes.add(code));
+        } catch (error) {
+          logger.error({ err: error }, `Failed to generate codes from template ${template.id}`);
+        }
+      }
+
+      return Array.from(allCodes);
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to get codes from templates');
+      return [];
+    }
+  }
+
+  private async getUniversityId(): Promise<string | null> {
+    try {
+      const [university] = await db
+        .select()
+        .from(universities)
+        .where(eq(universities.name, this.universityName))
+        .limit(1);
+
+      return university?.id || null;
+    } catch (error) {
+      logger.error({ err: error }, `Failed to get university ID for ${this.universityName}`);
+      return null;
+    }
+  }
+
+  private extractCodesFromSitemap(xmlContent: string, routePattern: string): string[] {
+    const codes = new Set<string>();
+    
+    try {
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        processEntities: false, // Disable entity expansion
+      });
+      const jsonObj = parser.parse(xmlContent);
+      
+      if (!jsonObj.urlset?.url) return [];
+      
+      const urls = Array.isArray(jsonObj.urlset.url) ? jsonObj.urlset.url : [jsonObj.urlset.url];
+      const locs: string[] = urls.map((u: any) => u.loc).filter(Boolean);
+
+      const escapedPattern = routePattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regexString = escapedPattern.replace(':code', '([a-zA-Z0-9]{3,10})');
+      const regex = new RegExp(regexString, 'i');
+
+      for (const url of locs) {
+        const match = url.match(regex);
+        if (match && match[1]) {
+          codes.add(match[1].toUpperCase());
+        }
+      }
+    } catch (err) {
+      logger.error({ err }, 'Failed to parse sitemap XML');
+    }
+
+    return Array.from(codes);
   }
 
   private extractFromNextData(content: any, code: string): Partial<ScrapedSubjectData> {

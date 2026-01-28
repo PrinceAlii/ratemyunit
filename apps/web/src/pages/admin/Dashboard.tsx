@@ -6,13 +6,14 @@ import { Button } from '../../components/ui/button';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { useAuth } from '../../lib/auth-context';
 import { Navigate } from 'react-router-dom';
-import { ShieldCheck, Users, MessageSquare, AlertTriangle, BarChart3, Check, Trash2, Ban, Database } from 'lucide-react';
+import { ShieldCheck, Users, MessageSquare, AlertTriangle, BarChart3, Check, Trash2, Ban, Database, FileText } from 'lucide-react';
 import { DataScraper } from './DataScraper';
+import { SubjectTemplates } from './SubjectTemplates';
 
 export function AdminDashboard() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'users' | 'scraper'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'users' | 'templates' | 'scraper'>('overview');
   const [banDialogOpen, setBanDialogOpen] = useState(false);
   const [userToBan, setUserToBan] = useState<{ id: string; email: string; banned: boolean } | null>(null);
 
@@ -113,6 +114,16 @@ export function AdminDashboard() {
         >
           <Users className="mr-2 h-5 w-5" />
           Users
+        </Button>
+        <Button
+          variant={activeTab === 'templates' ? 'default' : 'ghost'}
+          onClick={() => setActiveTab('templates')}
+          className="border-3 border-transparent data-[active=true]:border-foreground font-bold"
+          // @ts-ignore
+          data-active={activeTab === 'templates'}
+        >
+          <FileText className="mr-2 h-5 w-5" />
+          Templates
         </Button>
         <Button
           variant={activeTab === 'scraper' ? 'default' : 'ghost'}
@@ -256,6 +267,8 @@ export function AdminDashboard() {
           )}
         </div>
       )}
+
+      {activeTab === 'templates' && <SubjectTemplates />}
 
       {activeTab === 'scraper' && <DataScraper />}
 

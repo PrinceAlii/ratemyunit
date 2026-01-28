@@ -15,15 +15,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@node-rs/argon2": "^1.8.0",
-    "dotenv": "^16.4.1",
-    "drizzle-orm": "^0.29.3",
-    "postgres": "^3.4.3"
+    "@node-rs/argon2": "^2.0.2",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.1",
+    "postgres": "^3.4.8"
   },
   "devDependencies": {
-    "@types/node": "^20.11.5",
-    "drizzle-kit": "^0.20.10",
-    "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "@types/node": "^25.0.10",
+    "drizzle-kit": "^0.31.8",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }

@@ -23,6 +23,7 @@
     "@radix-ui/react-toast": "^1.2.15",
     "@ratemyunit/types": "workspace:*",
     "@ratemyunit/validators": "workspace:*",
+    "@tailwindcss/postcss": "^4.1.18",
     "@tanstack/react-query": "^5.90.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

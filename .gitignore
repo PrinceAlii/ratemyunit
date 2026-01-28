@@ -5,6 +5,8 @@ node_modules/
 ## Temp
 # PROJECT_CONTEXT.md
 
+conductor/
+
 # Build outputs
 dist/
 build/

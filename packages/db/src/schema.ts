@@ -177,7 +177,7 @@ export const subjectCodeTemplates = pgTable('subject_code_templates', {
 }, (t) => ({
   universityIdIdx: index('subject_code_templates_university_id_idx').on(t.universityId),
   activeIdx: index('subject_code_templates_active_idx').on(t.active),
-  priorityIdx: index('subject_code_templates_priority_idx').on(t.priority).desc(),
+  priorityIdx: index('subject_code_templates_priority_idx').on(t.priority),
 }));
 
 // Relations

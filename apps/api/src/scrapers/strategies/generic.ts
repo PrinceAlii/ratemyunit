@@ -3,6 +3,18 @@ import { BaseScraper } from './base';
 import { ScraperResult } from '../uts/types';
 import { safeValidateScrapedSubject } from '../uts/validator';
 import he from 'he';
+import pino from 'pino';
+import { config } from '../../config.js';
+
+const logger = pino({
+  level: config.NODE_ENV === 'production' ? 'info' : 'debug',
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: true,
+    },
+  },
+});
 
 export class GenericDomScraper extends BaseScraper {
 
@@ -38,10 +50,9 @@ export class GenericDomScraper extends BaseScraper {
     const routePattern = this.config.routes?.subject;
     if (!routePattern) return [];
 
-    // Construct regex from route pattern (e.g. "/units/:code" -> "/units/([a-zA-Z0-9\-_]+)")
-    // We escape special regex chars except :code
-    const escapedPattern = routePattern.replace(/[.*+?^${}()|[\\]/g, '\$&');
-    const regexString = escapedPattern.replace(':code', '([a-zA-Z0-9\-_]{3,10})'); // Limit code length to avoid garbage
+    // Construct regex from route pattern
+    const escapedPattern = routePattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regexString = escapedPattern.replace(':code', '([a-zA-Z0-9\\-_]{3,10})');
     const regex = new RegExp(regexString);
 
     const startUrl = this.config.routes?.discovery 
@@ -52,13 +63,15 @@ export class GenericDomScraper extends BaseScraper {
     const discoveredCodes = new Set<string>();
 
     try {
-        console.log(`🔎 Discovering from: ${startUrl}`);
+        logger.info(`🔎 Discovering from: ${startUrl}`);
         await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
         
         await page.waitForTimeout(2000);
 
         const hrefs = await page.evaluate(() => {
-            return Array.from(document.querySelectorAll('a')).map(a => a.getAttribute('href')).filter(Boolean) as string[];
+            return Array.from(document.querySelectorAll('a'))
+                .map(a => a.getAttribute('href'))
+                .filter((href): href is string => typeof href === 'string');
         });
 
         for (const href of hrefs) {
@@ -68,10 +81,10 @@ export class GenericDomScraper extends BaseScraper {
             }
         }
         
-        console.log(`✅ Discovered ${discoveredCodes.size} units on shallow scan.`);
+        logger.info(`✅ Discovered ${discoveredCodes.size} units on shallow scan.`);
 
     } catch (e) {
-        console.error(`Discovery failed: ${e}`);
+        logger.error({ err: e }, `Discovery failed`);
     } finally {
         await page.close();
     }
@@ -88,10 +101,13 @@ export class GenericDomScraper extends BaseScraper {
     }
 
     try {
-        const name = await this.getText(page, selectors.title, true);
-        const description = selectors.description ? await this.getText(page, selectors.description) : 'No description.';
-        const faculty = selectors.faculty ? await this.getText(page, selectors.faculty) : undefined;
-        const creditPointsText = selectors.creditPoints ? await this.getText(page, selectors.creditPoints) : '6';
+        const titleSelector = selectors['title'];
+        if (!titleSelector) throw new Error('Title selector missing');
+
+        const name = await this.getText(page, titleSelector, true);
+        const description = selectors['description'] ? await this.getText(page, selectors['description']) : 'No description.';
+        const faculty = selectors['faculty'] ? await this.getText(page, selectors['faculty']) : undefined;
+        const creditPointsText = selectors['creditPoints'] ? await this.getText(page, selectors['creditPoints']) : '6';
         const creditPoints = parseInt(creditPointsText.replace(/\D/g, ''), 10) || 6;
 
         const data = {

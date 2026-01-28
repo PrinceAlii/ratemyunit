@@ -105,17 +105,19 @@ export async function buildApp() {
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error);
 
-    if (error.validation) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((error as any).validation) {
       return reply.status(400).send({
         success: false,
         error: 'Validation error',
-        details: error.validation,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        details: (error as any).validation,
       });
     }
 
-    const statusCode = error.statusCode || 500;
+    const statusCode = (error as any).statusCode || 500;
     const message =
-      config.NODE_ENV === 'production' ? 'Internal server error' : error.message;
+      config.NODE_ENV === 'production' ? 'Internal server error' : (error as any).message;
 
     return reply.status(statusCode).send({
       success: false,

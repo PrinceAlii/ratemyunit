@@ -34,8 +34,8 @@ export const resetPasswordSchema = z.object({
 export const createReviewSchema = z.object({
   unitId: z.string().uuid('Invalid unit ID'),
   sessionTaken: z.string().min(1, 'Session taken is required'),
-  displayNameType: z.enum(['nickname', 'anonymous', 'verified'], {
-    errorMap: () => ({ message: 'Invalid display name type' }),
+  displayNameType: z.enum(['nickname', 'anonymous', 'verified'] as const, {
+    error: 'Invalid display name type',
   }),
   customNickname: z.string().max(50, 'Nickname is too long').optional().nullable(),
   overallRating: z.number().int().min(1).max(5),
@@ -55,14 +55,14 @@ export const createReviewSchema = z.object({
 export const updateReviewSchema = createReviewSchema.partial().omit({ unitId: true });
 
 export const voteReviewSchema = z.object({
-  voteType: z.enum(['helpful', 'not_helpful'], {
-    errorMap: () => ({ message: 'Invalid vote type' }),
+  voteType: z.enum(['helpful', 'not_helpful'] as const, {
+    error: 'Invalid vote type',
   }),
 });
 
 export const flagReviewSchema = z.object({
-  reason: z.enum(['spam', 'inappropriate', 'inaccurate', 'other'], {
-    errorMap: () => ({ message: 'Invalid flag reason' }),
+  reason: z.enum(['spam', 'inappropriate', 'inaccurate', 'other'] as const, {
+    error: 'Invalid flag reason',
   }),
   description: z.string().max(500, 'Description is too long').optional().nullable(),
 });
@@ -110,8 +110,8 @@ export const updateUnitSchema = z.object({
 });
 
 export const moderateReviewSchema = z.object({
-  action: z.enum(['remove', 'restore'], {
-    errorMap: () => ({ message: 'Invalid moderation action' }),
+  action: z.enum(['remove', 'restore'] as const, {
+    error: 'Invalid moderation action',
   }),
 });
 

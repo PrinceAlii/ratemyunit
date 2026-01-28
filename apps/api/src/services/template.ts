@@ -153,7 +153,8 @@ export class SubjectTemplateService {
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const zodErrors = error.errors.map((e) => `${e.path.join('.')}: ${e.message}`);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const zodErrors = (error as any).errors.map((e: any) => `${e.path.join('.')}: ${e.message}`);
         errors = errors.concat(zodErrors);
       } else {
         errors = [...errors, 'Unknown validation error'];

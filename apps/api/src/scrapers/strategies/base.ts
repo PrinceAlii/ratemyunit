@@ -9,7 +9,7 @@ export const ScraperConfigSchema = z.object({
     search: z.string().optional(),
     discovery: z.string().optional(),
   }).optional(),
-  selectors: z.record(z.string()).optional(),
+  selectors: z.record(z.string(), z.string()).optional(),
   search: z.object({
     input: z.string(),
     btn: z.string().optional(),

@@ -2,6 +2,7 @@ import { Lucia } from 'lucia';
 import { DrizzlePostgreSQLAdapter } from '@lucia-auth/adapter-drizzle';
 import { db } from '@ratemyunit/db/client';
 import { users, sessions } from '@ratemyunit/db/schema';
+import { config } from '../config.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const adapter = new DrizzlePostgreSQLAdapter(db, sessions as any, users as any);
@@ -9,7 +10,9 @@ const adapter = new DrizzlePostgreSQLAdapter(db, sessions as any, users as any);
 export const lucia = new Lucia(adapter, {
   sessionCookie: {
     attributes: {
-      secure: process.env.NODE_ENV === 'production',
+      secure: config.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
     },
   },
   getUserAttributes: (attributes) => {

@@ -2,6 +2,8 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
+import csrf from '@fastify/csrf-protection';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { config } from './config.js';
@@ -10,6 +12,7 @@ import { adminRoutes } from './routes/admin.js';
 import { unitsRoutes } from './routes/units.js';
 import { reviewsRoutes } from './routes/reviews.js';
 import { publicDataRoutes } from './routes/public-data.js';
+import { templateRoutes } from './routes/templates.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -20,8 +23,43 @@ export async function buildApp() {
 
   await app.register(cookie);
 
+  // CSRF Protection
+  await app.register(csrf, {
+    sessionPlugin: '@fastify/cookie',
+    cookieOpts: {
+      signed: false, // Set to true if you use signed cookies
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: config.NODE_ENV === 'production',
+    },
+  });
+
+  // Rate Limiting
+  await app.register(rateLimit, {
+    max: 100, // 100 requests per window
+    timeWindow: '1 minute', // 1 minute window
+    allowList: ['127.0.0.1', 'localhost'], // Allow local development
+  });
+
   await app.register(helmet, {
-    contentSecurityPolicy: config.NODE_ENV === 'production',
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameSrc: ["'none'"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true,
+    },
+    frameguard: { action: 'deny' },
+    xssFilter: true,
   });
 
   await app.register(cors, {
@@ -62,6 +100,7 @@ export async function buildApp() {
   await app.register(unitsRoutes, { prefix: '/api/units' });
   await app.register(reviewsRoutes, { prefix: '/api/reviews' });
   await app.register(publicDataRoutes, { prefix: '/api/public' });
+  await app.register(templateRoutes, { prefix: '/api/admin/templates' });
 
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error);

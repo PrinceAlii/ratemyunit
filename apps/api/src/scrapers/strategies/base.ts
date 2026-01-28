@@ -34,7 +34,7 @@ export abstract class BaseScraper {
    * Discovers available subject codes.
    * Default implementation returns empty list (opt-in).
    */
-  async discoverSubjects(browser: Browser): Promise<string[]> {
+  async discoverSubjects(_browser: Browser): Promise<string[]> {
     return [];
   }
 }

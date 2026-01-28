@@ -9,7 +9,7 @@ const TOKEN_EXPIRY_HOURS = 24;
  * Generate a random token (UUID-like).
  */
 function generateToken(): string {
-  return randomBytes(16).toString('hex');
+  return randomBytes(32).toString('base64url');
 }
 
 /**

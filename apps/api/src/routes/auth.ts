@@ -20,13 +20,31 @@ import {
 } from '../lib/tokens.js';
 import { authenticateUser, requireAuth } from '../middleware/auth.js';
 import { config } from '../config.js';
+import pino from 'pino';
+
+const logger = pino({
+  level: config.NODE_ENV === 'production' ? 'info' : 'debug',
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: true,
+    },
+  },
+});
 
 export async function authRoutes(app: FastifyInstance) {
   /**
    * POST /api/auth/register
    * Register a new user account.
    */
-  app.post('/register', async (request, reply) => {
+  app.post('/register', {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: '1 hour'
+      }
+    }
+  }, async (request, reply) => {
     const body = registerSchema.parse(request.body);
 
     // Extract email domain and verify it matches a university.
@@ -58,19 +76,19 @@ export async function authRoutes(app: FastifyInstance) {
       .where(eq(users.email, body.email))
       .limit(1);
 
+    const passwordHash = await hash(body.password, {
+      memoryCost: 47104,
+      timeCost: 3,
+      outputLen: 32,
+      parallelism: 1,
+    });
+
     if (existingUser) {
       return reply.status(400).send({
         success: false,
         error: 'An account with this email already exists.',
       });
     }
-
-    const passwordHash = await hash(body.password, {
-      memoryCost: 19456,
-      timeCost: 2,
-      outputLen: 32,
-      parallelism: 1,
-    });
 
     const [newUser] = await db
       .insert(users)
@@ -88,9 +106,9 @@ export async function authRoutes(app: FastifyInstance) {
 
     if (config.NODE_ENV === 'development') {
       const verificationLink = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
-      console.log('\n📧 Email Verification Link:');
-      console.log(verificationLink);
-      console.log('');
+      logger.info('\n📧 Email Verification Link:');
+      logger.info(verificationLink);
+      logger.info('');
     } else {
       // TODO: Send verification email via email service (SendGrid, Resend, etc.).
     }
@@ -108,26 +126,35 @@ export async function authRoutes(app: FastifyInstance) {
    * POST /api/auth/login
    * Login with email and password.
    */
-  app.post('/login', async (request, reply) => {
+  app.post('/login', {
+    config: {
+      rateLimit: {
+        max: 5,
+        timeWindow: '5 minutes'
+      }
+    }
+  }, async (request, reply) => {
     const body = loginSchema.parse(request.body);
 
     const [user] = await db.select().from(users).where(eq(users.email, body.email)).limit(1);
 
-    if (!user) {
-      return reply.status(401).send({
-        success: false,
-        error: 'Invalid email or password.',
-      });
-    }
+    const dummyHash = "$argon2id$v=19$m=47104,t=3,p=1$c29tZXNhbHQ$Rdesc85X6AnBl09v/No0ksW3XOn9uWpZ9HOn9uWpZ9H"; // Dummy hash for timing
 
-    const validPassword = await verify(user.passwordHash, body.password, {
-      memoryCost: 19456,
-      timeCost: 2,
-      outputLen: 32,
-      parallelism: 1,
-    });
+    const validPassword = user 
+      ? await verify(user.passwordHash, body.password, {
+          memoryCost: 47104,
+          timeCost: 3,
+          outputLen: 32,
+          parallelism: 1,
+        })
+      : await verify(dummyHash, body.password, {
+          memoryCost: 47104,
+          timeCost: 3,
+          outputLen: 32,
+          parallelism: 1,
+        }).then(() => false);
 
-    if (!validPassword) {
+    if (!user || !validPassword) {
       return reply.status(401).send({
         success: false,
         error: 'Invalid email or password.',
@@ -229,7 +256,14 @@ export async function authRoutes(app: FastifyInstance) {
    * POST /api/auth/forgot-password
    * Request password reset token.
    */
-  app.post('/forgot-password', async (request, reply) => {
+  app.post('/forgot-password', {
+    config: {
+      rateLimit: {
+        max: 3,
+        timeWindow: '1 hour'
+      }
+    }
+  }, async (request, reply) => {
     const body = forgotPasswordSchema.parse(request.body);
 
     const [user] = await db.select().from(users).where(eq(users.email, body.email)).limit(1);
@@ -247,9 +281,9 @@ export async function authRoutes(app: FastifyInstance) {
     // In development, log the reset link to console.
     if (config.NODE_ENV === 'development') {
       const resetLink = `${config.FRONTEND_URL}/reset-password?token=${resetToken}`;
-      console.log('\n🔑 Password Reset Link:');
-      console.log(resetLink);
-      console.log('');
+      logger.info('\n🔑 Password Reset Link:');
+      logger.info(resetLink);
+      logger.info('');
     } else {
       // TODO: Send password reset email via email service.
     }
@@ -276,10 +310,13 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    // Hash new password.
+    // Invalidate all sessions for this user BEFORE changing password
+    await lucia.invalidateUserSessions(userId);
+
+    // Hash new password with improved parameters.
     const passwordHash = await hash(body.password, {
-      memoryCost: 19456,
-      timeCost: 2,
+      memoryCost: 47104,
+      timeCost: 3,
       outputLen: 32,
       parallelism: 1,
     });
@@ -289,9 +326,6 @@ export async function authRoutes(app: FastifyInstance) {
 
     // Delete the reset token.
     await deletePasswordResetToken(body.token);
-
-    // Invalidate all sessions for this user.
-    await lucia.invalidateUserSessions(userId);
 
     return reply.send({
       success: true,

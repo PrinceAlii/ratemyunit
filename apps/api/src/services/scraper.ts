@@ -1,10 +1,22 @@
 import { db } from '@ratemyunit/db/client';
 import { units, universities } from '@ratemyunit/db/schema';
 import { eq } from 'drizzle-orm';
-import { chromium } from 'playwright';
+import { chromium, Browser } from 'playwright';
 import { ScraperFactory } from '../scrapers/factory';
 import { ScraperConfigSchema } from '../scrapers/strategies/base';
 import type { ScraperResult } from '../scrapers/uts/types';
+import pino from 'pino';
+import { config } from '../config.js';
+
+const logger = pino({
+  level: config.NODE_ENV === 'production' ? 'info' : 'debug',
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: true,
+    },
+  },
+});
 
 export class ScraperService {
   
@@ -30,23 +42,23 @@ export class ScraperService {
       try { scraperSelectors = JSON.parse(scraperSelectors); } catch { scraperSelectors = {}; }
     }
 
-    const selectorsObj = (scraperSelectors as any) || {};
-    const searchConfig = selectorsObj.search;
+    const selectorsObj = (scraperSelectors as Record<string, unknown>) || {};
+    const searchConfig = selectorsObj.search as Record<string, string> | undefined;
     
     // Filter out nested configurations to ensure compatibility with string-based selector records
-    const cleanSelectors: Record<string, string> = {};
-    for (const [key, value] of Object.entries(selectorsObj)) {
+    const cleanSelectors = Object.entries(selectorsObj).reduce((acc, [key, value]) => {
         if (key !== 'search' && typeof value === 'string') {
-            cleanSelectors[key] = value;
+            acc[key] = value;
         }
-    }
+        return acc;
+    }, {} as Record<string, string>);
 
-    const routesObj = (scraperRoutes as any) || {};
-    const baseUrl = routesObj.base || uni.handbookUrl || '';
+    const routesObj = (scraperRoutes as Record<string, unknown>) || {};
+    const baseUrl = (routesObj.base as string) || uni.handbookUrl || '';
     
     const configToValidate = {
       baseUrl,
-      routes: scraperRoutes,
+      routes: scraperRoutes as Record<string, string>,
       selectors: cleanSelectors,
       search: searchConfig
     };
@@ -60,17 +72,34 @@ export class ScraperService {
     return { uni, scraper: ScraperFactory.createScraper(uni.scraperType as any, uni.name, parseResult.data) };
   }
 
-  async discoverUnits(universityId: string): Promise<string[]> {
-    const { scraper } = await this.getUniversityScraper(universityId);
-    const browser = await chromium.launch({ headless: true });
+  async discoverUnits(universityId: string, existingBrowser?: Browser): Promise<string[]> {
+    logger.info(`🔧 ScraperService.discoverUnits called with universityId: ${universityId}`);
+    const { uni, scraper } = await this.getUniversityScraper(universityId);
+    logger.info(`🎓 Running discovery for ${uni.name} using ${uni.scraperType} scraper`);
+    
+    let browser = existingBrowser;
+    let shouldClose = false;
+
+    if (!browser) {
+        logger.info(`🌐 Launching browser for discovery...`);
+        browser = await chromium.launch({ headless: true });
+        shouldClose = true;
+    }
+
     try {
-        return await scraper.discoverSubjects(browser);
+        logger.info(`📞 Calling scraper.discoverSubjects()...`);
+        const result = await scraper.discoverSubjects(browser);
+        logger.info(`✅ scraper.discoverSubjects() returned ${result.length} codes`);
+        return result;
     } finally {
-        await browser.close();
+        if (shouldClose && browser) {
+            logger.info(`🔒 Closing browser...`);
+            await browser.close();
+        }
     }
   }
 
-  async scrapeUnit(unitCode: string, universityId?: string, existingBrowser?: any): Promise<{
+  async scrapeUnit(unitCode: string, universityId?: string, existingBrowser?: Browser): Promise<{
     success: boolean;
     unitCode: string;
     unitName?: string;
@@ -153,11 +182,11 @@ export class ScraperService {
     const { uni, scraper } = await this.getUniversityScraper(universityId);
     
     const browser = await chromium.launch({ headless: true });
-    const results: ScraperResult[] = [];
-
+    
     try {
-      for (let i = 0; i < unitCodes.length; i++) {
-        const code = unitCodes[i];
+      // Use reduce for sequential async execution and accumulating results immutably
+      const results = await unitCodes.reduce(async (accPromise, code, i) => {
+        const acc = await accPromise;
         if (i > 0) await new Promise(r => setTimeout(r, delayMs));
 
         const res = await scraper.scrapeSubject(browser, code);
@@ -189,13 +218,13 @@ export class ScraperService {
                 },
             });
         }
-        results.push(res);
-      }
+        return [...acc, res];
+      }, Promise.resolve([] as ScraperResult[]));
+
+      return results;
     } finally {
       await browser.close();
     }
-    
-    return results;
   }
 }
 

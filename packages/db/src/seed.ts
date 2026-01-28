@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import { db } from './client.js';
-import { universities, users } from './schema.js';
+import { universities, users, subjectCodeTemplates } from './schema.js';
 import { hash } from '@node-rs/argon2';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 
 const AUSTRALIAN_UNIVERSITIES = [
   // --- CourseLoop Universities (Verified) ---
@@ -11,11 +11,12 @@ const AUSTRALIAN_UNIVERSITIES = [
     abbreviation: 'UTS',
     emailDomain: 'student.uts.edu.au',
     websiteUrl: 'https://www.uts.edu.au',
-    handbookUrl: 'https://handbook.uts.edu.au',
+    handbookUrl: 'https://coursehandbook.uts.edu.au',
     scraperType: 'courseloop',
     scraperRoutes: {
-      base: 'https://handbook.uts.edu.au',
-      subject: '/subject/current/:code'
+      base: 'https://coursehandbook.uts.edu.au',
+      subject: '/subject/current/:code',
+      discovery: '/sitemap.xml'
     }
   },
   {
@@ -27,7 +28,8 @@ const AUSTRALIAN_UNIVERSITIES = [
     scraperType: 'courseloop',
     scraperRoutes: {
       base: 'https://handbook.monash.edu',
-      subject: '/current/units/:code'
+      subject: '/current/units/:code',
+      discovery: '/sitemap.xml'
     }
   },
   {
@@ -39,7 +41,8 @@ const AUSTRALIAN_UNIVERSITIES = [
     scraperType: 'courseloop',
     scraperRoutes: {
       base: 'https://handbook.flinders.edu.au',
-      subject: '/topic/:code'
+      subject: '/topics/2026/:code',
+      discovery: '/sitemap.xml'
     }
   },
   {
@@ -51,10 +54,24 @@ const AUSTRALIAN_UNIVERSITIES = [
     scraperType: 'courseloop',
     scraperRoutes: {
       base: 'https://handbook.jcu.edu.au',
-      subject: '/subject/:code'
+      subject: '/subject/2025/:code',
+      discovery: '/sitemap.xml'
     }
   },
-  
+  {
+    name: 'Macquarie University',
+    abbreviation: 'MQ',
+    emailDomain: 'students.mq.edu.au',
+    websiteUrl: 'https://www.mq.edu.au',
+    handbookUrl: 'https://coursehandbook.mq.edu.au',
+    scraperType: 'courseloop',
+    scraperRoutes: {
+      base: 'https://coursehandbook.mq.edu.au',
+      subject: '/2025/units/:code',
+      discovery: '/sitemap.xml'
+    }
+  },
+
   // --- CourseLeaf / Other (Using Generic Scraper) ---
   {
     name: 'Western Sydney University',
@@ -65,11 +82,14 @@ const AUSTRALIAN_UNIVERSITIES = [
     scraperType: 'custom',
     scraperRoutes: {
       base: 'https://hbook.westernsydney.edu.au',
-      subject: '/subject/:code'
+      subject: '/subject-details/:code',
+      discovery: '/subject-search/api/?page=fose&route=search'
     },
     scraperSelectors: {
-      title: 'h1',
-      description: '#coursebody'
+      title: 'h1.page-title',
+      description: '#textcontainer',
+      creditPoints: 'strong:has-text("Credit Points") + text()',
+      faculty: 'strong:has-text("School") + text()'
     }
   },
   {
@@ -92,17 +112,18 @@ const AUSTRALIAN_UNIVERSITIES = [
     abbreviation: 'USYD',
     emailDomain: 'uni.sydney.edu.au',
     websiteUrl: 'https://www.sydney.edu.au',
-    handbookUrl: 'https://www.sydney.edu.au/handbooks',
-    scraperType: 'akari',
+    handbookUrl: 'https://cusp.sydney.edu.au/students/view-units-page/',
+    scraperType: 'cusp',
     scraperRoutes: {
-      base: 'https://www.sydney.edu.au',
-      subject: '/units/:code'
+      base: 'https://cusp.sydney.edu.au',
+      subject: '/students/view-unit-page/alpha/:code',
+      discovery: '/students/view-units-page/did//get_table/1/'
     },
     scraperSelectors: {
-      title: 'h1.pageTitle',
-      description: '.b-summary',
-      faculty: 'h4:has-text("Managing faculty") + h4',
-      creditPoints: 'th:has-text("Credit points") + td'
+      title: 'h2',
+      description: '.description',
+      faculty: '.faculty',
+      creditPoints: 'td:contains("Credit points")'
     }
   },
 
@@ -174,14 +195,11 @@ const AUSTRALIAN_UNIVERSITIES = [
     emailDomain: 'student.unsw.edu.au',
     websiteUrl: 'https://www.unsw.edu.au',
     handbookUrl: 'https://www.handbook.unsw.edu.au',
-    scraperType: 'custom',
+    scraperType: 'courseloop',
     scraperRoutes: {
       base: 'https://www.handbook.unsw.edu.au',
-      subject: '/undergraduate/courses/2025/:code' 
-    },
-    scraperSelectors: {
-      title: 'h1', 
-      description: '[data-testid="readmore-content-Overview"]'
+      subject: '/undergraduate/courses/2025/:code',
+      discovery: '/sitemap.xml'
     }
   },
   {
@@ -205,14 +223,15 @@ const AUSTRALIAN_UNIVERSITIES = [
     abbreviation: 'UQ',
     emailDomain: 'student.uq.edu.au',
     websiteUrl: 'https://www.uq.edu.au',
-    handbookUrl: 'https://my.uq.edu.au/programs-courses',
+    handbookUrl: 'https://programs-courses.uq.edu.au',
     scraperType: 'custom',
     scraperRoutes: {
-      base: 'https://my.uq.edu.au',
-      subject: '/programs-courses/course.html?course_code=:code'
+      base: 'https://programs-courses.uq.edu.au',
+      subject: '/course.html?course_code=:code',
+      discovery: '/search.html?searchType=coursecode&keywords=*'
     },
     scraperSelectors: {
-      title: 'h1',
+      title: '#course-title',
       description: '#course-summary',
       creditPoints: '#course-units'
     }
@@ -248,22 +267,6 @@ const AUSTRALIAN_UNIVERSITIES = [
       title: 'h1',
       description: 'dt:has-text("Description") + dd',
       creditPoints: 'dt:has-text("Credit") + dd'
-    }
-  },
-  {
-    name: 'Macquarie University',
-    abbreviation: 'MQ',
-    emailDomain: 'students.mq.edu.au',
-    websiteUrl: 'https://www.mq.edu.au',
-    handbookUrl: 'https://coursehandbook.mq.edu.au',
-    scraperType: 'custom',
-    scraperRoutes: {
-      base: 'https://coursehandbook.mq.edu.au',
-      subject: '/2025/units/:code'
-    },
-    scraperSelectors: {
-      title: 'h1',
-      description: '.description'
     }
   }
 ];
@@ -316,8 +319,9 @@ async function seed() {
     });
 
     const [existingAdmin] = await db.select().from(users).where(eq(users.email, 'admin@uts.edu.au'));
+    let adminUser;
     if (!existingAdmin) {
-      await db.insert(users).values({
+      [adminUser] = await db.insert(users).values({
         email: 'admin@uts.edu.au',
         passwordHash,
         displayName: 'Admin',
@@ -325,11 +329,193 @@ async function seed() {
         universityId: utsId,
         emailVerified: true,
         banned: false,
-      });
+      }).returning();
       console.log('✓ Created Admin User');
+    } else {
+      adminUser = existingAdmin;
     }
-    
-    console.log('\n✅ Database seeded with Australian Universities!');
+
+    // Seed UTS Subject Code Templates
+    console.log('\nSeeding UTS Subject Code Templates...');
+
+    const utsTemplates = [
+      // Faculty of Engineering and IT - IT (Priority 10)
+      {
+        name: 'IT Subjects',
+        faculty: 'Faculty of Engineering and IT',
+        startCode: '31001',
+        endCode: '32999',
+        description: 'Information Technology subjects covering software development, data science, networking, and cybersecurity',
+        priority: 10,
+      },
+      // Faculty of Engineering and IT - Engineering (Priority 10)
+      {
+        name: 'Engineering Subjects',
+        faculty: 'Faculty of Engineering and IT',
+        startCode: '40001',
+        endCode: '49999',
+        description: 'Engineering subjects covering civil, mechanical, electrical, biomedical, and software engineering',
+        priority: 10,
+      },
+      // Faculty of Business (Priority 9)
+      {
+        name: 'Business Subjects',
+        faculty: 'Faculty of Business',
+        startCode: '20000',
+        endCode: '28999',
+        description: 'Business subjects covering accounting, finance, management, marketing, and economics',
+        priority: 9,
+      },
+      // Faculty of Health - Range 1 (Priority 8)
+      {
+        name: 'Health Subjects (09XXX)',
+        faculty: 'Faculty of Health',
+        startCode: '09001',
+        endCode: '09999',
+        description: 'Health subjects covering nursing, midwifery, and public health',
+        priority: 8,
+      },
+      // Faculty of Health - Range 2 (Priority 8)
+      {
+        name: 'Health Subjects (90XXX-93XXX)',
+        faculty: 'Faculty of Health',
+        startCode: '90001',
+        endCode: '93999',
+        description: 'Health subjects covering medical sciences, pharmacy, physiotherapy, and allied health',
+        priority: 8,
+      },
+      // Faculty of Health - Range 3 (Priority 8)
+      {
+        name: 'Health Subjects (96XXX)',
+        faculty: 'Faculty of Health',
+        startCode: '96001',
+        endCode: '96999',
+        description: 'Health subjects covering sport and exercise science',
+        priority: 8,
+      },
+      // Faculty of Law (Priority 7)
+      {
+        name: 'Law Subjects',
+        faculty: 'Faculty of Law',
+        startCode: '70000',
+        endCode: '79999',
+        description: 'Law subjects covering legal practice, business law, criminal law, and international law',
+        priority: 7,
+      },
+      // Faculty of Communication (Priority 6)
+      {
+        name: 'Communication Subjects',
+        faculty: 'Faculty of Communication',
+        startCode: '50000',
+        endCode: '59999',
+        description: 'Communication subjects covering journalism, media production, public relations, and social inquiry',
+        priority: 6,
+      },
+      // Faculty of Design, Architecture & Building - Range 1 (Priority 5)
+      {
+        name: 'Design, Architecture & Building (11XXX-17XXX)',
+        faculty: 'Faculty of Design, Architecture & Building',
+        startCode: '11001',
+        endCode: '17999',
+        description: 'Subjects covering design, visual communication, product design, and fashion',
+        priority: 5,
+      },
+      // Faculty of Design, Architecture & Building - Range 2 (Priority 5)
+      {
+        name: 'Design, Architecture & Building (80XXX-89XXX)',
+        faculty: 'Faculty of Design, Architecture & Building',
+        startCode: '80001',
+        endCode: '89999',
+        description: 'Subjects covering architecture, built environment, construction management, and property',
+        priority: 5,
+      },
+      // Faculty of Science - Range 1 (Priority 4)
+      {
+        name: 'Science Subjects (33XXX-37XXX)',
+        faculty: 'Faculty of Science',
+        startCode: '33001',
+        endCode: '37999',
+        description: 'Science subjects covering mathematics, statistics, and environmental science',
+        priority: 4,
+      },
+      // Faculty of Science - Range 2 (Priority 4)
+      {
+        name: 'Science Subjects (60XXX)',
+        faculty: 'Faculty of Science',
+        startCode: '60001',
+        endCode: '60999',
+        description: 'Science subjects covering biotechnology and molecular bioscience',
+        priority: 4,
+      },
+      // Faculty of Science - Range 3 (Priority 4)
+      {
+        name: 'Science Subjects (65XXX-69XXX)',
+        faculty: 'Faculty of Science',
+        startCode: '65001',
+        endCode: '69999',
+        description: 'Science subjects covering chemistry, physics, and forensic science',
+        priority: 4,
+      },
+      // Faculty of Education (Priority 3)
+      {
+        name: 'Education Subjects',
+        faculty: 'Faculty of Education',
+        startCode: '01001',
+        endCode: '02999',
+        description: 'Education subjects covering primary, secondary, and adult education, as well as educational leadership',
+        priority: 3,
+      },
+      // Transdisciplinary Innovation (Priority 2)
+      {
+        name: 'Transdisciplinary Innovation Subjects',
+        faculty: 'Transdisciplinary Innovation',
+        startCode: '94001',
+        endCode: '95999',
+        description: 'Transdisciplinary subjects covering innovation, entrepreneurship, and creative intelligence',
+        priority: 2,
+      },
+      // International & Exchange (Priority 1)
+      {
+        name: 'International & Exchange Subjects',
+        faculty: 'International & Exchange',
+        startCode: '97001',
+        endCode: '99999',
+        description: 'Subjects for international students and exchange programs',
+        priority: 1,
+      },
+    ];
+
+    for (const template of utsTemplates) {
+      const [existing] = await db
+        .select()
+        .from(subjectCodeTemplates)
+        .where(
+          and(
+            eq(subjectCodeTemplates.universityId, utsId),
+            eq(subjectCodeTemplates.name, template.name)
+          )
+        );
+
+      if (!existing) {
+        await db.insert(subjectCodeTemplates).values({
+          universityId: utsId,
+          name: template.name,
+          templateType: 'range',
+          startCode: template.startCode,
+          endCode: template.endCode,
+          description: template.description,
+          faculty: template.faculty,
+          priority: template.priority,
+          active: true,
+          createdBy: adminUser.id,
+        });
+        console.log(`✓ Created template: ${template.name}`);
+      } else {
+        console.log(`  Template already exists: ${template.name}`);
+      }
+    }
+
+    console.log('\n✅ Database seeded with Australian Universities and UTS Templates!');
   } catch (error) {
     console.error('Seed failed:', error);
     process.exit(1);

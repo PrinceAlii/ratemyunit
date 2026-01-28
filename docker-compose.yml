@@ -31,6 +31,23 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://ratemyunit:devpassword@postgres:5432/ratemyunit
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      - postgres
+      - redis
+    stop_grace_period: 45s
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:

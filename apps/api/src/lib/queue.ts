@@ -58,7 +58,7 @@ const browserFactory = {
   },
 };
 
-const browserPool: Pool<Browser> = createPool(browserFactory, {
+export const browserPool: Pool<Browser> = createPool(browserFactory, {
   min: 1,
   max: config.SCRAPER_CONCURRENCY,
   acquireTimeoutMillis: 60000,

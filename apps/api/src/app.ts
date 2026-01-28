@@ -13,6 +13,9 @@ import { unitsRoutes } from './routes/units.js';
 import { reviewsRoutes } from './routes/reviews.js';
 import { publicDataRoutes } from './routes/public-data.js';
 import { templateRoutes } from './routes/templates.js';
+import { db } from '@ratemyunit/db/client';
+import { sql } from 'drizzle-orm';
+import { scraperQueue } from './lib/queue.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -91,8 +94,38 @@ export async function buildApp() {
     },
   });
 
-  app.get('/health', async () => {
-    return { status: 'ok', timestamp: new Date().toISOString() };
+  app.get('/health', async (_request, reply) => {
+    const checks = {
+      api: 'ok',
+      database: 'unknown',
+      redis: 'unknown',
+      timestamp: new Date().toISOString(),
+    };
+
+    let status = 200;
+
+    try {
+      // Check database
+      await db.execute(sql`SELECT 1`);
+      checks.database = 'ok';
+    } catch (err) {
+      app.log.error({ err }, 'Health check failed: Database');
+      checks.database = 'error';
+      status = 503;
+    }
+
+    try {
+      // Check Redis via Queue connection
+      const client = await scraperQueue.client;
+      await client.ping();
+      checks.redis = 'ok';
+    } catch (err) {
+      app.log.error({ err }, 'Health check failed: Redis');
+      checks.redis = 'error';
+      status = 503;
+    }
+
+    return reply.status(status).send(checks);
   });
 
   await app.register(authRoutes, { prefix: '/api/auth' });

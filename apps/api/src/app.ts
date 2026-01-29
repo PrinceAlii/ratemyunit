@@ -4,8 +4,11 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import csrf from '@fastify/csrf-protection';
+import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { authRoutes } from './routes/auth.js';
 import { adminRoutes } from './routes/admin.js';
@@ -134,6 +137,25 @@ export async function buildApp() {
   await app.register(reviewsRoutes, { prefix: '/api/reviews' });
   await app.register(publicDataRoutes, { prefix: '/api/public' });
   await app.register(templateRoutes, { prefix: '/api/admin/templates' });
+
+  // Serve frontend static files (built from apps/web)
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const frontendPath = path.resolve(__dirname, '../../web/dist');
+  
+  await app.register(fastifyStatic, {
+    root: frontendPath,
+    prefix: '/',
+    decorateReply: false,
+  });
+
+  // Serve index.html for all non-API routes (SPA fallback)
+  app.setNotFoundHandler((request, reply) => {
+    if (request.url.startsWith('/api/')) {
+      return reply.status(404).send({ success: false, error: 'Not found' });
+    }
+    return reply.sendFile('index.html');
+  });
 
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error);

@@ -16,8 +16,9 @@ RUN npm ci
 RUN npx playwright install chromium
 RUN npx playwright install-deps chromium
 
-# Build the API and its dependencies
+# Build the API and frontend
 RUN npx turbo build --filter=@ratemyunit/api...
+RUN VITE_API_URL=https://ratemyunit.dev npx turbo build --filter=@ratemyunit/web
 
 # Environment variables
 ENV NODE_ENV=production

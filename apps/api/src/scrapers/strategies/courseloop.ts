@@ -180,13 +180,13 @@ export class CourseLoopScraper extends BaseScraper {
       // Handle sitemap index
       if (jsonObj.sitemapindex?.sitemap) {
         const sitemaps = Array.isArray(jsonObj.sitemapindex.sitemap) ? jsonObj.sitemapindex.sitemap : [jsonObj.sitemapindex.sitemap];
-        nestedUrls.push(...sitemaps.map((s: any) => s.loc).filter(Boolean));
+        nestedUrls.push(...sitemaps.map((s: { loc?: string }) => s.loc).filter((loc): loc is string => !!loc));
       } 
       
       // Standard sitemap might also point to other sitemaps in loc
       if (jsonObj.urlset?.url) {
         const locs = Array.isArray(jsonObj.urlset.url) ? jsonObj.urlset.url : [jsonObj.urlset.url];
-        const possibleSitemaps = locs.map((u: any) => u.loc).filter((l: any) => typeof l === 'string' && l.endsWith('.xml'));
+        const possibleSitemaps = locs.map((u: { loc?: string }) => u.loc).filter((l: unknown): l is string => typeof l === 'string' && l.endsWith('.xml'));
         nestedUrls.push(...possibleSitemaps);
       }
 
@@ -350,7 +350,7 @@ export class CourseLoopScraper extends BaseScraper {
       if (!jsonObj.urlset?.url) return [];
       
       const urls = Array.isArray(jsonObj.urlset.url) ? jsonObj.urlset.url : [jsonObj.urlset.url];
-      const locs: string[] = urls.map((u: any) => u.loc).filter(Boolean);
+      const locs: string[] = urls.map((u: { loc?: string }) => u.loc).filter((loc): loc is string => !!loc);
 
       const escapedPattern = routePattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regexString = escapedPattern.replace(':code', '([a-zA-Z0-9]{3,10})');
@@ -369,16 +369,16 @@ export class CourseLoopScraper extends BaseScraper {
     return Array.from(codes);
   }
 
-  private extractFromNextData(content: any, code: string): Partial<ScrapedSubjectData> {
+  private extractFromNextData(content: Record<string, unknown>, code: string): Partial<ScrapedSubjectData> {
     // CourseLoop JSON structure is fairly consistent
     return {
-      code: content.code || code,
-      name: content.title || 'Unknown Subject',
-      creditPoints: parseInt(content.credit_points, 10) || 6,
-      description: this.stripHtml(content.description) || 'No description available.',
-      faculty: content.parent_academic_org,
-      prerequisites: this.extractPrereqsFromAssociations(content.associations),
-      sessions: this.parseOfferings(content.offering),
+      code: (content.code as string) || code,
+      name: (content.title as string) || 'Unknown Subject',
+      creditPoints: parseInt(content.credit_points as string, 10) || 6,
+      description: this.stripHtml(content.description as string) || 'No description available.',
+      faculty: content.parent_academic_org as string,
+      prerequisites: this.extractPrereqsFromAssociations(content.associations as unknown[]),
+      sessions: this.parseOfferings(content.offering as unknown[]),
     };
   }
 
@@ -416,22 +416,22 @@ export class CourseLoopScraper extends BaseScraper {
     return decoded.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
   }
 
-  private extractPrereqsFromAssociations(associations: any[]): string | undefined {
+  private extractPrereqsFromAssociations(associations: unknown[]): string | undefined {
     if (!associations || !Array.isArray(associations)) return undefined;
-    const prereqAssoc = associations.find(a => 
+    const prereqAssoc = (associations as Array<{ association_type?: string; associated_items?: unknown[] }>).find(a => 
       a.association_type === 'Prerequisites' || a.association_type === 'Recommended studies'
     );
     if (prereqAssoc?.associated_items) {
-      return prereqAssoc.associated_items
-        .map((item: any) => `${item.assoc_code} ${item.assoc_title}`)
+      return (prereqAssoc.associated_items as Array<{ assoc_code?: string; assoc_title?: string }>)
+        .map((item) => `${item.assoc_code} ${item.assoc_title}`)
         .join(', ');
     }
     return undefined;
   }
 
-  private parseOfferings(offerings: any[]): string[] {
+  private parseOfferings(offerings: unknown[]): string[] {
     if (!offerings || !Array.isArray(offerings)) return [];
-    return offerings.map(o => o.teaching_period).filter(tp => !!tp);
+    return (offerings as Array<{ teaching_period?: string }>).map(o => o.teaching_period).filter((tp): tp is string => !!tp);
   }
 
   private parseTitle(title: string, fallbackCode: string): { name: string } {

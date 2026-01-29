@@ -28,9 +28,9 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids = [aws_security_group.db.id]
 
   publicly_accessible = false
-  skip_final_snapshot = true # Set to false for production
+  skip_final_snapshot = true
 
-  backup_retention_period = 0
+  backup_retention_period = 0 # No backups needed
   backup_window           = "03:00-04:00"
   maintenance_window      = "sun:04:00-sun:05:00"
 

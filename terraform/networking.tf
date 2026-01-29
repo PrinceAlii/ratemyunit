@@ -90,23 +90,57 @@ resource "aws_route_table_association" "public_2" {
 # Security Groups
 resource "aws_security_group" "web" {
   name        = "ratemyunit-web-sg"
-  description = "Allow inbound HTTP/HTTPS traffic"
+  description = "Allow inbound HTTP/HTTPS traffic from Cloudflare only"
   vpc_id      = aws_vpc.main.id
 
-  # Port 80 for API
+  # Port 80 for API - Cloudflare IPs only
+  # See: https://www.cloudflare.com/ips/
+  # TODO: Update this list periodically or use data source
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [
+      "173.245.48.0/20",
+      "103.21.244.0/22",
+      "103.22.200.0/22",
+      "103.31.4.0/22",
+      "141.101.64.0/18",
+      "108.162.192.0/18",
+      "190.93.240.0/20",
+      "188.114.96.0/20",
+      "197.234.240.0/22",
+      "198.41.128.0/17",
+      "162.158.0.0/15",
+      "104.16.0.0/13",
+      "104.24.0.0/14",
+      "172.64.0.0/13",
+      "131.0.72.0/22"
+    ]
   }
 
-  # Port 443 for API (when SSL is ready)
+  # Port 443 for API (when SSL is ready) - Cloudflare IPs only
   ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [
+      "173.245.48.0/20",
+      "103.21.244.0/22",
+      "103.22.200.0/22",
+      "103.31.4.0/22",
+      "141.101.64.0/18",
+      "108.162.192.0/18",
+      "190.93.240.0/20",
+      "188.114.96.0/20",
+      "197.234.240.0/22",
+      "198.41.128.0/17",
+      "162.158.0.0/15",
+      "104.16.0.0/13",
+      "104.24.0.0/14",
+      "172.64.0.0/13",
+      "131.0.72.0/22"
+    ]
   }
 
   # NO PORT 22 - We use SSM Session Manager for secure shell access

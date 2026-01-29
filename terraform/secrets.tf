@@ -55,7 +55,7 @@ resource "aws_ssm_parameter" "jwt_secret" {
 resource "aws_ssm_parameter" "frontend_url" {
   name  = "/ratemyunit/production/frontend/url"
   type  = "String"
-  value = "http://localhost:5173"
+  value = "https://ratemyunit.com" # Update with your Cloudflare domain
 
   lifecycle {
     ignore_changes = [value]

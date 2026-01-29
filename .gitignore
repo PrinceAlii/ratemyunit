@@ -5,6 +5,7 @@ node_modules/
 conductor/
 report/
 report/
+agents.md
 
 # Build outputs
 dist/

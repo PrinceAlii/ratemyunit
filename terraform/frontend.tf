@@ -47,7 +47,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   }
 
   origin {
-    domain_name = aws_eip.api_eip.public_ip
+    domain_name = aws_eip.api_eip.public_dns
     origin_id   = "EC2-API"
 
     custom_origin_config {

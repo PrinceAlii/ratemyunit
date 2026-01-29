@@ -305,7 +305,7 @@ export async function templateRoutes(app: FastifyInstance) {
       }
 
       // Build update object
-      const updates: Record<string, any> = {
+      const updates: Record<string, unknown> = {
         ...data,
         updatedAt: new Date(),
       };

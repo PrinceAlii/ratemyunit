@@ -81,7 +81,7 @@ export async function unitsRoutes(app: FastifyInstance) {
     }
 
     const orderBy = desc(units.unitCode); // Default sort
-    let sortClause: any = orderBy;
+    let sortClause: import('drizzle-orm').SQL | import('drizzle-orm').AnyColumn = orderBy;
     
     if (sort === 'rating_desc') {
         sortClause = desc(sql`COALESCE(${avgRatingSq.avgRating}, 0)`);

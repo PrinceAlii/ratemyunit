@@ -69,7 +69,7 @@ export class ScraperService {
       throw new Error(`Invalid scraper configuration for ${uni.name}: ${parseResult.error.message}`);
     }
 
-    return { uni, scraper: ScraperFactory.createScraper(uni.scraperType as any, uni.name, parseResult.data) };
+    return { uni, scraper: ScraperFactory.createScraper(uni.scraperType as string, uni.name, parseResult.data) };
   }
 
   async discoverUnits(universityId: string, existingBrowser?: Browser): Promise<string[]> {

@@ -1,11 +1,10 @@
 # Dependencies
 node_modules/
-.pnpm-store/
 
 ## Temp
-# PROJECT_CONTEXT.md
-
 conductor/
+report/
+report/
 
 # Build outputs
 dist/
@@ -31,7 +30,6 @@ out/
 logs/
 *.log
 npm-debug.log*
-pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 

@@ -17,7 +17,7 @@ RateMyUnit is an open source platform designed to aggregate and standardize stud
 This project uses a modern, type safe monorepo architecture.
 
 *   **Monorepo:** Turborepo
-*   **Package Manager:** PNPM
+*   **Package Manager:** NPM
 *   **Frontend:** React 19, Vite, Tailwind CSS, TanStack Query
 *   **Backend:** Node.js, Fastify, BullMQ (Redis)
 *   **Database:** PostgreSQL, Drizzle ORM
@@ -30,7 +30,7 @@ Follow these steps to set up the project locally for development.
 ### Prerequisites
 
 *   Node.js 20+
-*   PNPM (`npm i -g pnpm`)
+*   NPM (Comes with Node.js)
 *   Docker & Docker Compose
 
 ### Installation
@@ -43,7 +43,7 @@ Follow these steps to set up the project locally for development.
 
 2.  **Install dependencies**
     ```bash
-    pnpm install
+    npm install
     ```
 
 3.  **Configure environment**
@@ -62,14 +62,14 @@ Follow these steps to set up the project locally for development.
 5.  **Initialize database**
     Run migrations and seed default data (university configurations, admin account).
     ```bash
-    pnpm db:migrate
-    pnpm db:seed
+    npm run db:migrate
+    npm run db:seed
     ```
 
 6.  **Start development server**
     This launches both the API and Web applications in watch mode.
     ```bash
-    pnpm dev
+    npm run dev
     ```
     *   Web: [http://localhost:5173](http://localhost:5173)
     *   API: [http://localhost:3000](http://localhost:3000)
@@ -107,8 +107,8 @@ The `deploy.yml` workflow runs on pushes to `main` and performs the following:
 Contributions are welcome. Please ensure you run the full test suite before submitting a Pull Request.
 
 ```bash
-pnpm typecheck
-pnpm test
+npm run typecheck
+npm test
 ```
 
 ## License

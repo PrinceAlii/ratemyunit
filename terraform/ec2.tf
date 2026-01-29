@@ -76,7 +76,7 @@ data "aws_ami" "amazon_linux_2023" {
 resource "aws_instance" "api" {
   ami           = data.aws_ami.amazon_linux_2023.id
   instance_type = "t3.micro"
-  
+
   subnet_id                   = aws_subnet.public_1.id
   vpc_security_group_ids      = [aws_security_group.web.id]
   iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name

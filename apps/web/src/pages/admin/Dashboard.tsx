@@ -89,7 +89,6 @@ export function AdminDashboard() {
           variant={activeTab === 'overview' ? 'default' : 'ghost'}
           onClick={() => setActiveTab('overview')}
           className="border-3 border-transparent data-[active=true]:border-foreground font-bold"
-          // @ts-expect-error
           data-active={activeTab === 'overview'}
         >
           <BarChart3 className="mr-2 h-5 w-5" />
@@ -99,7 +98,6 @@ export function AdminDashboard() {
           variant={activeTab === 'moderation' ? 'default' : 'ghost'}
           onClick={() => setActiveTab('moderation')}
           className="border-3 border-transparent data-[active=true]:border-foreground font-bold"
-          // @ts-expect-error
           data-active={activeTab === 'moderation'}
         >
           <AlertTriangle className="mr-2 h-5 w-5" />
@@ -109,7 +107,6 @@ export function AdminDashboard() {
           variant={activeTab === 'users' ? 'default' : 'ghost'}
           onClick={() => setActiveTab('users')}
           className="border-3 border-transparent data-[active=true]:border-foreground font-bold"
-          // @ts-expect-error
           data-active={activeTab === 'users'}
         >
           <Users className="mr-2 h-5 w-5" />
@@ -119,7 +116,6 @@ export function AdminDashboard() {
           variant={activeTab === 'templates' ? 'default' : 'ghost'}
           onClick={() => setActiveTab('templates')}
           className="border-3 border-transparent data-[active=true]:border-foreground font-bold"
-          // @ts-expect-error
           data-active={activeTab === 'templates'}
         >
           <FileText className="mr-2 h-5 w-5" />
@@ -129,7 +125,6 @@ export function AdminDashboard() {
           variant={activeTab === 'scraper' ? 'default' : 'ghost'}
           onClick={() => setActiveTab('scraper')}
           className="border-3 border-transparent data-[active=true]:border-foreground font-bold"
-          // @ts-expect-error
           data-active={activeTab === 'scraper'}
         >
           <Database className="mr-2 h-5 w-5" />

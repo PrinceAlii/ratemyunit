@@ -138,7 +138,7 @@ export async function buildApp() {
   app.setErrorHandler((error, _request, reply) => {
     app.log.error(error);
 
-    const fastifyError = error as { validation?: unknown; statusCode?: number };
+    const fastifyError = error as { validation?: unknown; statusCode?: number; message?: string };
 
     if (fastifyError.validation) {
       return reply.status(400).send({
@@ -150,7 +150,7 @@ export async function buildApp() {
 
     const statusCode = fastifyError.statusCode || 500;
     const message =
-      config.NODE_ENV === 'production' ? 'Internal server error' : error.message;
+      config.NODE_ENV === 'production' ? 'Internal server error' : (fastifyError.message || 'An error occurred');
 
     return reply.status(statusCode).send({
       success: false,

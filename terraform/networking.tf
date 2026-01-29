@@ -22,7 +22,7 @@ resource "aws_internet_gateway" "main" {
 resource "aws_subnet" "public_1" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
-  availability_zone       = "us-east-1a"
+  availability_zone       = "ap-southeast-2a"
   map_public_ip_on_launch = true
 
   tags = {
@@ -33,7 +33,7 @@ resource "aws_subnet" "public_1" {
 resource "aws_subnet" "public_2" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.2.0/24"
-  availability_zone       = "us-east-1b"
+  availability_zone       = "ap-southeast-2b"
   map_public_ip_on_launch = true
 
   tags = {
@@ -45,7 +45,7 @@ resource "aws_subnet" "public_2" {
 resource "aws_subnet" "private_1" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.10.0/24"
-  availability_zone = "us-east-1a"
+  availability_zone = "ap-southeast-2a"
 
   tags = {
     Name = "ratemyunit-private-1"
@@ -55,7 +55,7 @@ resource "aws_subnet" "private_1" {
 resource "aws_subnet" "private_2" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.11.0/24"
-  availability_zone = "us-east-1b"
+  availability_zone = "ap-southeast-2b"
 
   tags = {
     Name = "ratemyunit-private-2"
@@ -108,13 +108,7 @@ resource "aws_security_group" "web" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # SSH Access (Restrict to your IP in production)
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] 
-  }
+
 
   # Outbound all
   egress {

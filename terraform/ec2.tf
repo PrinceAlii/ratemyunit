@@ -50,6 +50,13 @@ resource "aws_iam_role_policy" "ssm_params" {
           "ssm:GetParametersByPath"
         ]
         Resource = "arn:aws:ssm:*:*:parameter/ratemyunit/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt"
+        ]
+        Resource = "*"
       }
     ]
   })
@@ -82,7 +89,13 @@ resource "aws_instance" "api" {
   iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
   associate_public_ip_address = true
 
-  user_data = file("${path.module}/user_data.sh")
+  user_data = templatefile("${path.module}/user_data.sh", {
+    ecr_repository_url = aws_ecr_repository.api.repository_url
+    api_image          = "${aws_ecr_repository.api.repository_url}:latest"
+    frontend_url       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+  })
+
+  user_data_replace_on_change = true
 
   root_block_device {
     volume_size = 20

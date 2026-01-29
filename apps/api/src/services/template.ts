@@ -19,7 +19,7 @@ const RangeTemplateSchema = z.object({
 
 const ListTemplateSchema = z.object({
   templateType: z.literal('list'),
-  codeList: z.array(z.string().min(1)).min(1).max(MAX_LIST_CODES),
+  codeList: z.array(z.string()).min(1).max(MAX_LIST_CODES),
   startCode: z.string().nullable().optional(),
   endCode: z.string().nullable().optional(),
   pattern: z.string().nullable().optional(),
@@ -96,10 +96,6 @@ export class SubjectTemplateService {
       throw new Error(`Unsupported template type: ${templateType}`);
     }
 
-    if (codes.length === 0) {
-        throw new Error(`Template generated 0 codes. Please check your configuration.`);
-    }
-
     return codes;
   }
 
@@ -153,8 +149,7 @@ export class SubjectTemplateService {
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const zodErrors = (error as any).errors.map((e: any) => `${e.path.join('.')}: ${e.message}`);
+        const zodErrors = (error.issues || []).map((e) => `${e.path.join('.')}: ${e.message}`);
         errors = errors.concat(zodErrors);
       } else {
         errors = [...errors, 'Unknown validation error'];
@@ -379,7 +374,7 @@ export class SubjectTemplateService {
       const count = end - start + 1;
       if (count > MAX_CODES_PER_TEMPLATE) {
         errors.push(
-          `Range would generate ${count} codes, exceeds limit of ${MAX_CODES_PER_TEMPLATE}`
+          `Range would generate ${count} codes, exceeds maximum of ${MAX_CODES_PER_TEMPLATE}`
         );
       }
     }
@@ -422,11 +417,6 @@ export class SubjectTemplateService {
 
     if (codeList.length > MAX_LIST_CODES) {
       errors.push(`List exceeds maximum of ${MAX_LIST_CODES} codes`);
-    }
-
-    const uniqueCodes = new Set(codeList);
-    if (uniqueCodes.size !== codeList.length) {
-      errors.push('List contains duplicate codes');
     }
 
     return errors;

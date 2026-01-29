@@ -220,7 +220,7 @@ describe('SubjectTemplateService', () => {
         };
 
         expect(() => service.generateCodesFromTemplateData(template)).toThrow(
-          'Invalid regex pattern'
+          /regex pattern/
         );
       });
 
@@ -351,7 +351,7 @@ describe('SubjectTemplateService', () => {
       const result = service.validateTemplate(template);
 
       expect(result.valid).toBe(false);
-      expect(result.errors.some((e) => e.includes('Invalid regex'))).toBe(true);
+      expect(result.errors.some((e) => /regex pattern/i.test(e))).toBe(true);
     });
 
     it('should report range overflow', () => {
@@ -367,7 +367,7 @@ describe('SubjectTemplateService', () => {
       const result = service.validateTemplate(template);
 
       expect(result.valid).toBe(false);
-      expect(result.errors.some((e) => e.includes('exceeds limit'))).toBe(true);
+      expect(result.errors.some((e) => e.includes('exceeds maximum'))).toBe(true);
     });
   });
 

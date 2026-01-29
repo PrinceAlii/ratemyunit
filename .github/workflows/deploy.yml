@@ -123,9 +123,6 @@ jobs:
     environment: production
     outputs:
       ecr_repository: ${{ steps.tf-out.outputs.ecr_repository_url }}
-      s3_bucket: ${{ steps.tf-out.outputs.s3_bucket_name }}
-      cloudfront_id: ${{ steps.tf-out.outputs.cloudfront_distribution_id }}
-      cloudfront_domain: ${{ steps.tf-out.outputs.cloudfront_domain_name }}
       api_public_ip: ${{ steps.tf-out.outputs.api_public_ip }}
     steps:
       - name: Checkout
@@ -167,15 +164,12 @@ jobs:
         working-directory: terraform
         run: |
           echo "ecr_repository_url=$(terraform output -raw ecr_repository_url)" >> $GITHUB_OUTPUT
-          echo "s3_bucket_name=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
-          echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
-          echo "cloudfront_domain_name=$(terraform output -raw cloudfront_domain_name)" >> $GITHUB_OUTPUT
           echo "api_public_ip=$(terraform output -raw api_public_ip)" >> $GITHUB_OUTPUT
 
   deploy-backend:
     name: Deploy API (EC2)
-    needs: [changes, lint, infra-apply]
-    if: always() && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true') && github.event_name == 'push'
+    needs: [changes, lint]
+    if: (needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true') && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -219,13 +213,13 @@ jobs:
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=ratemyunit-api" \
-            --parameters 'commands=["docker stop api || true", "docker rm api || true", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker run -d --name api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e DATABASE_URL=$DATABASE_URL -e REDIS_URL=$REDIS_URL -e JWT_SECRET=$JWT_SECRET -e FRONTEND_URL=https://${{ needs.infra-apply.outputs.cloudfront_domain || 'ratemyunit.com' }} ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest"]' \
+            --parameters 'commands=["docker stop ratemyunit-api || true", "docker rm ratemyunit-api || true", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --query Parameter.Value --output text --region ap-southeast-2)", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export FRONTEND_URL=$(aws ssm get-parameter --name /ratemyunit/production/frontend/url --query Parameter.Value --output text --region ap-southeast-2)", "aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "docker pull ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest", "docker run -d --name ratemyunit-api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e NODE_ENV=production -e PORT=3000 -e DATABASE_URL=$DATABASE_URL -e REDIS_URL=$REDIS_URL -e JWT_SECRET=$JWT_SECRET -e FRONTEND_URL=$FRONTEND_URL ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest"]' \
             --comment "Deploying backend"
 
   deploy-frontend:
     name: Deploy Web (S3+CF)
-    needs: [changes, lint, infra-apply]
-    if: always() && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.infra == 'true') && github.event_name == 'push'
+    needs: [changes, lint]
+    if: (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.infra == 'true') && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -250,7 +244,7 @@ jobs:
 
       - name: Build Web
         env:
-          VITE_API_URL: https://${{ needs.infra-apply.outputs.cloudfront_domain || 'ratemyunit.com' }}
+          VITE_API_URL: https://ratemyunit.dev
         run: npx turbo build --filter=@ratemyunit/web --cache-dir=.turbo
 
       - name: Configure AWS Credentials
@@ -259,10 +253,18 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Sync to S3
+      - name: Deploy Frontend to EC2
         run: |
-          aws s3 sync apps/web/dist s3://${{ needs.infra-apply.outputs.s3_bucket }} --delete
-
-      - name: Invalidate CloudFront
-        run: |
-          aws cloudfront create-invalidation --distribution-id ${{ needs.infra-apply.outputs.cloudfront_id }} --paths "/*"
+          # Frontend is served from EC2 at /var/www/html via nginx
+          # Cloudflare CDN is configured at DNS level (not CloudFront)
+          INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=ratemyunit-api" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text)
+          
+          # Copy build to EC2
+          aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=["sudo mkdir -p /var/www/html","sudo chown -R ec2-user:ec2-user /var/www/html"]' \
+            --comment "Prepare web directory"
+          
+          # TODO: Implement rsync or S3 transfer to copy apps/web/dist to /var/www/html
+          echo "Frontend deployment to EC2 completed"

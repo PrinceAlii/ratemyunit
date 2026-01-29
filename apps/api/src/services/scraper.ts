@@ -2,9 +2,9 @@ import { db } from '@ratemyunit/db/client';
 import { units, universities } from '@ratemyunit/db/schema';
 import { eq } from 'drizzle-orm';
 import { chromium, Browser } from 'playwright';
-import { ScraperFactory, type ScraperType } from '../scrapers/factory';
-import { ScraperConfigSchema } from '../scrapers/strategies/base';
-import type { ScraperResult } from '../scrapers/uts/types';
+import { ScraperFactory, type ScraperType } from '../scrapers/factory.js';
+import { ScraperConfigSchema } from '../scrapers/strategies/base.js';
+import type { ScraperResult } from '../scrapers/uts/types.js';
 import pino from 'pino';
 import { config } from '../config.js';
 

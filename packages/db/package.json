@@ -4,11 +4,21 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./schema": "./src/schema.ts",
-    "./client": "./src/client.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    }
   },
   "scripts": {
+    "build": "tsc",
     "migrate": "drizzle-kit generate:pg && tsx src/migrate.ts",
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",

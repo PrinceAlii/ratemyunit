@@ -64,6 +64,7 @@ jobs:
       ecr_repository: ${{ steps.tf-out.outputs.ecr_repository_url }}
       s3_bucket: ${{ steps.tf-out.outputs.s3_bucket_name }}
       cloudfront_id: ${{ steps.tf-out.outputs.cloudfront_distribution_id }}
+      cloudfront_domain: ${{ steps.tf-out.outputs.cloudfront_domain_name }}
       api_public_ip: ${{ steps.tf-out.outputs.api_public_ip }}
     steps:
       - name: Checkout
@@ -101,6 +102,7 @@ jobs:
           echo "ecr_repository_url=$(terraform output -raw ecr_repository_url)" >> $GITHUB_OUTPUT
           echo "s3_bucket_name=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
           echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
+          echo "cloudfront_domain_name=$(terraform output -raw cloudfront_domain_name)" >> $GITHUB_OUTPUT
           echo "api_public_ip=$(terraform output -raw api_public_ip)" >> $GITHUB_OUTPUT
           
   deploy-backend:
@@ -144,7 +146,7 @@ jobs:
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=ratemyunit-api" \
-            --parameters 'commands=["docker stop api || true", "docker rm api || true", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker run -d --name api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e DATABASE_URL=$DATABASE_URL -e REDIS_URL=$REDIS_URL -e JWT_SECRET=$JWT_SECRET ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest"]' \
+            --parameters 'commands=["docker stop api || true", "docker rm api || true", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker run -d --name api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e DATABASE_URL=$DATABASE_URL -e REDIS_URL=$REDIS_URL -e JWT_SECRET=$JWT_SECRET -e FRONTEND_URL=https://${{ needs.infra-apply.outputs.cloudfront_domain }} ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest"]' \
             --comment "Deploying backend version ${{ github.sha }}"
 
       - name: Verify Deployment
@@ -179,7 +181,7 @@ jobs:
 
       - name: Build Web
         env:
-          VITE_API_URL: http://${{ needs.infra-apply.outputs.api_public_ip }}:80
+          VITE_API_URL: https://${{ needs.infra-apply.outputs.cloudfront_domain }}
         run: npx turbo build --filter=@ratemyunit/web
 
       - name: Configure AWS Credentials

@@ -80,7 +80,7 @@ export async function unitsRoutes(app: FastifyInstance) {
         whereClause = and(whereClause, sql`COALESCE(${avgRatingSq.avgRating}, 0) >= ${ratingFilter}`);
     }
 
-    let orderBy = desc(units.unitCode); // Default sort
+    const orderBy = desc(units.unitCode); // Default sort
     let sortClause: any = orderBy;
     
     if (sort === 'rating_desc') {

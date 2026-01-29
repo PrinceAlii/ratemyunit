@@ -404,7 +404,9 @@ export class CourseLoopScraper extends BaseScraper {
     try {
       const el = page.locator(selector).first();
       if (await el.isVisible()) return (await el.innerText()).trim();
-    } catch {}
+    } catch {
+      // Intentionally empty
+    }
     return '';
   }
 
@@ -443,7 +445,9 @@ export class CourseLoopScraper extends BaseScraper {
       const text = await page.getByText(/credit points?/i).first().innerText();
       const match = text.match(/(\d+)\s*cp/i);
       if (match) return parseInt(match[1], 10);
-    } catch {}
+    } catch {
+      // Intentionally empty
+    }
     return 6;
   }
 
@@ -453,7 +457,9 @@ export class CourseLoopScraper extends BaseScraper {
        const text = await page.textContent('body');
        const matches = text?.match(/(autumn|spring|summer|winter)\s+(session|20\d{2})/gi);
        if (matches) return [...new Set(matches.map(m => m.trim()))];
-    } catch {}
+    } catch {
+      // Intentionally empty
+    }
     return [];
   }
 }

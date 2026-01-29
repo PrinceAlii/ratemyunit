@@ -37,7 +37,7 @@ describe('UTS Scraper Validator', () => {
 
   it('rejects an invalid subject code (too short)', () => {
     const data = {
-      code: '123',
+      code: '12',
       name: 'Test',
       description: 'Test',
       creditPoints: 6,
@@ -46,9 +46,20 @@ describe('UTS Scraper Validator', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects an invalid subject code (non-numeric)', () => {
+  it('rejects an invalid subject code (too long)', () => {
     const data = {
-      code: 'ABCDE',
+      code: '1234567890123',
+      name: 'Test',
+      description: 'Test',
+      creditPoints: 6,
+    };
+    const result = scrapedSubjectDataSchema.safeParse(data);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects an invalid subject code (special characters)', () => {
+    const data = {
+      code: '312@51',
       name: 'Test',
       description: 'Test',
       creditPoints: 6,

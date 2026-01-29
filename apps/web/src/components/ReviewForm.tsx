@@ -239,7 +239,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
                 id="display-type"
                  className="flex h-10 w-full rounded-none border-3 border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-medium"
                  value={formData.displayNameType}
-                 onChange={(e) => setFormData({ ...formData, displayNameType: e.target.value as any })}
+                 onChange={(e) => setFormData({ ...formData, displayNameType: e.target.value as 'nickname' | 'anonymous' | 'verified' })}
                  disabled={mutation.isPending}
              >
                  <option value="nickname">Nickname</option>

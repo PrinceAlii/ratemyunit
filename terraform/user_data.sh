@@ -65,6 +65,7 @@ REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
 export DATABASE_URL=$(aws ssm get-parameter --name "/ratemyunit/production/database/url" --with-decryption --query "Parameter.Value" --output text --region $REGION)
 export JWT_SECRET=$(aws ssm get-parameter --name "/ratemyunit/production/jwt/secret" --with-decryption --query "Parameter.Value" --output text --region $REGION)
 export REDIS_URL=$(aws ssm get-parameter --name "/ratemyunit/production/redis/url" --with-decryption --query "Parameter.Value" --output text --region $REGION)
+export FRONTEND_URL=$(aws ssm get-parameter --name "/ratemyunit/production/frontend/url" --query "Parameter.Value" --output text --region $REGION)
 
 # Create Docker Network
 docker network create ratemyunit-net || true
@@ -95,7 +96,7 @@ docker run -d \
   -e DATABASE_URL="$DATABASE_URL" \
   -e REDIS_URL="$REDIS_URL" \
   -e JWT_SECRET="$JWT_SECRET" \
-  -e FRONTEND_URL="${frontend_url}" \
+  -e FRONTEND_URL="$FRONTEND_URL" \
   ${api_image}
 
 echo "UserData Setup Complete"

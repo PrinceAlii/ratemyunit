@@ -1,5 +1,5 @@
 import { Browser } from 'playwright';
-import { ScraperResult } from '../uts/types';
+import { ScraperResult } from '../uts/types.js';
 import { z } from 'zod';
 
 export const ScraperConfigSchema = z.object({

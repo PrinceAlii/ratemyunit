@@ -1,7 +1,7 @@
 import { Browser, Page } from 'playwright';
-import { BaseScraper } from './base';
-import { ScraperResult } from '../uts/types';
-import { safeValidateScrapedSubject } from '../uts/validator';
+import { BaseScraper } from './base.js';
+import { ScraperResult } from '../uts/types.js';
+import { safeValidateScrapedSubject } from '../uts/validator.js';
 import he from 'he';
 import pino from 'pino';
 import { config } from '../../config.js';

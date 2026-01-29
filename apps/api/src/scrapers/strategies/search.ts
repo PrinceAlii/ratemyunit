@@ -1,6 +1,6 @@
 import { Browser } from 'playwright';
-import { GenericDomScraper } from './generic';
-import { ScraperResult } from '../uts/types';
+import { GenericDomScraper } from './generic.js';
+import { ScraperResult } from '../uts/types.js';
 
 export class SearchDomScraper extends GenericDomScraper {
 

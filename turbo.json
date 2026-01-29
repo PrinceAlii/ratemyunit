@@ -25,6 +25,7 @@
     },
     "typecheck": {
       "dependsOn": [
+        "^build",
         "^typecheck"
       ]
     },

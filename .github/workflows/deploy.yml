@@ -21,7 +21,7 @@ jobs:
       ecr_repository: ${{ steps.tf-out.outputs.ecr_repository_url }}
       s3_bucket: ${{ steps.tf-out.outputs.s3_bucket_name }}
       cloudfront_id: ${{ steps.tf-out.outputs.cloudfront_distribution_id }}
-      # instance_id: ${{ steps.tf-out.outputs.instance_id }}
+      api_public_ip: ${{ steps.tf-out.outputs.api_public_ip }}
     
     steps:
       - name: Checkout
@@ -53,6 +53,7 @@ jobs:
           echo "ecr_repository_url=$(terraform output -raw ecr_repository_url)" >> $GITHUB_OUTPUT
           echo "s3_bucket_name=$(terraform output -raw s3_bucket_name)" >> $GITHUB_OUTPUT
           echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
+          echo "api_public_ip=$(terraform output -raw api_public_ip)" >> $GITHUB_OUTPUT
           
   deploy-backend:
     name: Deploy API (EC2)
@@ -75,20 +76,27 @@ jobs:
       - name: Build and Push Docker Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ratemyunit-api # Hardcoded or passed from output
+          ECR_REPOSITORY: ratemyunit-api
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          # Assuming Dockerfile is in apps/api
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f apps/api/Dockerfile .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Run Database Migrations
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=ratemyunit-api" \
+            --parameters 'commands=["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "docker pull ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker run --rm --network ratemyunit-net -e DATABASE_URL=$DATABASE_URL ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest npm run db:migrate"]' \
+            --comment "Running database migrations for version ${{ github.sha }}"
 
       - name: Deploy to EC2 via SSM
         run: |
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=ratemyunit-api" \
-            --parameters 'commands=["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "docker pull ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest", "docker stop api || true", "docker rm api || true", "export DB_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker run -d --name api --network ratemyunit-net -p 80:3000 -e DATABASE_URL=$DB_URL -e REDIS_URL=$REDIS_URL -e JWT_SECRET=$JWT_SECRET ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest"]' \
+            --parameters 'commands=["docker stop api || true", "docker rm api || true", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker run -d --name api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e DATABASE_URL=$DATABASE_URL -e REDIS_URL=$REDIS_URL -e JWT_SECRET=$JWT_SECRET ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest"]' \
             --comment "Deploying backend version ${{ github.sha }}"
 
   deploy-frontend:
@@ -103,19 +111,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
-          run_install: false
+          cache: 'npm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci
 
       - name: Build Web
-        run: pnpm turbo build --filter=@ratemyunit/web
+        env:
+          VITE_API_URL: http://${{ needs.infra.outputs.api_public_ip }}:80
+        run: npx turbo build --filter=@ratemyunit/web
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -125,7 +129,6 @@ jobs:
 
       - name: Sync to S3
         run: |
-          # Need bucket name from infra output
           aws s3 sync apps/web/dist s3://${{ needs.infra.outputs.s3_bucket }} --delete
 
       - name: Invalidate CloudFront

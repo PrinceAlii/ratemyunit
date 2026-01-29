@@ -13,19 +13,17 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "db:migrate": "pnpm --filter @ratemyunit/db migrate",
-    "db:seed": "pnpm --filter @ratemyunit/db seed",
-    "db:studio": "pnpm --filter @ratemyunit/db studio"
+    "db:migrate": "npm run migrate -w @ratemyunit/db",
+    "db:seed": "npm run seed -w @ratemyunit/db",
+    "db:studio": "npm run studio -w @ratemyunit/db"
   },
   "devDependencies": {
-    "@types/node": "^25.0.10",
+    "@types/node": "^25.1.0",
     "prettier": "^3.8.1",
-    "turbo": "^2.7.6",
+    "turbo": "^2.8.0",
     "typescript": "^5.9.3"
   },
-  "packageManager": "pnpm@10.28.1",
   "engines": {
-    "node": ">=20.0.0",
-    "pnpm": ">=8.0.0"
+    "node": ">=20.0.0"
   }
 }

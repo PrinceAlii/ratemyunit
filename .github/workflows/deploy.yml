@@ -10,19 +10,12 @@ permissions:
 
 env:
   AWS_REGION: ap-southeast-2
-  # You must set these secrets in GitHub
-  TF_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE }} 
+  TF_VERSION: "1.14.4"
   
 jobs:
-  infra:
-    name: Terraform Apply
+  infra-plan:
+    name: Terraform Plan
     runs-on: ubuntu-latest
-    outputs:
-      ecr_repository: ${{ steps.tf-out.outputs.ecr_repository_url }}
-      s3_bucket: ${{ steps.tf-out.outputs.s3_bucket_name }}
-      cloudfront_id: ${{ steps.tf-out.outputs.cloudfront_distribution_id }}
-      api_public_ip: ${{ steps.tf-out.outputs.api_public_ip }}
-    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,14 +29,69 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "1.14.4"
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+        working-directory: terraform
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: terraform
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: terraform
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -out=main.tfplan
+        working-directory: terraform
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: terraform/main.tfplan
+          retention-days: 1
+
+  infra-apply:
+    name: Terraform Apply
+    needs: infra-plan
+    runs-on: ubuntu-latest
+    environment: production # Manual Gate Configured in GitHub Settings
+    outputs:
+      ecr_repository: ${{ steps.tf-out.outputs.ecr_repository_url }}
+      s3_bucket: ${{ steps.tf-out.outputs.s3_bucket_name }}
+      cloudfront_id: ${{ steps.tf-out.outputs.cloudfront_distribution_id }}
+      api_public_ip: ${{ steps.tf-out.outputs.api_public_ip }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan
+          path: terraform
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
 
       - name: Terraform Init
         run: terraform init
         working-directory: terraform
 
       - name: Terraform Apply
-        run: terraform apply -auto-approve
+        run: terraform apply -auto-approve main.tfplan
         working-directory: terraform
 
       - name: Get Terraform Outputs
@@ -57,7 +105,7 @@ jobs:
           
   deploy-backend:
     name: Deploy API (EC2)
-    needs: infra
+    needs: infra-apply
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -101,7 +149,7 @@ jobs:
 
   deploy-frontend:
     name: Deploy Web (S3+CF)
-    needs: infra
+    needs: infra-apply
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -118,7 +166,7 @@ jobs:
 
       - name: Build Web
         env:
-          VITE_API_URL: http://${{ needs.infra.outputs.api_public_ip }}:80
+          VITE_API_URL: http://${{ needs.infra-apply.outputs.api_public_ip }}:80
         run: npx turbo build --filter=@ratemyunit/web
 
       - name: Configure AWS Credentials
@@ -129,8 +177,8 @@ jobs:
 
       - name: Sync to S3
         run: |
-          aws s3 sync apps/web/dist s3://${{ needs.infra.outputs.s3_bucket }} --delete
+          aws s3 sync apps/web/dist s3://${{ needs.infra-apply.outputs.s3_bucket }} --delete
 
       - name: Invalidate CloudFront
         run: |
-          aws cloudfront create-invalidation --distribution-id ${{ needs.infra.outputs.cloudfront_id }} --paths "/*"
+          aws cloudfront create-invalidation --distribution-id ${{ needs.infra-apply.outputs.cloudfront_id }} --paths "/*"

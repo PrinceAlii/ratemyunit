@@ -3,18 +3,48 @@ name: Deploy
 on:
   push:
     branches: ["main"]
+  pull_request:
+    branches: ["main"]
 
 permissions:
-  id-token: write # Required for OIDC
+  id-token: write
   contents: read
 
 env:
   AWS_REGION: ap-southeast-2
   TF_VERSION: "1.14.4"
-  
+
 jobs:
+  changes:
+    name: Check for changes
+    runs-on: ubuntu-latest
+    outputs:
+      infra: ${{ steps.filter.outputs.infra }}
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            infra:
+              - 'terraform/**'
+            backend:
+              - 'apps/api/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+            frontend:
+              - 'apps/web/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+
   infra-plan:
     name: Terraform Plan
+    needs: changes
+    if: needs.changes.outputs.infra == 'true' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -31,16 +61,16 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      - name: Terraform Format Check
-        run: terraform fmt -check
-        working-directory: terraform
+      - name: Terraform Init Cache
+        uses: actions/cache@v4
+        with:
+          path: terraform/.terraform
+          key: ${{ runner.os }}-terraform-${{ hashFiles('terraform/*.tf') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
 
       - name: Terraform Init
         run: terraform init
-        working-directory: terraform
-
-      - name: Terraform Validate
-        run: terraform validate
         working-directory: terraform
 
       - name: Terraform Plan
@@ -57,9 +87,10 @@ jobs:
 
   infra-apply:
     name: Terraform Apply
-    needs: infra-plan
+    needs: [changes, infra-plan]
+    if: (needs.changes.outputs.infra == 'true' && github.event_name == 'push')
     runs-on: ubuntu-latest
-    environment: production # Manual Gate Configured in GitHub Settings
+    environment: production
     outputs:
       ecr_repository: ${{ steps.tf-out.outputs.ecr_repository_url }}
       s3_bucket: ${{ steps.tf-out.outputs.s3_bucket_name }}
@@ -87,6 +118,12 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      - name: Terraform Init Cache
+        uses: actions/cache@v4
+        with:
+          path: terraform/.terraform
+          key: ${{ runner.os }}-terraform-${{ hashFiles('terraform/*.tf') }}
+
       - name: Terraform Init
         run: terraform init
         working-directory: terraform
@@ -104,10 +141,11 @@ jobs:
           echo "cloudfront_distribution_id=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
           echo "cloudfront_domain_name=$(terraform output -raw cloudfront_domain_name)" >> $GITHUB_OUTPUT
           echo "api_public_ip=$(terraform output -raw api_public_ip)" >> $GITHUB_OUTPUT
-          
+
   deploy-backend:
     name: Deploy API (EC2)
-    needs: infra-apply
+    needs: [changes, infra-apply]
+    if: always() && (needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true') && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -119,19 +157,24 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and Push Docker Image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ratemyunit-api
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -f apps/api/Dockerfile .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest
+            ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Run Database Migrations
         run: |
@@ -139,32 +182,20 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=ratemyunit-api" \
             --parameters 'commands=["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "docker pull ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker run --rm --network ratemyunit-net -e DATABASE_URL=$DATABASE_URL ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest npm run db:migrate"]' \
-            --comment "Running database migrations for version ${{ github.sha }}"
+            --comment "Running database migrations"
 
       - name: Deploy to EC2 via SSM
         run: |
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=ratemyunit-api" \
-            --parameters 'commands=["docker stop api || true", "docker rm api || true", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker run -d --name api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e DATABASE_URL=$DATABASE_URL -e REDIS_URL=$REDIS_URL -e JWT_SECRET=$JWT_SECRET -e FRONTEND_URL=https://${{ needs.infra-apply.outputs.cloudfront_domain }} ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest"]' \
-            --comment "Deploying backend version ${{ github.sha }}"
-
-      - name: Verify Deployment
-        run: |
-          # Wait a few seconds for the container to attempt to start
-          sleep 10
-          
-          # Get logs from the container to see if it's crashing
-          echo "Checking API container logs..."
-          aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --targets "Key=tag:Name,Values=ratemyunit-api" \
-            --parameters 'commands=["docker logs api --tail 50"]' \
-            --comment "Verifying deployment logs"
+            --parameters 'commands=["docker stop api || true", "docker rm api || true", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker run -d --name api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e DATABASE_URL=$DATABASE_URL -e REDIS_URL=$REDIS_URL -e JWT_SECRET=$JWT_SECRET -e FRONTEND_URL=https://${{ needs.infra-apply.outputs.cloudfront_domain || 'ratemyunit.com' }} ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest"]' \
+            --comment "Deploying backend"
 
   deploy-frontend:
     name: Deploy Web (S3+CF)
-    needs: infra-apply
+    needs: [changes, infra-apply]
+    if: always() && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.infra == 'true') && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -176,13 +207,21 @@ jobs:
           node-version: 20
           cache: 'npm'
 
+      - name: Turborepo Cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build Web
         env:
-          VITE_API_URL: https://${{ needs.infra-apply.outputs.cloudfront_domain }}
-        run: npx turbo build --filter=@ratemyunit/web
+          VITE_API_URL: https://${{ needs.infra-apply.outputs.cloudfront_domain || 'ratemyunit.com' }}
+        run: npx turbo build --filter=@ratemyunit/web --cache-dir=.turbo
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4

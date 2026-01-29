@@ -306,10 +306,9 @@ jobs:
             sleep 2
           done
 
-      - name: Seed Database (First Deploy Only)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Seed Database
         run: |
-          echo "Seeding database with initial data..."
+          echo "Seeding database with initial data (idempotent - safe to run multiple times)..."
           
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \

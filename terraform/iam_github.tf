@@ -82,7 +82,10 @@ resource "aws_iam_role" "github_deploy" {
         }
         Condition = {
           StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:PrinceAlii/ratemyunit:ref:refs/heads/main"
+            "token.actions.githubusercontent.com:sub" = [
+              "repo:PrinceAlii/ratemyunit:ref:refs/heads/main",
+              "repo:PrinceAlii/ratemyunit:environment:production"
+            ]
           }
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"

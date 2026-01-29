@@ -147,6 +147,19 @@ jobs:
             --parameters 'commands=["docker stop api || true", "docker rm api || true", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker run -d --name api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e DATABASE_URL=$DATABASE_URL -e REDIS_URL=$REDIS_URL -e JWT_SECRET=$JWT_SECRET ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest"]' \
             --comment "Deploying backend version ${{ github.sha }}"
 
+      - name: Verify Deployment
+        run: |
+          # Wait a few seconds for the container to attempt to start
+          sleep 10
+          
+          # Get logs from the container to see if it's crashing
+          echo "Checking API container logs..."
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=ratemyunit-api" \
+            --parameters 'commands=["docker logs api --tail 50"]' \
+            --comment "Verifying deployment logs"
+
   deploy-frontend:
     name: Deploy Web (S3+CF)
     needs: infra-apply

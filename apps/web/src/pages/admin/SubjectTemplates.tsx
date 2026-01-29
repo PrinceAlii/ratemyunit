@@ -146,9 +146,9 @@ export function SubjectTemplates() {
   });
 
   const queueMutation = useMutation({
-    mutationFn: (id: string) => api.post<{ data: { jobsQueued: number } }>(`/api/admin/templates/${id}/queue`, {}),
+    mutationFn: (id: string) => api.post<{ jobsQueued: number }>(`/api/admin/templates/${id}/queue`, {}),
     onSuccess: (response) => {
-      toast.success(`Successfully queued ${response.data.jobsQueued} subjects for scraping`);
+      toast.success(`Successfully queued ${response.jobsQueued} subjects for scraping`);
       queryClient.invalidateQueries({ queryKey: ['admin', 'scrape', 'status'] });
     },
     onError: (error: Error) => {

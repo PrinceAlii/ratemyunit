@@ -51,10 +51,11 @@ export async function buildApp() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'", "https://static.cloudflareinsights.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         imgSrc: ["'self'", "data:", "https:"],
         connectSrc: ["'self'"],
+        fontSrc: ["'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "data:"],
         objectSrc: ["'none'"],
         frameSrc: ["'none'"],
       },
@@ -146,7 +147,6 @@ export async function buildApp() {
   await app.register(fastifyStatic, {
     root: frontendPath,
     prefix: '/',
-    decorateReply: false,
   });
 
   // Serve index.html for all non-API routes (SPA fallback)

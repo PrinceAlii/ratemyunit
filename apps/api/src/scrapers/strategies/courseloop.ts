@@ -180,7 +180,7 @@ export class CourseLoopScraper extends BaseScraper {
       // Handle sitemap index
       if (jsonObj.sitemapindex?.sitemap) {
         const sitemaps = Array.isArray(jsonObj.sitemapindex.sitemap) ? jsonObj.sitemapindex.sitemap : [jsonObj.sitemapindex.sitemap];
-        nestedUrls.push(...sitemaps.map((s: { loc?: string }) => s.loc).filter((loc): loc is string => !!loc));
+        nestedUrls.push(...sitemaps.map((s: { loc?: string }) => s.loc).filter((loc: unknown): loc is string => !!loc));
       } 
       
       // Standard sitemap might also point to other sitemaps in loc
@@ -350,7 +350,7 @@ export class CourseLoopScraper extends BaseScraper {
       if (!jsonObj.urlset?.url) return [];
       
       const urls = Array.isArray(jsonObj.urlset.url) ? jsonObj.urlset.url : [jsonObj.urlset.url];
-      const locs: string[] = urls.map((u: { loc?: string }) => u.loc).filter((loc): loc is string => !!loc);
+      const locs: string[] = urls.map((u: { loc?: string }) => u.loc).filter((loc: unknown): loc is string => !!loc);
 
       const escapedPattern = routePattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const regexString = escapedPattern.replace(':code', '([a-zA-Z0-9]{3,10})');

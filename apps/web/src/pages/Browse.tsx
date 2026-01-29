@@ -8,10 +8,9 @@ import { Label } from '../components/ui/label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Search, Filter, SlidersHorizontal, School } from 'lucide-react';
 import { StarRating } from '../components/StarRating';
-import type { Unit, University } from '@ratemyunit/types';
+import type { UnitWithStats, University } from '@ratemyunit/types';
 
-interface SearchResults extends Unit {
-  averageRating: number;
+interface SearchResults extends UnitWithStats {
   reviewCount: number;
 }
 

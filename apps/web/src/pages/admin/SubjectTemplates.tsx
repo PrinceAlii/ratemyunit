@@ -923,7 +923,7 @@ export function SubjectTemplates() {
                 </div>
                 <div className="p-4 border-3 border-foreground bg-background">
                   <div className="grid grid-cols-5 gap-2 font-mono text-sm">
-                    {previewData.codes.map((code, idx) => (
+                    {previewData.codes.map((code: string, idx: number) => (
                       <div
                         key={idx}
                         className="px-3 py-2 bg-secondary text-secondary-foreground border-2 border-foreground font-bold text-center"

@@ -2,7 +2,7 @@ import { db } from '@ratemyunit/db/client';
 import { units, universities } from '@ratemyunit/db/schema';
 import { eq } from 'drizzle-orm';
 import { chromium, Browser } from 'playwright';
-import { ScraperFactory } from '../scrapers/factory';
+import { ScraperFactory, type ScraperType } from '../scrapers/factory';
 import { ScraperConfigSchema } from '../scrapers/strategies/base';
 import type { ScraperResult } from '../scrapers/uts/types';
 import pino from 'pino';
@@ -69,7 +69,7 @@ export class ScraperService {
       throw new Error(`Invalid scraper configuration for ${uni.name}: ${parseResult.error.message}`);
     }
 
-    return { uni, scraper: ScraperFactory.createScraper(uni.scraperType as string, uni.name, parseResult.data) };
+    return { uni, scraper: ScraperFactory.createScraper(uni.scraperType as ScraperType, uni.name, parseResult.data) };
   }
 
   async discoverUnits(universityId: string, existingBrowser?: Browser): Promise<string[]> {

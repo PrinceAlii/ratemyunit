@@ -30,6 +30,7 @@ jobs:
           filters: |
             infra:
               - 'terraform/**'
+              - '.github/workflows/deploy.yml'
             backend:
               - 'apps/api/**'
               - 'packages/**'

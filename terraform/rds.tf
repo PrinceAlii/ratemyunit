@@ -12,7 +12,7 @@ resource "aws_db_subnet_group" "main" {
 resource "aws_db_instance" "postgres" {
   identifier           = "ratemyunit-prod-db"
   engine               = "postgres"
-  engine_version       = "16.1"
+  engine_version       = "16.6"
   instance_class       = "db.t3.micro" # Free Tier
   allocated_storage    = 20
   storage_type         = "gp2"
@@ -30,7 +30,7 @@ resource "aws_db_instance" "postgres" {
   publicly_accessible    = false
   skip_final_snapshot    = true # Set to false for production
   
-  backup_retention_period = 7
+  backup_retention_period = 0
   backup_window           = "03:00-04:00"
   maintenance_window      = "sun:04:00-sun:05:00"
 

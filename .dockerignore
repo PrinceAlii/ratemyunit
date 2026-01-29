@@ -1,0 +1,12 @@
+node_modules
+.git
+.turbo
+dist
+build
+coverage
+.env
+.env.*
+!.env.example
+conductor
+terraform
+report

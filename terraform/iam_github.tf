@@ -48,11 +48,9 @@ resource "aws_iam_policy" "tf_state_access" {
         Action = [
           "s3:ListBucket",
           "s3:GetObject",
-          "s3:PutObject" # Plan needs to write to state if it refreshes? Actually Apply does. Plan writes lock.
+          "s3:PutObject"
         ]
         Resource = [
-          aws_s3_bucket.frontend.arn, # Wrong bucket? No, state bucket is not managed by TF here usually? 
-          # Ah, the state bucket is ratemyunit-terraform-state.
           "arn:aws:s3:::ratemyunit-terraform-state",
           "arn:aws:s3:::ratemyunit-terraform-state/*"
         ]

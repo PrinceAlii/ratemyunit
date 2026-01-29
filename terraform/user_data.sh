@@ -58,8 +58,9 @@ EOF
 
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/bin/config.json
 
-# Get region from instance metadata
-REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)
+# Get region from instance metadata (IMDSv2)
+TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
+REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
 
 # Retrieve secrets from SSM Parameter Store
 export DATABASE_URL=$(aws ssm get-parameter --name "/ratemyunit/production/database/url" --with-decryption --query "Parameter.Value" --output text --region $REGION)
@@ -70,17 +71,18 @@ export FRONTEND_URL=$(aws ssm get-parameter --name "/ratemyunit/production/front
 # Create Docker Network
 docker network create ratemyunit-net || true
 
-# Start Redis
+# Start Redis with persistence
 docker run -d \
   --name redis \
   --network ratemyunit-net \
   --restart always \
-  redis:alpine
+  -v redis-data:/data \
+  redis:alpine redis-server --appendonly yes
 
 # Wait for Redis to be ready
 sleep 5
 
-# Log in to ECR
+# Log in to ECR (non-interactive)
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin ${ecr_repository_url}
 
 # Pull and run API container
@@ -90,7 +92,7 @@ docker run -d \
   --name ratemyunit-api \
   --network ratemyunit-net \
   --restart always \
-  -p 3000:3000 \
+  -p 80:3000 \
   -e NODE_ENV=production \
   -e PORT=3000 \
   -e DATABASE_URL="$DATABASE_URL" \

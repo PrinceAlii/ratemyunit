@@ -15,14 +15,14 @@ resource "aws_db_instance" "postgres" {
   engine_version       = "16.1"
   instance_class       = "db.t3.micro" # Free Tier
   allocated_storage    = 20
-  storage_type         = "gp3"
+  storage_type         = "gp2"
   db_name              = "ratemyunit"
   username             = "ratemyunit"
   
   # In a production Terraform setup, this should come from a variable or 
   # be managed via the aws_ssm_parameter resource. 
   # For now, we define it as a placeholder.
-  password             = "REPLACE_ME_WITH_SECURE_PASSWORD" 
+  password             = random_password.db_password.result 
   
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.db.id]

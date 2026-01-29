@@ -93,7 +93,7 @@ resource "aws_security_group" "web" {
   description = "Allow inbound HTTP/HTTPS traffic"
   vpc_id      = aws_vpc.main.id
 
-  # Inbound from Cloudflare (Simplified for MVP, ideally use CF IP ranges)
+  # Port 80 for API
   ingress {
     from_port   = 80
     to_port     = 80
@@ -101,6 +101,7 @@ resource "aws_security_group" "web" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Port 443 for API (when SSL is ready)
   ingress {
     from_port   = 443
     to_port     = 443
@@ -108,7 +109,7 @@ resource "aws_security_group" "web" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-
+  # NO PORT 22 - We use SSM Session Manager for secure shell access
 
   # Outbound all
   egress {

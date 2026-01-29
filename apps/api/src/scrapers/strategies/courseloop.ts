@@ -1,12 +1,12 @@
 import { Browser, Page } from 'playwright';
-import { BaseScraper } from './base';
-import { ScraperResult, ScrapedSubjectData } from '../uts/types';
-import { safeValidateScrapedSubject } from '../uts/validator';
+import { BaseScraper } from './base.js';
+import { ScraperResult, ScrapedSubjectData } from '../uts/types.js';
+import { safeValidateScrapedSubject } from '../uts/validator.js';
 import he from 'he';
 import { db } from '@ratemyunit/db/client';
 import { universities, subjectCodeTemplates } from '@ratemyunit/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
-import { subjectTemplateService } from '../../services/template';
+import { subjectTemplateService } from '../../services/template.js';
 import pino from 'pino';
 import { config } from '../../config.js';
 import { XMLParser } from 'fast-xml-parser';

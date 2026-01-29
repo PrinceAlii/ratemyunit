@@ -1,7 +1,7 @@
-import { BaseScraper, ScraperConfig } from './strategies/base';
-import { CourseLoopScraper } from './strategies/courseloop';
-import { GenericDomScraper } from './strategies/generic';
-import { SearchDomScraper } from './strategies/search';
+import { BaseScraper, ScraperConfig } from './strategies/base.js';
+import { CourseLoopScraper } from './strategies/courseloop.js';
+import { GenericDomScraper } from './strategies/generic.js';
+import { SearchDomScraper } from './strategies/search.js';
 
 export type ScraperType = 'courseloop' | 'akari' | 'custom' | 'cusp' | 'legacy' | 'search_dom';
 

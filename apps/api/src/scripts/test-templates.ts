@@ -1,7 +1,7 @@
 import { db } from '@ratemyunit/db/client';
 import { subjectCodeTemplates, universities } from '@ratemyunit/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { subjectTemplateService } from '../services/template';
+import { subjectTemplateService } from '../services/template.js';
 
 interface TemplateStats {
   id: string;

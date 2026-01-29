@@ -1,4 +1,4 @@
-import { CourseLoopScraper } from '../scrapers/strategies/courseloop';
+import { CourseLoopScraper } from '../scrapers/strategies/courseloop.js';
 import { chromium } from 'playwright';
 
 async function debugUtsScraper() {

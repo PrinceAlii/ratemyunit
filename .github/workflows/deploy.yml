@@ -203,11 +203,36 @@ jobs:
 
       - name: Run Database Migrations
         run: |
-          aws ssm send-command \
+          COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=ratemyunit-api" \
-            --parameters 'commands=["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "docker pull ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker run --rm --network ratemyunit-net -e DATABASE_URL=$DATABASE_URL ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest npm run db:migrate"]' \
-            --comment "Running database migrations"
+            --parameters 'commands=["export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker exec -e DATABASE_URL=\"$DATABASE_URL\" ratemyunit-api node /app/packages/db/scripts/apply-migrations.mjs 2>&1 || echo \"Container not running yet, will migrate after deployment\""]' \
+            --comment "Running database migrations" \
+            --query 'Command.CommandId' \
+            --output text)
+          
+          echo "Migration command ID: $COMMAND_ID"
+          
+          # Wait for command to complete (timeout after 30 seconds)
+          for i in {1..30}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "i-07f47e255aa57e0ea" \
+              --query 'Status' \
+              --output text 2>/dev/null || echo "Pending")
+            
+            if [[ "$STATUS" == "Success" || "$STATUS" == "Failed" ]]; then
+              echo "Migration status: $STATUS"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "i-07f47e255aa57e0ea" \
+                --query 'StandardOutputContent' \
+                --output text
+              break
+            fi
+            
+            sleep 1
+          done
 
       - name: Deploy to EC2 via SSM
         run: |
@@ -216,3 +241,112 @@ jobs:
             --targets "Key=tag:Name,Values=ratemyunit-api" \
             --parameters 'commands=["docker stop ratemyunit-api || true", "docker rm ratemyunit-api || true", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "export FRONTEND_URL=$(aws ssm get-parameter --name /ratemyunit/production/frontend/url --query Parameter.Value --output text --region ap-southeast-2)", "aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "docker pull ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest", "docker run -d --name ratemyunit-api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e NODE_ENV=production -e PORT=3000 -e DATABASE_URL=$DATABASE_URL -e REDIS_URL=$REDIS_URL -e JWT_SECRET=$JWT_SECRET -e FRONTEND_URL=$FRONTEND_URL ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest"]' \
             --comment "Deploying backend"
+
+      - name: Wait for Container to Start
+        run: |
+          echo "Waiting for container to be ready..."
+          sleep 10
+          
+          # Verify container is running
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=ratemyunit-api" \
+            --parameters 'commands=["docker ps --filter name=ratemyunit-api --format \"{{.Status}}\""]' \
+            --query 'Command.CommandId' \
+            --output text)
+          
+          sleep 3
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "i-07f47e255aa57e0ea" \
+            --query 'StandardOutputContent' \
+            --output text
+
+      - name: Run Post-Deployment Migrations
+        run: |
+          echo "Running database migrations in the new container..."
+          
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=ratemyunit-api" \
+            --parameters 'commands=["export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker exec -e DATABASE_URL=\"$DATABASE_URL\" ratemyunit-api node /app/packages/db/scripts/apply-migrations.mjs 2>&1"]' \
+            --comment "Post-deployment migrations" \
+            --query 'Command.CommandId' \
+            --output text)
+          
+          echo "Migration command ID: $COMMAND_ID"
+          
+          # Wait for migrations to complete
+          for i in {1..60}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "i-07f47e255aa57e0ea" \
+              --query 'Status' \
+              --output text 2>/dev/null || echo "Pending")
+            
+            if [[ "$STATUS" == "Success" ]]; then
+              echo "✓ Migrations completed successfully"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "i-07f47e255aa57e0ea" \
+                --query 'StandardOutputContent' \
+                --output text
+              break
+            elif [[ "$STATUS" == "Failed" ]]; then
+              echo "✗ Migrations failed"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "i-07f47e255aa57e0ea" \
+                --query 'StandardOutputContent' \
+                --output text
+              exit 1
+            fi
+            
+            echo "Waiting for migrations... ($i/60)"
+            sleep 2
+          done
+
+      - name: Seed Database (First Deploy Only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Seeding database with initial data..."
+          
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=ratemyunit-api" \
+            --parameters 'commands=["export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ap-southeast-2)", "docker exec -e DATABASE_URL=\"$DATABASE_URL\" ratemyunit-api node /app/packages/db/dist/seed.js 2>&1"]' \
+            --comment "Database seeding" \
+            --query 'Command.CommandId' \
+            --output text)
+          
+          echo "Seeding command ID: $COMMAND_ID"
+          
+          # Wait for seeding to complete
+          for i in {1..120}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "i-07f47e255aa57e0ea" \
+              --query 'Status' \
+              --output text 2>/dev/null || echo "Pending")
+            
+            if [[ "$STATUS" == "Success" ]]; then
+              echo "✓ Database seeded successfully"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "i-07f47e255aa57e0ea" \
+                --query 'StandardOutputContent' \
+                --output text
+              break
+            elif [[ "$STATUS" == "Failed" ]]; then
+              echo "✗ Seeding failed (this is optional)"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "i-07f47e255aa57e0ea" \
+                --query 'StandardOutputContent' \
+                --output text
+              break
+            fi
+            
+            echo "Waiting for seeding... ($i/120)"
+            sleep 2
+          done

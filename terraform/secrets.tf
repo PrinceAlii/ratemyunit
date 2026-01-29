@@ -51,3 +51,18 @@ resource "aws_ssm_parameter" "jwt_secret" {
     Project     = "RateMyUnit"
   }
 }
+
+resource "aws_ssm_parameter" "frontend_url" {
+  name  = "/ratemyunit/production/frontend/url"
+  type  = "String"
+  value = "http://localhost:5173"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+
+  tags = {
+    Environment = "Production"
+    Project     = "RateMyUnit"
+  }
+}

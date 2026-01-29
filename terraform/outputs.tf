@@ -32,3 +32,13 @@ output "vpc_id" {
   description = "The ID of the VPC"
   value       = aws_vpc.main.id
 }
+
+output "frontend_url" {
+  description = "The frontend URL (CloudFront)"
+  value       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+}
+
+output "update_frontend_url_command" {
+  description = "Command to update the frontend URL in SSM Parameter Store"
+  value       = "aws ssm put-parameter --name '/ratemyunit/production/frontend/url' --value 'https://${aws_cloudfront_distribution.frontend.domain_name}' --overwrite --region ${data.aws_region.current.name}"
+}

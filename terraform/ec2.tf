@@ -92,7 +92,6 @@ resource "aws_instance" "api" {
   user_data = templatefile("${path.module}/user_data.sh", {
     ecr_repository_url = aws_ecr_repository.api.repository_url
     api_image          = "${aws_ecr_repository.api.repository_url}:latest"
-    frontend_url       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
   })
 
   user_data_replace_on_change = true

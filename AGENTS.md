@@ -197,20 +197,55 @@ Files and responsibilities:
 5. Cloudflare proxies HTTPS traffic to EC2 public IP (static Elastic IP)
 
 ### CI/CD Workflows (.github/workflows)
-- **ci.yml**: Runs on PR/push to `main`, covering lint/typecheck/test/build
-- **deploy.yml**: Push to `main` triggers:
-  1. Path filters for infra/backend/frontend
-  2. Terraform plan/apply (via AWS_DEPLOY_ROLE IAM role)
-  3. Docker build/push to ECR
-  4. Deployment via SSM (stop/rm container, pull image, run)
-  5. Database migrations + seeding via SSM commands
+
+**ci.yml** - Continuous Integration
+- **Triggers**: Pull requests and pushes to `main`
+- **Concurrency**: Auto-cancels in-progress runs for the same ref
+- **Jobs**:
+  - `validate`: Runs lint, typecheck, test, and build checks across all workspaces using Turborepo
+
+**deploy.yml** - Deployment Pipeline
+- **Triggers**:
+  - Pushes to `main` (automatic deployment)
+  - Pull requests to `main` (Terraform plan only, no apply)
+  - Manual workflow dispatch
+- **Concurrency**: Single deployment at a time (cancel-in-progress: false to protect mid-flight deployments)
+- **Jobs**:
+  1. `changes`: Path filters detect changes to infra/backend/frontend
+  2. `infra-plan`: Terraform plan (runs on infra changes or PRs)
+     - Caches Terraform providers and plugins (includes .terraform.lock.hcl in cache key)
+     - Uploads plan artifact (retained for 7 days)
+  3. `infra-apply`: Terraform apply (only on push to main with infra changes, requires production environment approval)
+  4. `deploy-backend`: Deploys API + Frontend (only on push to main)
+     - **Dependency**: Waits for `infra-apply` to succeed or be skipped (prevents race conditions)
+     - Tags current running image for rollback capability
+     - Builds and pushes Docker image to ECR with SHA-tagged version
+     - Runs pre-deployment database migrations via SSM (with timeout handling)
+     - Deploys container to EC2 via SSM commands (waits for completion, 5-minute timeout)
+     - Handles EC2 instance states (stopped, stopping, pending) gracefully
+     - Runs post-deployment migrations via SSM (with timeout handling)
+     - Seeds database (mandatory, idempotent) via SSM (with timeout handling)
+     - Performs health check on deployed application (polls /health endpoint for 5 minutes)
+     - **Rollback**: On failure, automatically reverts to previous Docker image
+     - Sends deployment status notification (success/failure with workflow link)
+- **Authentication**: Uses AWS OIDC (IAM role `AWS_DEPLOY_ROLE` from GitHub Secrets)
+- **Terraform Version**: 1.14.4 (latest stable as of 2026)
+- **Image Tagging**: Deploys SHA-tagged images for better version tracking and rollback capability
 
 ### Deployment Gotchas
 1. **Cloudflare IP whitelist** is static—update `terraform/networking.tf` when Cloudflare publishes new CIDR blocks
 2. **Secrets** live in SSM Parameter Store and GitHub Secrets (`AWS_DEPLOY_ROLE`). Additional secrets may be added to GitHub Secrets as needed (but avoid committing them)
-3. **Migrations** run automatically on every deployment (pre & post) via SSM shell commands
+3. **Migrations** run automatically on every deployment (pre & post) via SSM shell commands; each step dynamically resolves the EC2 instance ID by tag
+   - Pre-deployment migrations run on the OLD container to prepare the database
+   - Post-deployment migrations run on the NEW container after deployment
+   - All migration steps have timeout handling (30s for pre-deployment, 2min for post-deployment)
+   - Database seeding is mandatory and must succeed for deployment to complete
 4. **No SSH**: Access everything via AWS Session Manager or CI/CD SSM commands
 5. **Free Tier limit**: Always maintain t3.micro (EC2) and db.t3.micro (RDS) to stay within AWS 2025/26 Free Tier
+6. **Rollback mechanism**: If deployment fails (migration errors, health check failures), the workflow automatically reverts to the previous Docker image
+7. **Health checks**: After deployment, the workflow polls the `/health` endpoint for up to 5 minutes; deployment fails if the app doesn't become healthy
+8. **SHA-tagged deployments**: Each deployment uses a SHA-tagged Docker image (`:${{ github.sha }}`) rather than `:latest` for better version tracking
+9. **Concurrency control**: Only one deployment can run at a time; new deployments wait for in-progress ones to complete (never cancelled mid-flight)
 
 ---
 
@@ -398,6 +433,6 @@ See **IMPROVEMENT.md** for a curated list of near-future initiatives and archite
 
 ---
 
-*Last updated: 2026-02-01*
+*Last updated: 2026-02-01 (Comprehensive CI/CD workflow improvements: added rollback mechanism, health checks, SHA-tagged deployments, timeout handling, concurrency control, and enhanced error handling)*
 
 Remember to update this file when you make related changes.

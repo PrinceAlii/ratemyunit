@@ -17,7 +17,7 @@ resource "aws_ssm_parameter" "db_password" {
 resource "aws_ssm_parameter" "db_url" {
   name  = "/ratemyunit/production/database/url"
   type  = "SecureString"
-  value = format("postgresql://%s:%s@%s/%s", aws_db_instance.postgres.username, random_password.db_password.result, aws_db_instance.postgres.endpoint, aws_db_instance.postgres.db_name)
+  value = format("postgresql://%s:%s@%s/%s?sslmode=require", aws_db_instance.postgres.username, random_password.db_password.result, aws_db_instance.postgres.endpoint, aws_db_instance.postgres.db_name)
 
   tags = {
     Environment = "Production"

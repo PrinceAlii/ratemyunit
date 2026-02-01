@@ -346,6 +346,7 @@ jobs:
             DESCRIBE_RESULT=$(aws ec2 describe-instances \
               --filters \
                 "Name=tag:Name,Values=ratemyunit-api" \
+                "Name=instance-state-name,Values=running,pending,stopping,stopped" \
               --query 'Reservations[0].Instances[0]' \
               --output json)
             INSTANCE_ID=$(echo "$DESCRIBE_RESULT" | jq -r '.InstanceId // empty')

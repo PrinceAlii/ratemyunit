@@ -18,7 +18,7 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
-# Public Subnets (for EC2/Web)
+# Public Subnets
 resource "aws_subnet" "public_1" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
@@ -41,7 +41,7 @@ resource "aws_subnet" "public_2" {
   }
 }
 
-# Private Subnets (for RDS)
+# Private Subnets
 resource "aws_subnet" "private_1" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.10.0/24"
@@ -62,7 +62,7 @@ resource "aws_subnet" "private_2" {
   }
 }
 
-# Public Route Table
+# Route Table + Associations
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -76,7 +76,6 @@ resource "aws_route_table" "public" {
   }
 }
 
-# Route Table Associations
 resource "aws_route_table_association" "public_1" {
   subnet_id      = aws_subnet.public_1.id
   route_table_id = aws_route_table.public.id
@@ -93,59 +92,20 @@ resource "aws_security_group" "web" {
   description = "Allow inbound HTTP/HTTPS traffic from Cloudflare only"
   vpc_id      = aws_vpc.main.id
 
-  # Port 80 for API - Cloudflare IPs only
-  # See: https://www.cloudflare.com/ips/
-  # TODO: Update this list periodically or use data source
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = [
-      "173.245.48.0/20",
-      "103.21.244.0/22",
-      "103.22.200.0/22",
-      "103.31.4.0/22",
-      "141.101.64.0/18",
-      "108.162.192.0/18",
-      "190.93.240.0/20",
-      "188.114.96.0/20",
-      "197.234.240.0/22",
-      "198.41.128.0/17",
-      "162.158.0.0/15",
-      "104.16.0.0/13",
-      "104.24.0.0/14",
-      "172.64.0.0/13",
-      "131.0.72.0/22"
-    ]
+    cidr_blocks = jsondecode(file("${path.module}/cloudflare-ips.json")).ipv4
   }
 
-  # Port 443 for API (when SSL is ready) - Cloudflare IPs only
   ingress {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = [
-      "173.245.48.0/20",
-      "103.21.244.0/22",
-      "103.22.200.0/22",
-      "103.31.4.0/22",
-      "141.101.64.0/18",
-      "108.162.192.0/18",
-      "190.93.240.0/20",
-      "188.114.96.0/20",
-      "197.234.240.0/22",
-      "198.41.128.0/17",
-      "162.158.0.0/15",
-      "104.16.0.0/13",
-      "104.24.0.0/14",
-      "172.64.0.0/13",
-      "131.0.72.0/22"
-    ]
+    cidr_blocks = jsondecode(file("${path.module}/cloudflare-ips.json")).ipv4
   }
 
-  # NO PORT 22 - We use SSM Session Manager for secure shell access
-
-  # Outbound all
   egress {
     from_port   = 0
     to_port     = 0

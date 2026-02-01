@@ -246,21 +246,27 @@ jobs:
         run: |
           echo "Waiting for container to be ready..."
           sleep 10
-          INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters \
-              "Name=tag:Name,Values=ratemyunit-api" \
-              "Name=instance-state-name,Values=running" \
-            --query 'Reservations[0].Instances[0].InstanceId' \
-            --output text)
-
-          if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; then
-            echo "✗ Unable to resolve EC2 instance ID" && exit 1
-          fi
+          INSTANCE_ID="None"
+          attempt=0
+          while [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; do
+            INSTANCE_ID=$(aws ec2 describe-instances \
+              --filters \
+                "Name=tag:Name,Values=ratemyunit-api" \
+                "Name=instance-state-name,Values=running" \
+              --query 'Reservations[0].Instances[0].InstanceId' \
+              --output text)
+            attempt=$((attempt + 1))
+            if [[ $attempt -ge 18 ]]; then
+              echo "✗ Unable to resolve EC2 instance ID" && exit 1
+            fi
+            sleep 1
+          done
 
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=ratemyunit-api" \
             --parameters 'commands=["docker ps --filter name=ratemyunit-api --format \"{{.Status}}\""]' \
+            --comment "Verify container started" \
             --query 'Command.CommandId' \
             --output text)
 

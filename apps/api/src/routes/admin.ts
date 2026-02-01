@@ -152,13 +152,17 @@ export async function adminRoutes(app: FastifyInstance) {
     }
 
     const { unitCode, universityId } = result.data;
-    if (!universityId) return reply.status(400).send({ success: false, error: 'University ID required' });
+    
+    // Resolve university ID or default to UTS
+    const effectiveUniId = universityId || (await db.select().from(universities).where(eq(universities.abbreviation, 'UTS')).limit(1).then(r => r[0]?.id));
+      
+    if (!effectiveUniId) return reply.status(400).send({ success: false, error: 'University ID required or default UTS not found' });
 
     // Add to queue with university ID
     await scraperQueue.add('scrape-unit', { 
         type: 'scrape',
         unitCode, 
-        universityId 
+        universityId: effectiveUniId 
     });
 
     return reply.send({

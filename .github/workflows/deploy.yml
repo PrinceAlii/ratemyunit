@@ -299,7 +299,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=ratemyunit-api" \
-            --parameters 'commands=["docker rm -f ratemyunit-api || true", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export FRONTEND_URL=$(aws ssm get-parameter --name /ratemyunit/production/frontend/url --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "docker pull ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:${{ github.sha }}", "docker run -d --name ratemyunit-api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e NODE_ENV=production -e PORT=3000 -e DATABASE_URL=$DATABASE_URL -e REDIS_URL=$REDIS_URL -e JWT_SECRET=$JWT_SECRET -e FRONTEND_URL=$FRONTEND_URL ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:${{ github.sha }}"]' \
+            --parameters 'commands=["docker rm -f ratemyunit-api || true", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export FRONTEND_URL=$(aws ssm get-parameter --name /ratemyunit/production/frontend/url --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "docker pull ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:${{ github.sha }}", "docker run -d --name ratemyunit-api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e NODE_ENV=production -e PORT=3000 -e DATABASE_URL=\"$DATABASE_URL\" -e REDIS_URL=\"$REDIS_URL\" -e JWT_SECRET=\"$JWT_SECRET\" -e FRONTEND_URL=\"$FRONTEND_URL\" ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:${{ github.sha }}"]' \
             --comment "Deploying backend" \
             --query 'Command.CommandId' \
             --output text)
@@ -567,37 +567,69 @@ jobs:
               --query 'Command.CommandId' \
               --output text)
 
-            sleep 3
+            # Wait for SSM command to complete (timeout after 30 seconds)
+            CMD_STATUS="Pending"
+            for j in {1..30}; do
+              CMD_STATUS=$(aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE_ID" \
+                --query 'Status' \
+                --output text 2>/dev/null || echo "Pending")
 
-            HTTP_CODE=$(aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE_ID" \
-              --query 'StandardOutputContent' \
-              --output text 2>/dev/null | tr -d '[:space:]')
+              if [[ "$CMD_STATUS" == "Success" || "$CMD_STATUS" == "Failed" ]]; then
+                break
+              fi
+              sleep 1
+            done
 
-            if [[ "$HTTP_CODE" == "200" ]]; then
-              echo "✓ Application is healthy (HTTP $HTTP_CODE)"
-
-              # Get health check details
-              DETAIL_CMD=$(aws ssm send-command \
-                --document-name "AWS-RunShellScript" \
-                --instance-ids "$INSTANCE_ID" \
-                --parameters 'commands=["curl -s http://localhost/health"]' \
-                --query 'Command.CommandId' \
-                --output text)
-
-              sleep 2
-
-              aws ssm get-command-invocation \
-                --command-id "$DETAIL_CMD" \
+            # Only read output if command completed successfully
+            if [[ "$CMD_STATUS" == "Success" ]]; then
+              HTTP_CODE=$(aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
                 --instance-id "$INSTANCE_ID" \
                 --query 'StandardOutputContent' \
-                --output text
+                --output text 2>/dev/null | tr -d '[:space:]')
 
-              exit 0
+              if [[ "$HTTP_CODE" == "200" ]]; then
+                echo "✓ Application is healthy (HTTP $HTTP_CODE)"
+
+                # Get health check details
+                DETAIL_CMD=$(aws ssm send-command \
+                  --document-name "AWS-RunShellScript" \
+                  --instance-ids "$INSTANCE_ID" \
+                  --parameters 'commands=["curl -s http://localhost/health"]' \
+                  --query 'Command.CommandId' \
+                  --output text)
+
+                # Wait for details command to complete
+                for k in {1..10}; do
+                  DETAIL_STATUS=$(aws ssm get-command-invocation \
+                    --command-id "$DETAIL_CMD" \
+                    --instance-id "$INSTANCE_ID" \
+                    --query 'Status' \
+                    --output text 2>/dev/null || echo "Pending")
+                  if [[ "$DETAIL_STATUS" == "Success" ]]; then
+                    break
+                  fi
+                  sleep 1
+                done
+
+                if [[ "$DETAIL_STATUS" == "Success" ]]; then
+                  aws ssm get-command-invocation \
+                    --command-id "$DETAIL_CMD" \
+                    --instance-id "$INSTANCE_ID" \
+                    --query 'StandardOutputContent' \
+                    --output text
+                fi
+
+                exit 0
+              fi
+
+              echo "Health check attempt $i/30 (HTTP $HTTP_CODE)..."
+            else
+              echo "Health check attempt $i/30 (SSM command status: $CMD_STATUS)..."
             fi
 
-            echo "Health check attempt $i/30 (HTTP $HTTP_CODE)..."
             sleep 10
           done
 
@@ -619,7 +651,7 @@ jobs:
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=ratemyunit-api" \
-            --parameters "commands=[\"docker rm -f ratemyunit-api || true\", \"export DATABASE_URL=\$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export REDIS_URL=\$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export JWT_SECRET=\$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export FRONTEND_URL=\$(aws ssm get-parameter --name /ratemyunit/production/frontend/url --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"docker run -d --name ratemyunit-api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e NODE_ENV=production -e PORT=3000 -e DATABASE_URL=\$DATABASE_URL -e REDIS_URL=\$REDIS_URL -e JWT_SECRET=\$JWT_SECRET -e FRONTEND_URL=\$FRONTEND_URL ${{ steps.backup.outputs.backup_image }}\"]" \
+            --parameters "commands=[\"docker rm -f ratemyunit-api || true\", \"export DATABASE_URL=\$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export REDIS_URL=\$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export JWT_SECRET=\$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export FRONTEND_URL=\$(aws ssm get-parameter --name /ratemyunit/production/frontend/url --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"docker run -d --name ratemyunit-api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e NODE_ENV=production -e PORT=3000 -e DATABASE_URL=\\\"\$DATABASE_URL\\\" -e REDIS_URL=\\\"\$REDIS_URL\\\" -e JWT_SECRET=\\\"\$JWT_SECRET\\\" -e FRONTEND_URL=\\\"\$FRONTEND_URL\\\" ${{ steps.backup.outputs.backup_image }}\"]" \
             --comment "Rolling back deployment"
 
           echo "✓ Rollback initiated"

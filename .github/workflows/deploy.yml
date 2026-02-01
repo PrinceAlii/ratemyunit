@@ -248,25 +248,29 @@ jobs:
           sleep 10
           INSTANCE_ID="None"
           attempt=0
-          while [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; do
-            INSTANCE_ID=$(aws ec2 describe-instances \
+          until [[ -n "$INSTANCE_ID" && "$INSTANCE_ID" != "None" ]]; do
+            DESCRIBE_RESULT=$(aws ec2 describe-instances \
               --filters \
                 "Name=tag:Name,Values=ratemyunit-api" \
                 "Name=instance-state-name,Values=running" \
-              --query 'Reservations[0].Instances[0].InstanceId' \
-              --output text)
+              --query 'Reservations[0].Instances[0]' \
+              --output json)
+            INSTANCE_ID=$(echo "$DESCRIBE_RESULT" | jq -r '.InstanceId // empty')
             attempt=$((attempt + 1))
-            if [[ $attempt -ge 18 ]]; then
-              echo "✗ Unable to resolve EC2 instance ID" && exit 1
+            if [[ $attempt -ge 60 ]]; then
+              echo "✗ Unable to resolve EC2 instance ID"
+              echo "EC2 describe output:"
+              echo "$DESCRIBE_RESULT"
+              exit 1
             fi
-            sleep 1
+            sleep 5
           done
 
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=ratemyunit-api" \
             --parameters 'commands=["docker ps --filter name=ratemyunit-api --format \"{{.Status}}\""]' \
-            --comment "Verify container started" \
+            --comment "Verify container started (${INSTANCE_ID})" \
             --query 'Command.CommandId' \
             --output text)
 
@@ -277,8 +281,9 @@ jobs:
             --query 'Status' \
             --output text >/tmp/ssm-status 2>/tmp/ssm-error; do
             attempt=$((attempt + 1))
-            if [[ $attempt -ge 30 ]]; then
+            if [[ $attempt -ge 60 ]]; then
               echo "✗ Timed out waiting for SSM command invocation" >&2
+              echo "SSM error log:"
               cat /tmp/ssm-error
               exit 1
             fi

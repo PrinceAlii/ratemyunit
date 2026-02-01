@@ -37,20 +37,30 @@ export interface ScrapeJobData {
 const browserFactory = {
   create: async (): Promise<Browser> => {
     logger.info('🌐 Launching Worker Browser...');
-    return chromium.launch({ 
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-extensions',
-            '--disable-default-apps',
-            '--disable-sync',
-            '--password-store=basic',
-            '--use-mock-keychain',
-        ],
-        timeout: 60000,
-    });
+    try {
+        return await chromium.launch({ 
+            headless: true,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process', 
+                '--disable-gpu',
+                '--disable-extensions',
+                '--disable-default-apps',
+                '--disable-sync',
+                '--password-store=basic',
+                '--use-mock-keychain',
+            ],
+            timeout: 60000,
+        });
+    } catch (error) {
+        logger.error({ err: error }, '❌ Failed to launch browser');
+        throw error;
+    }
   },
   destroy: async (browser: Browser): Promise<void> => {
     logger.info('♻️ Destroying Worker Browser...');

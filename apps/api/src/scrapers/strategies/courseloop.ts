@@ -36,8 +36,12 @@ export class CourseLoopScraper extends BaseScraper {
     try {
       const response = await page.goto(url, {
         waitUntil: 'domcontentloaded',
-        timeout: 30000,
+        timeout: 60000,
       });
+
+      if (!response) {
+          throw new Error(`Navigation failed: No response received from ${url}`);
+      }
 
       if (response?.status() === 404) {
         return {

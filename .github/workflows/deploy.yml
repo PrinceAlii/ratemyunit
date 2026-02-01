@@ -252,10 +252,10 @@ jobs:
             DESCRIBE_RESULT=$(aws ec2 describe-instances \
               --filters \
                 "Name=tag:Name,Values=ratemyunit-api" \
-                "Name=instance-state-name,Values=running" \
               --query 'Reservations[0].Instances[0]' \
               --output json)
             INSTANCE_ID=$(echo "$DESCRIBE_RESULT" | jq -r '.InstanceId // empty')
+            INSTANCE_STATE=$(echo "$DESCRIBE_RESULT" | jq -r '.State.Name // empty')
             attempt=$((attempt + 1))
             if [[ $attempt -ge 60 ]]; then
               echo "✗ Unable to resolve EC2 instance ID"
@@ -265,6 +265,13 @@ jobs:
             fi
             sleep 5
           done
+
+          if [[ "$INSTANCE_STATE" != "running" ]]; then
+            echo "Instance is in state '$INSTANCE_STATE'. Starting..."
+            aws ec2 start-instances --instance-ids "$INSTANCE_ID"
+            aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+            echo "Instance is now running"
+          fi
 
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \

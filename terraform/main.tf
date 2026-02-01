@@ -8,7 +8,7 @@ terraform {
     }
   }
 }
-
+// trigger deployment
 provider "aws" {
   region = "ap-southeast-2"
 

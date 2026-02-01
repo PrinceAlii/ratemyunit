@@ -47,14 +47,18 @@ interface QueueStatus {
 
 interface Job {
   id: string;
-  unitCode: string;
-  universityId: string;
-  universityName?: string;
-  attempts: number;
+  name: string;
+  data: {
+    unitCode?: string;
+    universityId?: string;
+    type?: string;
+  };
+  attemptsMade: number;
+  timestamp: number;
+  processedOn?: number;
+  finishedOn?: number;
+  failedReason?: string;
   state: 'waiting' | 'active' | 'completed' | 'failed';
-  createdAt: string;
-  processedAt?: string;
-  error?: string;
 }
 
 interface JobsResponse {
@@ -129,47 +133,47 @@ export function DataScraper() {
       }>>('/api/units/search', { limit: 10, sort: 'recent' });
       return response;
     },
-        refetchInterval: 10000,
-      });
-    
-      const singleMutation = useMutation({
-        mutationFn: (code: string) => api.post('/api/admin/scrape', {
-          unitCode: code,
-          universityId: selectedUni || undefined 
-        }),
-        onSuccess: (_, code) => {
-          setSingleMessage({ type: 'success', text: `Scrape job queued for unit ${code}` });
-          toast.success(`Scrape job queued for unit ${code}`);
-          setSingleCode('');
-          queryClient.invalidateQueries({ queryKey: ['admin', 'scrape', 'status'] });
-        },
-        onError: (error: Error) => {
-          setSingleMessage({ type: 'error', text: error.message });
-          toast.error(`Scrape failed: ${error.message}`);
-        },
-      });
-    
-      const bulkMutation = useMutation({
-        mutationFn: (codes: string[]) => api.post<BulkScrapeResult>('/api/admin/scrape/bulk', {
-          unitCodes: codes,
-          universityId: selectedUni || undefined
-        }),
-        onSuccess: (data) => {
-          const message = `Scraped ${data.successful}/${data.total} units successfully. ${data.failed} failed.`;
-          setBulkMessage({ type: 'success', text: message });
-          toast.success(message);
-          setBulkCodes('');
-          setBulkDialogOpen(false);
-          queryClient.invalidateQueries({ queryKey: ['admin'] });
-        },
-        onError: (error: Error) => {
-          setBulkMessage({ type: 'error', text: error.message });
-          toast.error(`Bulk scrape failed: ${error.message}`);
-          setBulkDialogOpen(false);
-        },
-      });
-    
-      const scanMutation = useMutation({
+    refetchInterval: 10000,
+  });
+
+  const singleMutation = useMutation({
+    mutationFn: (code: string) => api.post('/api/admin/scrape', {
+      unitCode: code,
+      universityId: selectedUni || undefined 
+    }),
+    onSuccess: (_, code) => {
+      setSingleMessage({ type: 'success', text: `Scrape job queued for unit ${code}` });
+      toast.success(`Scrape job queued for unit ${code}`);
+      setSingleCode('');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'scrape', 'status'] });
+    },
+    onError: (error: Error) => {
+      setSingleMessage({ type: 'error', text: error.message });
+      toast.error(`Scrape failed: ${error.message}`);
+    },
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: (codes: string[]) => api.post<BulkScrapeResult>('/api/admin/scrape/bulk', {
+      unitCodes: codes,
+      universityId: selectedUni || undefined
+    }),
+    onSuccess: (data) => {
+      const message = `Scraped ${data.successful}/${data.total} units successfully. ${data.failed} failed.`;
+      setBulkMessage({ type: 'success', text: message });
+      toast.success(message);
+      setBulkCodes('');
+      setBulkDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['admin'] });
+    },
+    onError: (error: Error) => {
+      setBulkMessage({ type: 'error', text: error.message });
+      toast.error(`Bulk scrape failed: ${error.message}`);
+      setBulkDialogOpen(false);
+    },
+  });
+
+  const scanMutation = useMutation({
     mutationFn: (uniId: string) => api.post(`/api/admin/university/${uniId}/scan`, {}),
     onSuccess: () => {
       const message = `Discovery scan queued. The system will now crawl the university site for unit codes.`;
@@ -314,6 +318,18 @@ export function DataScraper() {
   };
 
   const totalPages = jobsData ? Math.ceil(jobsData.total / 20) : 1;
+
+  const getJobTimestamp = (job: Job) => {
+      // Use processedOn or finishedOn if available, otherwise fallback to timestamp (creation time)
+      const ts = job.processedOn || job.finishedOn || job.timestamp;
+      if (!ts) return 'Unknown';
+      
+      try {
+          return formatDistanceToNow(new Date(ts), { addSuffix: true });
+      } catch (e) {
+          return 'Invalid date';
+      }
+  };
 
   return (
     <div className="space-y-6">
@@ -720,11 +736,11 @@ export function DataScraper() {
                     {jobsData.jobs.map((job) => (
                       <tr key={job.id} className="hover:bg-muted/50">
                         <td className="px-4 py-3 font-mono text-xs">{job.id.substring(0, 8)}...</td>
-                        <td className="px-4 py-3 font-mono font-bold">{job.unitCode}</td>
-                        <td className="px-4 py-3 font-medium">{job.universityName || 'Unknown'}</td>
-                        <td className="px-4 py-3 font-medium">{job.attempts}</td>
+                        <td className="px-4 py-3 font-mono font-bold">{job.data.unitCode || 'N/A'}</td>
+                        <td className="px-4 py-3 font-medium">{job.data.universityId ? 'Linked' : 'Unknown'}</td>
+                        <td className="px-4 py-3 font-medium">{job.attemptsMade}</td>
                         <td className="px-4 py-3 font-medium text-muted-foreground text-xs">
-                          {formatDistanceToNow(new Date(job.processedAt || job.createdAt), { addSuffix: true })}
+                          {getJobTimestamp(job)}
                         </td>
                         {(selectedJobState === 'waiting' || selectedJobState === 'active') && (
                           <td className="px-4 py-3">
@@ -740,8 +756,8 @@ export function DataScraper() {
                           </td>
                         )}
                         {selectedJobState === 'failed' && (
-                          <td className="px-4 py-3 text-xs text-red-700 font-medium max-w-xs truncate">
-                            {job.error || 'Unknown error'}
+                          <td className="px-4 py-3 text-xs text-red-700 font-medium max-w-xs truncate" title={job.failedReason}>
+                            {job.failedReason || 'Unknown error'}
                           </td>
                         )}
                       </tr>

@@ -8,6 +8,11 @@ output "api_public_ip" {
   value       = aws_eip.api_eip.public_ip
 }
 
+output "api_instance_id" {
+  description = "The EC2 instance ID for the API server"
+  value       = aws_instance.api.id
+}
+
 output "rds_endpoint" {
   description = "The connection endpoint for the RDS instance"
   value       = aws_db_instance.postgres.endpoint

@@ -7,7 +7,7 @@ const configSchema = z.object({
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
   JWT_SECRET: z.string().min(32),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
-  SCRAPER_CONCURRENCY: z.coerce.number().min(1).max(50).default(3),
+  SCRAPER_CONCURRENCY: z.coerce.number().min(1).max(50).default(1),
 });
 
 export type Config = z.infer<typeof configSchema>;

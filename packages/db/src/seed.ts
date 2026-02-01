@@ -11,12 +11,12 @@ const AUSTRALIAN_UNIVERSITIES = [
     abbreviation: 'UTS',
     emailDomain: 'student.uts.edu.au',
     websiteUrl: 'https://www.uts.edu.au',
-    handbookUrl: 'https://coursehandbook.uts.edu.au',
+    handbookUrl: 'https://handbook.uts.edu.au',
     scraperType: 'courseloop',
     scraperRoutes: {
-      base: 'https://coursehandbook.uts.edu.au',
+      base: 'https://handbook.uts.edu.au',
       subject: '/subject/current/:code',
-      discovery: '/sitemap.xml'
+      discovery: '/subjects/numerical.html'
     }
   },
   {

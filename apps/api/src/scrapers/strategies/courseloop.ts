@@ -215,14 +215,6 @@ export class CourseLoopScraper extends BaseScraper {
       if (templateCodes.length > 0) {
         logger.info(`📝 Generated ${templateCodes.length} codes from templates`);
         templateCodes.forEach(code => discoveredCodes.add(code));
-      } else {
-        logger.warn('⚠️ No templates found, using hardcoded fallback if applicable');
-        if (this.config.baseUrl.includes('coursehandbook.uts.edu.au')) {
-          logger.info('📋 Using hardcoded UTS range 31001-39999 as final fallback');
-          for (let code = 31001; code <= 39999; code++) {
-            discoveredCodes.add(code.toString());
-          }
-        }
       }
   }
 
@@ -235,25 +227,32 @@ export class CourseLoopScraper extends BaseScraper {
         return null;
       });
 
-      if (nextData?.props?.pageProps) {
-        const pageProps = nextData.props.pageProps;
-        const possibleArrays = [
-          pageProps.subjects,
-          pageProps.units,
-          pageProps.courses,
-          pageProps.data?.subjects,
-          pageProps.data?.units,
-        ];
+      if (!nextData) return;
 
-        for (const arr of possibleArrays) {
-          if (Array.isArray(arr)) {
-            for (const item of arr) {
-              if (item?.code) discoveredCodes.add(item.code);
-              if (item?.subject_code) discoveredCodes.add(item.subject_code);
-            }
+      // Recursive search for objects with 'code' or 'subject_code'
+      const findCodes = (obj: unknown) => {
+          if (!obj || typeof obj !== 'object') return;
+          
+          if (Array.isArray(obj)) {
+              obj.forEach(item => findCodes(item));
+              return;
           }
-        }
-      }
+
+          const item = obj as Record<string, unknown>;
+          
+          // Check if this object looks like a subject
+          if (item.code && typeof item.code === 'string' && /^\d{5}$/.test(item.code)) {
+              discoveredCodes.add(item.code);
+          }
+          if (item.subject_code && typeof item.subject_code === 'string' && /^\d{5}$/.test(item.subject_code)) {
+              discoveredCodes.add(item.subject_code);
+          }
+
+          // Recurse into values
+          Object.values(item).forEach(value => findCodes(value));
+      };
+
+      findCodes(nextData);
   }
 
   private async discoverFromLinks(page: Page, routePattern: string, discoveredCodes: Set<string>): Promise<void> {

@@ -3,6 +3,26 @@ import { db } from './client.js';
 import { universities, users, subjectCodeTemplates } from './schema.js';
 import { hash } from '@node-rs/argon2';
 import { eq, and } from 'drizzle-orm';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function getFacultyFromName(templateName: string): string {
+  if (templateName.includes('IT')) return 'Faculty of Engineering and IT';
+  if (templateName.includes('Engineering')) return 'Faculty of Engineering and IT';
+  if (templateName.includes('Business')) return 'Faculty of Business';
+  if (templateName.includes('Health')) return 'Faculty of Health';
+  if (templateName.includes('Law')) return 'Faculty of Law';
+  if (templateName.includes('Communication')) return 'Faculty of Communication';
+  if (templateName.includes('Design') || templateName.includes('Architecture'))
+    return 'Faculty of Design, Architecture & Building';
+  if (templateName.includes('Science')) return 'Faculty of Science';
+  if (templateName.includes('Education')) return 'Faculty of Education';
+  return 'Other';
+}
 
 const AUSTRALIAN_UNIVERSITIES = [
   // --- CourseLoop Universities (Verified) ---
@@ -338,180 +358,94 @@ async function seed() {
     // Seed UTS Subject Code Templates
     console.log('\nSeeding UTS Subject Code Templates...');
 
-    const utsTemplates = [
-      // Faculty of Engineering and IT - IT (Priority 10)
-      {
-        name: 'IT Subjects',
-        faculty: 'Faculty of Engineering and IT',
-        startCode: '31001',
-        endCode: '32999',
-        description: 'Information Technology subjects covering software development, data science, networking, and cybersecurity',
-        priority: 10,
-      },
-      // Faculty of Engineering and IT - Engineering (Priority 10)
-      {
-        name: 'Engineering Subjects',
-        faculty: 'Faculty of Engineering and IT',
-        startCode: '40001',
-        endCode: '49999',
-        description: 'Engineering subjects covering civil, mechanical, electrical, biomedical, and software engineering',
-        priority: 10,
-      },
-      // Faculty of Business (Priority 9)
-      {
-        name: 'Business Subjects',
-        faculty: 'Faculty of Business',
-        startCode: '20000',
-        endCode: '28999',
-        description: 'Business subjects covering accounting, finance, management, marketing, and economics',
-        priority: 9,
-      },
-      // Faculty of Health - Range 1 (Priority 8)
-      {
-        name: 'Health Subjects (09XXX)',
-        faculty: 'Faculty of Health',
-        startCode: '09001',
-        endCode: '09999',
-        description: 'Health subjects covering nursing, midwifery, and public health',
-        priority: 8,
-      },
-      // Faculty of Health - Range 2 (Priority 8)
-      {
-        name: 'Health Subjects (90XXX-93XXX)',
-        faculty: 'Faculty of Health',
-        startCode: '90001',
-        endCode: '93999',
-        description: 'Health subjects covering medical sciences, pharmacy, physiotherapy, and allied health',
-        priority: 8,
-      },
-      // Faculty of Health - Range 3 (Priority 8)
-      {
-        name: 'Health Subjects (96XXX)',
-        faculty: 'Faculty of Health',
-        startCode: '96001',
-        endCode: '96999',
-        description: 'Health subjects covering sport and exercise science',
-        priority: 8,
-      },
-      // Faculty of Law (Priority 7)
-      {
-        name: 'Law Subjects',
-        faculty: 'Faculty of Law',
-        startCode: '70000',
-        endCode: '79999',
-        description: 'Law subjects covering legal practice, business law, criminal law, and international law',
-        priority: 7,
-      },
-      // Faculty of Communication (Priority 6)
-      {
-        name: 'Communication Subjects',
-        faculty: 'Faculty of Communication',
-        startCode: '50000',
-        endCode: '59999',
-        description: 'Communication subjects covering journalism, media production, public relations, and social inquiry',
-        priority: 6,
-      },
-      // Faculty of Design, Architecture & Building - Range 1 (Priority 5)
-      {
-        name: 'Design, Architecture & Building (11XXX-17XXX)',
-        faculty: 'Faculty of Design, Architecture & Building',
-        startCode: '11001',
-        endCode: '17999',
-        description: 'Subjects covering design, visual communication, product design, and fashion',
-        priority: 5,
-      },
-      // Faculty of Design, Architecture & Building - Range 2 (Priority 5)
-      {
-        name: 'Design, Architecture & Building (80XXX-89XXX)',
-        faculty: 'Faculty of Design, Architecture & Building',
-        startCode: '80001',
-        endCode: '89999',
-        description: 'Subjects covering architecture, built environment, construction management, and property',
-        priority: 5,
-      },
-      // Faculty of Science - Range 1 (Priority 4)
-      {
-        name: 'Science Subjects (33XXX-37XXX)',
-        faculty: 'Faculty of Science',
-        startCode: '33001',
-        endCode: '37999',
-        description: 'Science subjects covering mathematics, statistics, and environmental science',
-        priority: 4,
-      },
-      // Faculty of Science - Range 2 (Priority 4)
-      {
-        name: 'Science Subjects (60XXX)',
-        faculty: 'Faculty of Science',
-        startCode: '60001',
-        endCode: '60999',
-        description: 'Science subjects covering biotechnology and molecular bioscience',
-        priority: 4,
-      },
-      // Faculty of Science - Range 3 (Priority 4)
-      {
-        name: 'Science Subjects (65XXX-69XXX)',
-        faculty: 'Faculty of Science',
-        startCode: '65001',
-        endCode: '69999',
-        description: 'Science subjects covering chemistry, physics, and forensic science',
-        priority: 4,
-      },
-      // Faculty of Education (Priority 3)
-      {
-        name: 'Education Subjects',
-        faculty: 'Faculty of Education',
-        startCode: '01001',
-        endCode: '02999',
-        description: 'Education subjects covering primary, secondary, and adult education, as well as educational leadership',
-        priority: 3,
-      },
-      // Transdisciplinary Innovation (Priority 2)
-      {
-        name: 'Transdisciplinary Innovation Subjects',
-        faculty: 'Transdisciplinary Innovation',
-        startCode: '94001',
-        endCode: '95999',
-        description: 'Transdisciplinary subjects covering innovation, entrepreneurship, and creative intelligence',
-        priority: 2,
-      },
-      // International & Exchange (Priority 1)
-      {
-        name: 'International & Exchange Subjects',
-        faculty: 'International & Exchange',
-        startCode: '97001',
-        endCode: '99999',
-        description: 'Subjects for international students and exchange programs',
-        priority: 1,
-      },
-    ];
+    // Read valid codes from file
+    const codesPath = path.resolve(__dirname, './data/uts_codes.txt');
+    let validCodes: string[] = [];
 
-    for (const template of utsTemplates) {
+    try {
+      const content = fs.readFileSync(codesPath, 'utf-8');
+      validCodes = content.split('\n').map(c => c.trim()).filter(c => c.length > 0);
+      console.log(`✓ Loaded ${validCodes.length} valid UTS codes`);
+    } catch (error) {
+      console.error('❌ Failed to read uts_codes.txt:', error);
+      throw error;
+    }
+
+    // Group codes by faculty prefix
+    const groups: Record<string, string[]> = {
+      'IT Subjects (31XXX-32XXX)': [],
+      'Engineering Subjects (4XXXX)': [],
+      'Business Subjects (2XXXX)': [],
+      'Health Subjects (9XXXX, 09XXX)': [],
+      'Law Subjects (7XXXX)': [],
+      'Communication Subjects (5XXXX)': [],
+      'Design/Architecture (1XXXX, 8XXXX)': [],
+      'Science Subjects (33XXX-37XXX, 6XXXX)': [],
+      'Education Subjects (01XXX-02XXX)': [],
+    };
+
+    const miscCodes: string[] = [];
+
+    for (const code of validCodes) {
+      if (code.startsWith('31') || code.startsWith('32')) {
+        groups['IT Subjects (31XXX-32XXX)'].push(code);
+      } else if (code.startsWith('4')) {
+        groups['Engineering Subjects (4XXXX)'].push(code);
+      } else if (code.startsWith('2')) {
+        groups['Business Subjects (2XXXX)'].push(code);
+      } else if (code.startsWith('09') || code.startsWith('90') || code.startsWith('91') ||
+                 code.startsWith('92') || code.startsWith('93') || code.startsWith('96')) {
+        groups['Health Subjects (9XXXX, 09XXX)'].push(code);
+      } else if (code.startsWith('7')) {
+        groups['Law Subjects (7XXXX)'].push(code);
+      } else if (code.startsWith('5')) {
+        groups['Communication Subjects (5XXXX)'].push(code);
+      } else if (code.startsWith('1') || code.startsWith('8')) {
+        groups['Design/Architecture (1XXXX, 8XXXX)'].push(code);
+      } else if (code.startsWith('33') || code.startsWith('34') || code.startsWith('35') ||
+                 code.startsWith('36') || code.startsWith('37') || code.startsWith('6')) {
+        groups['Science Subjects (33XXX-37XXX, 6XXXX)'].push(code);
+      } else if (code.startsWith('01') || code.startsWith('02')) {
+        groups['Education Subjects (01XXX-02XXX)'].push(code);
+      } else {
+        miscCodes.push(code);
+      }
+    }
+
+    if (miscCodes.length > 0) {
+      groups['Other Subjects'] = miscCodes;
+    }
+
+    // Create list templates instead of range templates
+    let priority = 10;
+    for (const [name, codes] of Object.entries(groups)) {
+      if (codes.length === 0) continue;
+
       const [existing] = await db
         .select()
         .from(subjectCodeTemplates)
         .where(
           and(
             eq(subjectCodeTemplates.universityId, utsId),
-            eq(subjectCodeTemplates.name, template.name)
+            eq(subjectCodeTemplates.name, `${name} (List)`)
           )
         );
 
       if (!existing) {
         await db.insert(subjectCodeTemplates).values({
           universityId: utsId,
-          name: template.name,
-          templateType: 'range',
-          startCode: template.startCode,
-          endCode: template.endCode,
-          description: template.description,
-          faculty: template.faculty,
-          priority: template.priority,
+          name: `${name} (List)`,
+          templateType: 'list',
+          codeList: codes,
+          description: `Exact list of ${codes.length} valid subjects from official list`,
+          faculty: getFacultyFromName(name),
+          priority: priority--,
           active: true,
           createdBy: adminUser.id,
         });
-        console.log(`✓ Created template: ${template.name}`);
+        console.log(`✓ Created template: ${name} (List) - ${codes.length} codes`);
       } else {
-        console.log(`  Template already exists: ${template.name}`);
+        console.log(`  Template already exists: ${name} (List)`);
       }
     }
 

@@ -15,7 +15,8 @@
     "test": "turbo run test",
     "db:migrate": "npm run migrate -w @ratemyunit/db",
     "db:seed": "npm run seed -w @ratemyunit/db",
-    "db:studio": "npm run studio -w @ratemyunit/db"
+    "db:studio": "npm run studio -w @ratemyunit/db",
+    "db:fix-uts-templates": "npm run fix-uts-templates -w @ratemyunit/db"
   },
   "devDependencies": {
     "@types/node": "^25.1.0",

@@ -22,6 +22,7 @@
     "migrate": "drizzle-kit generate:pg && tsx src/migrate.ts",
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",
+    "fix-uts-templates": "tsx src/scripts/fix-uts-templates.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

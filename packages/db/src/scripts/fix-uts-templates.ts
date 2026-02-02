@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 // Valid codes from uts_codes.txt (condensed for script usage)
 // I will read the file dynamically since it's large.
-const UTS_CODES_PATH = path.resolve(__dirname, '../../../../uts_codes.txt');
+const UTS_CODES_PATH = path.resolve(__dirname, '../data/uts_codes.txt');
 
 async function fixUtsTemplates() {
   console.log('🔧 Fixing UTS Templates...');

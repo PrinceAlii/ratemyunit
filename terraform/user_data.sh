@@ -86,12 +86,14 @@ sleep 5
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin ${ecr_repository_url}
 
 # Pull and run API container
+# Note: CD pipeline will update this to specific SHA-tagged versions
+# This ensures the app is running after boot/reboot
 docker pull ${api_image}
 
 docker run -d \
   --name ratemyunit-api \
   --network ratemyunit-net \
-  --restart always \
+  --restart unless-stopped \
   -p 80:3000 \
   -e NODE_ENV=production \
   -e PORT=3000 \

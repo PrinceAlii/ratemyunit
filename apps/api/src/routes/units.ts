@@ -62,6 +62,7 @@ export async function unitsRoutes(app: FastifyInstance) {
             id: units.id,
             unitCode: units.unitCode,
             unitName: units.unitName,
+            description: units.description,
             faculty: units.faculty,
             creditPoints: units.creditPoints,
             universityName: universities.name,

@@ -18,7 +18,7 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs = require('fs'); const path = require('path'); const srcData = path.join('src', 'data'); const distData = path.join('dist', 'data'); if (fs.existsSync(srcData)) { fs.mkdirSync(distData, { recursive: true }); fs.readdirSync(srcData).forEach(file => fs.copyFileSync(path.join(srcData, file), path.join(distData, file))); console.log('✓ Copied data files to dist'); }\"",
     "migrate": "drizzle-kit generate:pg && tsx src/migrate.ts",
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",

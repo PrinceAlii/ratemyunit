@@ -3,9 +3,48 @@ import { buildApp } from './app.js';
 import { config } from './config.js';
 import { setupWorker, scraperQueue, browserPool } from './lib/queue.js';
 import { dbClient } from '@ratemyunit/db/client';
+import { sql } from 'drizzle-orm';
+import { db } from '@ratemyunit/db';
+
+async function verifyDatabaseMigrations() {
+  try {
+    // Check if the drizzle migrations table exists
+    const result = await db.execute(sql`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_name = '__drizzle_migrations'
+      );
+    `);
+
+    const migrationsTableExists = result.rows[0]?.exists;
+
+    if (!migrationsTableExists) {
+      console.warn('⚠️  WARNING: Migrations table not found. Database may not be initialized.');
+      console.warn('   Run migrations with: npm run db:migrate');
+      return false;
+    }
+
+    // Get count of applied migrations
+    const migrationsResult = await db.execute(sql`
+      SELECT COUNT(*) as count FROM __drizzle_migrations;
+    `);
+
+    const migrationsCount = migrationsResult.rows[0]?.count || 0;
+    console.log(`✅ Database migrations verified: ${migrationsCount} migration(s) applied`);
+
+    return true;
+  } catch (error) {
+    console.error('❌ Failed to verify database migrations:', error);
+    throw error;
+  }
+}
 
 async function start() {
   try {
+    // Verify database migrations before starting
+    await verifyDatabaseMigrations();
+
     const worker = setupWorker();
 
     const app = await buildApp();

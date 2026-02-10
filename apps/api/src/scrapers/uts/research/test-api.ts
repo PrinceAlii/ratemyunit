@@ -3,7 +3,7 @@
  * We'll try common API patterns based on the discovered domain.
  */
 
-const API_BASE = 'https://api-ap-southeast-2.prod.courseloop.com';
+const API_BASE = process.env.COURSELOOP_API_BASE || 'https://api-ap-southeast-2.prod.courseloop.com';
 
 interface TestResult {
   endpoint: string;

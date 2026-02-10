@@ -38,7 +38,7 @@ const browserFactory = {
   create: async (): Promise<Browser> => {
     logger.info('🌐 Launching Worker Browser...');
     try {
-        return await chromium.launch({ 
+        return await chromium.launch({
             headless: true,
             args: [
                 '--no-sandbox',
@@ -47,7 +47,7 @@ const browserFactory = {
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--single-process', 
+                '--single-process',
                 '--disable-gpu',
                 '--disable-extensions',
                 '--disable-default-apps',
@@ -64,7 +64,22 @@ const browserFactory = {
   },
   destroy: async (browser: Browser): Promise<void> => {
     logger.info('♻️ Destroying Worker Browser...');
-    await browser.close().catch(() => {});
+    try {
+      await browser.close();
+      logger.info('✅ Browser closed successfully');
+    } catch (error) {
+      logger.error({ err: error }, '❌ Failed to close browser - may have already crashed');
+    }
+  },
+  validate: async (browser: Browser): Promise<boolean> => {
+    try {
+      // Check if browser is still alive by getting its version
+      await browser.version();
+      return true;
+    } catch (error) {
+      logger.warn({ err: error }, '⚠️ Browser health check failed - marking for destruction');
+      return false;
+    }
   },
 };
 
@@ -74,6 +89,7 @@ export const browserPool: Pool<Browser> = createPool(browserFactory, {
   acquireTimeoutMillis: 60000,
   idleTimeoutMillis: 30000,
   evictionRunIntervalMillis: 1000,
+  testOnBorrow: true,
 });
 
 // Worker setup
@@ -181,10 +197,22 @@ export function setupWorker() {
             }
           } catch (e) {
               logger.error({ err: e }, `Scrape failed for ${unitCode}`);
-              // If it's a critical browser error, we might want to destroy the resource
-              // but generic-pool handles health checks if configured. 
-              // For now we just release it, but in a real crash scenario playright might have closed it.
-              // If we wanted to be safer, we could pool.destroy(browser) here if e is a browser crash.
+
+              // Check if this is a browser crash and destroy the resource if so
+              if (browser && e instanceof Error) {
+                const isBrowserCrash =
+                  e.message.includes('Target closed') ||
+                  e.message.includes('Browser closed') ||
+                  e.message.includes('Protocol error') ||
+                  e.message.includes('Target page, context or browser has been closed');
+
+                if (isBrowserCrash) {
+                  logger.warn('🔥 Browser crash detected - destroying browser instance');
+                  await browserPool.destroy(browser);
+                  browser = null; // Prevent release in finally block
+                }
+              }
+
               throw e;
           } finally {
              if (browser) await browserPool.release(browser);

@@ -91,8 +91,9 @@ async function discoverCourseLoopAPI() {
   });
 
   // Navigate to a sample subject page.
-  const testSubjectCode = '31251';
-  const url = `https://coursehandbook.uts.edu.au/subject/current/${testSubjectCode}`;
+  const testSubjectCode = process.env.TEST_SUBJECT_CODE || '31251';
+  const handbookBase = process.env.UTS_HANDBOOK_BASE_URL || 'https://coursehandbook.uts.edu.au';
+  const url = `${handbookBase}/subject/current/${testSubjectCode}`;
 
   console.log(`Loading ${url}...`);
   await page.goto(url, { waitUntil: 'networkidle' });

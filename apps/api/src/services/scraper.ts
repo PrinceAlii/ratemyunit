@@ -34,12 +34,22 @@ export class ScraperService {
 
     let scraperRoutes = uni.scraperRoutes;
     if (typeof scraperRoutes === 'string') {
-      try { scraperRoutes = JSON.parse(scraperRoutes); } catch { scraperRoutes = {}; }
+      try {
+        scraperRoutes = JSON.parse(scraperRoutes);
+      } catch (error) {
+        logger.error({ error, universityId: uni.id }, 'Failed to parse scraperRoutes, using empty object');
+        scraperRoutes = {};
+      }
     }
 
     let scraperSelectors = uni.scraperSelectors;
     if (typeof scraperSelectors === 'string') {
-      try { scraperSelectors = JSON.parse(scraperSelectors); } catch { scraperSelectors = {}; }
+      try {
+        scraperSelectors = JSON.parse(scraperSelectors);
+      } catch (error) {
+        logger.error({ error, universityId: uni.id }, 'Failed to parse scraperSelectors, using empty object');
+        scraperSelectors = {};
+      }
     }
 
     const selectorsObj = (scraperSelectors as Record<string, unknown>) || {};
@@ -154,7 +164,7 @@ export class ScraperService {
 
       return {
         success: true,
-        unitCode: result.subjectCode,
+        unitCode: unitCode,
         unitName: result.data.name,
       };
     } catch (error) {

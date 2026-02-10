@@ -66,3 +66,21 @@ resource "aws_ssm_parameter" "frontend_url" {
     Project     = "RateMyUnit"
   }
 }
+
+# Resend API Key for email sending
+# Value is managed by GitHub Actions workflow from RESEND_API_KEY secret
+# Terraform only ensures the parameter exists
+resource "aws_ssm_parameter" "resend_api_key" {
+  name  = "/ratemyunit/production/resend/api_key"
+  type  = "SecureString"
+  value = "placeholder"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+
+  tags = {
+    Environment = "Production"
+    Project     = "RateMyUnit"
+  }
+}

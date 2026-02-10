@@ -20,17 +20,7 @@ import {
 } from '../lib/tokens.js';
 import { authenticateUser, requireAuth } from '../middleware/auth.js';
 import { config } from '../config.js';
-import pino from 'pino';
-
-const logger = pino({
-  level: config.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true,
-    },
-  },
-});
+import { sendEmail, generateVerificationEmail, generatePasswordResetEmail } from '../lib/email.js';
 
 export async function authRoutes(app: FastifyInstance) {
   /**
@@ -116,15 +106,13 @@ export async function authRoutes(app: FastifyInstance) {
       .returning();
 
     const verificationToken = await createEmailVerificationToken(newUser.id);
+    const verificationLink = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
-    if (config.NODE_ENV === 'development') {
-      const verificationLink = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
-      logger.info('\n📧 Email Verification Link:');
-      logger.info(verificationLink);
-      logger.info('');
-    } else {
-      // TODO: Send verification email via email service (SendGrid, Resend, etc.).
-    }
+    await sendEmail({
+      to: newUser.email,
+      subject: 'Verify Your Email - RateMyUnit',
+      html: generateVerificationEmail(verificationLink),
+    });
 
     return reply.status(201).send({
       success: true,
@@ -290,16 +278,13 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const resetToken = await createPasswordResetToken(user.id);
+    const resetLink = `${config.FRONTEND_URL}/reset-password?token=${resetToken}`;
 
-    // In development, log the reset link to console.
-    if (config.NODE_ENV === 'development') {
-      const resetLink = `${config.FRONTEND_URL}/reset-password?token=${resetToken}`;
-      logger.info('\n🔑 Password Reset Link:');
-      logger.info(resetLink);
-      logger.info('');
-    } else {
-      // TODO: Send password reset email via email service.
-    }
+    await sendEmail({
+      to: user.email,
+      subject: 'Reset Your Password - RateMyUnit',
+      html: generatePasswordResetEmail(resetLink),
+    });
 
     return reply.send({
       success: true,

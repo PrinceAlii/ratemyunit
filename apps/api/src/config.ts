@@ -8,6 +8,7 @@ const configSchema = z.object({
   JWT_SECRET: z.string().min(32),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
   SCRAPER_CONCURRENCY: z.coerce.number().min(1).max(50).default(1),
+  RESEND_API_KEY: z.string().startsWith('re_').optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;

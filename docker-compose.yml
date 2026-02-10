@@ -42,6 +42,8 @@ services:
       - DATABASE_URL=postgresql://ratemyunit:devpassword@postgres:5432/ratemyunit
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
+      - AUTO_SEED=${AUTO_SEED:-false}
+      - FIRST_DEPLOY=${FIRST_DEPLOY:-false}
     depends_on:
       - postgres
       - redis

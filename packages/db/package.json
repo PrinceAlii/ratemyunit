@@ -22,6 +22,8 @@
     "migrate": "drizzle-kit generate:pg && tsx src/migrate.ts",
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",
+    "seed:sql": "bash scripts/seed.sh",
+    "db:setup": "drizzle-kit push --force && bash scripts/seed.sh",
     "fix-uts-templates": "tsx src/scripts/fix-uts-templates.ts",
     "cleanup-templates": "tsx src/scripts/remove-non-list-templates.ts",
     "typecheck": "tsc --noEmit",

@@ -35,5 +35,9 @@ ENV PORT=3000
 # Expose API port
 EXPOSE 3000
 
-# Start the application
-CMD ["node", "apps/api/dist/index.js"]
+# Copy and set entrypoint script
+COPY apps/api/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Start the application via entrypoint
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

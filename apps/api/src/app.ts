@@ -3,6 +3,7 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import csrf from '@fastify/csrf-protection';
 import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
@@ -28,7 +29,6 @@ export async function buildApp() {
 
   await app.register(cookie);
 
-  /*
   // CSRF Protection
   await app.register(csrf, {
     sessionPlugin: '@fastify/cookie',
@@ -39,7 +39,6 @@ export async function buildApp() {
       secure: config.NODE_ENV === 'production',
     },
   });
-  */
 
   // Rate Limiting
   await app.register(rateLimit, {

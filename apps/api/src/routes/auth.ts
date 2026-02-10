@@ -330,4 +330,16 @@ export async function authRoutes(app: FastifyInstance) {
       message: 'Password reset successfully. Please log in with your new password.',
     });
   });
+
+  /**
+   * GET /api/auth/csrf
+   * Generate a CSRF token for the frontend.
+   */
+  app.get('/csrf', async (_request, reply) => {
+    const token = await reply.generateCsrf();
+    return reply.send({
+      success: true,
+      data: { token },
+    });
+  });
 }

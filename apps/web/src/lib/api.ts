@@ -3,23 +3,65 @@ import type { ApiResponse } from '@ratemyunit/types';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 class ApiClient {
+  private csrfToken: string | null = null;
+
+  private async getCsrfToken(): Promise<string> {
+    if (this.csrfToken) return this.csrfToken;
+    
+    const response = await fetch(`${API_URL}/api/auth/csrf`, {
+      credentials: 'include',
+    });
+    const data = await response.json();
+    if (data.success && data.data?.token) {
+      this.csrfToken = data.data.token;
+      return this.csrfToken!;
+    }
+    throw new Error('Failed to fetch CSRF token');
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${API_URL}${endpoint}`;
+    const needsCsrf = options.method && !['GET', 'HEAD', 'OPTIONS'].includes(options.method);
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
+    if (needsCsrf && !this.csrfToken) {
+      try {
+        await this.getCsrfToken();
+      } catch (e) {
+        console.warn('Could not pre-fetch CSRF token', e);
+      }
+    }
+
+    const executeRequest = async (): Promise<Response> => {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         ...options.headers,
-      },
-      credentials: 'include', // Include cookies for session management.
-    }).catch(error => {
+      };
+
+      if (needsCsrf && this.csrfToken) {
+        headers['x-csrf-token'] = this.csrfToken;
+      }
+
+      return fetch(url, {
+        ...options,
+        headers,
+        credentials: 'include',
+      });
+    };
+
+    let response = await executeRequest().catch(error => {
       console.error('Fetch error:', error);
       throw error;
     });
+
+    // Handle expired CSRF token (usually 403)
+    if (response.status === 403 && needsCsrf) {
+       this.csrfToken = null;
+       await this.getCsrfToken();
+       response = await executeRequest();
+    }
 
     const data: ApiResponse<T> = await response.json();
 

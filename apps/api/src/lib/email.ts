@@ -30,7 +30,7 @@ export async function sendEmail({ to, subject, html }: SendEmailParams): Promise
 
   try {
     const { data, error } = await resend.emails.send({
-      from: 'RateMyUnit <noreply@ratemyunit.dev>',
+      from: 'RateMyUnit <verify@send.ratemyunit.dev>',
       to,
       subject,
       html,
@@ -84,7 +84,7 @@ export function generateVerificationEmail(verificationLink: string): string {
         </div>
 
         <p style="font-size: 12px; color: #999; text-align: center; margin-top: 20px;">
-          © 2025 RateMyUnit. All rights reserved.
+          © 2026 RateMyUnit. All rights reserved.
         </p>
       </body>
     </html>
@@ -127,7 +127,7 @@ export function generatePasswordResetEmail(resetLink: string): string {
         </div>
 
         <p style="font-size: 12px; color: #999; text-align: center; margin-top: 20px;">
-          © 2025 RateMyUnit. All rights reserved.
+          © 2026 RateMyUnit. All rights reserved.
         </p>
       </body>
     </html>

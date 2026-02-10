@@ -2,6 +2,11 @@ FROM node:20-bookworm
 
 WORKDIR /app
 
+# Install system dependencies (PostgreSQL client for debugging)
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy root config files
 COPY package.json package-lock.json turbo.json ./
 

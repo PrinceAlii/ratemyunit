@@ -1,10 +1,8 @@
 {
-  "id": "b377fc04-8bab-4420-83c4-04703627346d",
-  "prevId": "00000000-0000-0000-0000-000000000000",
-  "version": "5",
-  "dialect": "pg",
+  "version": "7",
+  "dialect": "postgresql",
   "tables": {
-    "email_verification_tokens": {
+    "public.email_verification_tokens": {
       "name": "email_verification_tokens",
       "schema": "",
       "columns": {
@@ -46,29 +44,32 @@
         "email_verification_tokens_user_id_users_id_fk": {
           "name": "email_verification_tokens_user_id_users_id_fk",
           "tableFrom": "email_verification_tokens",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "email_verification_tokens_token_unique": {
           "name": "email_verification_tokens_token_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "token"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
-      }
+      },
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "password_reset_tokens": {
+    "public.password_reset_tokens": {
       "name": "password_reset_tokens",
       "schema": "",
       "columns": {
@@ -110,29 +111,32 @@
         "password_reset_tokens_user_id_users_id_fk": {
           "name": "password_reset_tokens_user_id_users_id_fk",
           "tableFrom": "password_reset_tokens",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "password_reset_tokens_token_unique": {
           "name": "password_reset_tokens_token_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "token"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
-      }
+      },
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "review_flags": {
+    "public.review_flags": {
       "name": "review_flags",
       "schema": "",
       "columns": {
@@ -187,34 +191,37 @@
         "review_flags_review_id_reviews_id_fk": {
           "name": "review_flags_review_id_reviews_id_fk",
           "tableFrom": "review_flags",
-          "tableTo": "reviews",
           "columnsFrom": [
             "review_id"
           ],
+          "tableTo": "reviews",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "review_flags_user_id_users_id_fk": {
           "name": "review_flags_user_id_users_id_fk",
           "tableFrom": "review_flags",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "review_votes": {
+    "public.review_votes": {
       "name": "review_votes",
       "schema": "",
       "columns": {
@@ -256,34 +263,37 @@
         "review_votes_review_id_reviews_id_fk": {
           "name": "review_votes_review_id_reviews_id_fk",
           "tableFrom": "review_votes",
-          "tableTo": "reviews",
           "columnsFrom": [
             "review_id"
           ],
+          "tableTo": "reviews",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "review_votes_user_id_users_id_fk": {
           "name": "review_votes_user_id_users_id_fk",
           "tableFrom": "review_votes",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "reviews": {
+    "public.reviews": {
       "name": "reviews",
       "schema": "",
       "columns": {
@@ -394,34 +404,37 @@
         "reviews_unit_id_units_id_fk": {
           "name": "reviews_unit_id_units_id_fk",
           "tableFrom": "reviews",
-          "tableTo": "units",
           "columnsFrom": [
             "unit_id"
           ],
+          "tableTo": "units",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         },
         "reviews_user_id_users_id_fk": {
           "name": "reviews_user_id_users_id_fk",
           "tableFrom": "reviews",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "sessions": {
+    "public.sessions": {
       "name": "sessions",
       "schema": "",
       "columns": {
@@ -449,21 +462,24 @@
         "sessions_user_id_users_id_fk": {
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
-          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
+          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "cascade"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "units": {
+    "public.units": {
       "name": "units",
       "schema": "",
       "columns": {
@@ -561,21 +577,24 @@
         "units_university_id_universities_id_fk": {
           "name": "units_university_id_universities_id_fk",
           "tableFrom": "units",
-          "tableTo": "universities",
           "columnsFrom": [
             "university_id"
           ],
+          "tableTo": "universities",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {}
+      "uniqueConstraints": {},
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "universities": {
+    "public.universities": {
       "name": "universities",
       "schema": "",
       "columns": {
@@ -644,14 +663,17 @@
       "uniqueConstraints": {
         "universities_email_domain_unique": {
           "name": "universities_email_domain_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "email_domain"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
-      }
+      },
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     },
-    "users": {
+    "public.users": {
       "name": "users",
       "schema": "",
       "columns": {
@@ -727,83 +749,98 @@
         "users_university_id_universities_id_fk": {
           "name": "users_university_id_universities_id_fk",
           "tableFrom": "users",
-          "tableTo": "universities",
           "columnsFrom": [
             "university_id"
           ],
+          "tableTo": "universities",
           "columnsTo": [
             "id"
           ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
+          "onUpdate": "no action",
+          "onDelete": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "users_email_unique": {
           "name": "users_email_unique",
-          "nullsNotDistinct": false,
           "columns": [
             "email"
-          ]
+          ],
+          "nullsNotDistinct": false
         }
-      }
+      },
+      "policies": {},
+      "isRLSEnabled": false,
+      "checkConstraints": {}
     }
   },
   "enums": {
-    "display_name_type": {
+    "public.display_name_type": {
       "name": "display_name_type",
-      "values": {
-        "nickname": "nickname",
-        "anonymous": "anonymous",
-        "verified": "verified"
-      }
+      "schema": "public",
+      "values": [
+        "nickname",
+        "anonymous",
+        "verified"
+      ]
     },
-    "flag_reason": {
+    "public.flag_reason": {
       "name": "flag_reason",
-      "values": {
-        "spam": "spam",
-        "inappropriate": "inappropriate",
-        "inaccurate": "inaccurate",
-        "other": "other"
-      }
+      "schema": "public",
+      "values": [
+        "spam",
+        "inappropriate",
+        "inaccurate",
+        "other"
+      ]
     },
-    "flag_status": {
+    "public.flag_status": {
       "name": "flag_status",
-      "values": {
-        "pending": "pending",
-        "reviewed": "reviewed",
-        "dismissed": "dismissed"
-      }
+      "schema": "public",
+      "values": [
+        "pending",
+        "reviewed",
+        "dismissed"
+      ]
     },
-    "review_status": {
+    "public.review_status": {
       "name": "review_status",
-      "values": {
-        "auto-approved": "auto-approved",
-        "flagged": "flagged",
-        "removed": "removed"
-      }
+      "schema": "public",
+      "values": [
+        "auto-approved",
+        "flagged",
+        "removed"
+      ]
     },
-    "user_role": {
+    "public.user_role": {
       "name": "user_role",
-      "values": {
-        "student": "student",
-        "admin": "admin",
-        "moderator": "moderator"
-      }
+      "schema": "public",
+      "values": [
+        "student",
+        "admin",
+        "moderator"
+      ]
     },
-    "vote_type": {
+    "public.vote_type": {
       "name": "vote_type",
-      "values": {
-        "helpful": "helpful",
-        "not_helpful": "not_helpful"
-      }
+      "schema": "public",
+      "values": [
+        "helpful",
+        "not_helpful"
+      ]
     }
   },
   "schemas": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
-  }
+    "tables": {},
+    "columns": {}
+  },
+  "id": "b377fc04-8bab-4420-83c4-04703627346d",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "sequences": {},
+  "policies": {},
+  "views": {},
+  "roles": {}
 }

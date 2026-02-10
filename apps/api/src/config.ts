@@ -8,7 +8,7 @@ const configSchema = z.object({
   JWT_SECRET: z.string().min(32),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
   SCRAPER_CONCURRENCY: z.coerce.number().min(1).max(50).default(1),
-  RESEND_API_KEY: z.string().startsWith('re_').optional(),
+  RESEND_API_KEY: z.string().startsWith('re_').or(z.literal('')).optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -18,6 +18,10 @@ function loadConfig(): Config {
 
   if (!result.success) {
     console.error('❌ Configuration validation failed. Please check your environment variables.');
+    console.error('Validation errors:');
+    result.error.issues.forEach(issue => {
+      console.error(`  - ${issue.path.join('.')}: ${issue.message}`);
+    });
     throw new Error('Invalid environment variables');
   }
 

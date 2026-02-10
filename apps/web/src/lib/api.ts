@@ -37,8 +37,12 @@ class ApiClient {
     const executeRequest = async (): Promise<Response> => {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        ...options.headers,
       };
+
+      if (options.headers) {
+        const inputHeaders = options.headers as Record<string, string>;
+        Object.assign(headers, inputHeaders);
+      }
 
       if (needsCsrf && this.csrfToken) {
         headers['x-csrf-token'] = this.csrfToken;

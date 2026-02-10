@@ -326,7 +326,7 @@ export function DataScraper() {
       
       try {
           return formatDistanceToNow(new Date(ts), { addSuffix: true });
-      } catch (e) {
+      } catch (_e) {
           return 'Invalid date';
       }
   };

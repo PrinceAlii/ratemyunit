@@ -9,7 +9,7 @@ import { db } from '@ratemyunit/db';
 async function verifyDatabaseMigrations() {
   try {
     // Check if the drizzle migrations table exists
-    const result = await db.execute(sql`
+    const result = await db.execute<{ exists: boolean }>(sql`
       SELECT EXISTS (
         SELECT FROM information_schema.tables
         WHERE table_schema = 'public'
@@ -17,7 +17,7 @@ async function verifyDatabaseMigrations() {
       );
     `);
 
-    const migrationsTableExists = result.rows[0]?.exists;
+    const migrationsTableExists = result[0]?.exists;
 
     if (!migrationsTableExists) {
       console.warn('⚠️  WARNING: Migrations table not found. Database may not be initialized.');
@@ -26,11 +26,11 @@ async function verifyDatabaseMigrations() {
     }
 
     // Get count of applied migrations
-    const migrationsResult = await db.execute(sql`
+    const migrationsResult = await db.execute<{ count: number }>(sql`
       SELECT COUNT(*) as count FROM __drizzle_migrations;
     `);
 
-    const migrationsCount = migrationsResult.rows[0]?.count || 0;
+    const migrationsCount = Number(migrationsResult[0]?.count || 0);
     console.log(`✅ Database migrations verified: ${migrationsCount} migration(s) applied`);
 
     return true;

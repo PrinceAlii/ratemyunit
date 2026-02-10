@@ -32,12 +32,22 @@ export async function buildApp() {
   // CSRF Protection
   await app.register(csrf, {
     sessionPlugin: '@fastify/cookie',
+    getToken: (req) => req.headers['x-csrf-token'] as string,
     cookieOpts: {
-      signed: false, // Set to true if you use signed cookies
+      signed: false,
       httpOnly: true,
       sameSite: 'strict',
       secure: config.NODE_ENV === 'production',
     },
+  });
+
+  // Skip CSRF for specific non-sensitive or token-establishing routes
+  app.addHook('onRequest', async (request) => {
+    const skipCsrfRoutes = ['/api/auth/csrf', '/api/auth/logout'];
+    if (skipCsrfRoutes.some(route => request.url.startsWith(route))) {
+      // @ts-ignore - skip CSRF for these specific routes
+      request.csrfSkip = true;
+    }
   });
 
   // Rate Limiting

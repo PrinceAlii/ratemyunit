@@ -67,7 +67,16 @@ class ApiClient {
        response = await executeRequest();
     }
 
-    const data: ApiResponse<T> = await response.json();
+    const contentType = response.headers.get('Content-Type');
+    let data: ApiResponse<T>;
+    
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      console.error('Non-JSON response received:', text);
+      throw new Error(`Server returned non-JSON response (${response.status}). Check server logs.`);
+    }
 
     if (!response.ok || !data.success) {
       throw new Error(data.error || 'An error occurred');

@@ -186,10 +186,13 @@ export async function unitsRoutes(app: FastifyInstance) {
         user: {
           id: users.id,
           displayName: users.displayName,
-          role: users.role, 
+          role: users.role,
+          emailVerified: users.emailVerified,
+          domainVerified: users.domainVerified,
+          email: users.email,
         },
         voteCount: sql<number>`(
-          SELECT COUNT(*) FILTER (WHERE ${reviewVotes.voteType} = 'helpful') - 
+          SELECT COUNT(*) FILTER (WHERE ${reviewVotes.voteType} = 'helpful') -
           COUNT(*) FILTER (WHERE ${reviewVotes.voteType} = 'not_helpful')
           FROM ${reviewVotes}
           WHERE ${reviewVotes.reviewId} = ${reviews.id}
@@ -217,6 +220,9 @@ export async function unitsRoutes(app: FastifyInstance) {
         user: {
           displayName: displayName,
           role: review.user?.role,
+          emailVerified: review.user?.emailVerified,
+          domainVerified: review.user?.domainVerified,
+          emailDomain: review.user?.email?.split('@')[1] || '',
         }
       };
     });

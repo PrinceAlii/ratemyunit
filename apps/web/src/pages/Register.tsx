@@ -1,20 +1,40 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth-context';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { api } from '../lib/api';
+import type { University } from '@ratemyunit/types';
 
 export function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [universityId, setUniversityId] = useState('');
+  const [universities, setUniversities] = useState<University[]>([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingUniversities, setLoadingUniversities] = useState(true);
 
   const { register } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchUniversities = async () => {
+      try {
+        const data = await api.get<University[]>('/api/public/universities');
+        setUniversities(data);
+      } catch (err) {
+        console.error('Failed to fetch universities:', err);
+      } finally {
+        setLoadingUniversities(false);
+      }
+    };
+    fetchUniversities();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,8 +53,20 @@ export function Register() {
       return;
     }
 
+    if (!displayName || displayName.length < 2) {
+      setError('Display name must be at least 2 characters');
+      setLoading(false);
+      return;
+    }
+
+    if (!universityId) {
+      setError('Please select your university');
+      setLoading(false);
+      return;
+    }
+
     try {
-      await register(email, password);
+      await register(email, password, displayName, universityId);
       setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create account');
@@ -84,11 +116,28 @@ export function Register() {
             )}
 
             <div className="space-y-2">
+              <Label htmlFor="displayName" className="font-bold uppercase text-sm">Display Name</Label>
+              <Input
+                id="displayName"
+                type="text"
+                placeholder="John Smith"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                required
+                disabled={loading}
+                className="h-12 border-3"
+              />
+              <p className="text-xs font-medium text-muted-foreground">
+                Your name as it will appear on reviews (if you choose to show it)
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="email" className="font-bold uppercase text-sm">University Email</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="student@student.uts.edu.au"
+                placeholder="student@university.edu.au"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -96,7 +145,29 @@ export function Register() {
                 className="h-12 border-3"
               />
               <p className="text-xs font-medium text-muted-foreground">
-                Use your official university email address
+                Use your .edu.au email address
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="university" className="font-bold uppercase text-sm">University</Label>
+              <select
+                id="university"
+                value={universityId}
+                onChange={(e) => setUniversityId(e.target.value)}
+                required
+                disabled={loading || loadingUniversities}
+                className="w-full h-12 border-3 border-foreground bg-background px-3 font-medium shadow-neo transition-all hover:shadow-neo-hover focus:shadow-neo-hover focus:outline-none disabled:opacity-50"
+              >
+                <option value="">Select your university</option>
+                {universities.map((uni) => (
+                  <option key={uni.id} value={uni.id}>
+                    {uni.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs font-medium text-muted-foreground">
+                Select the university you attend
               </p>
             </div>
 

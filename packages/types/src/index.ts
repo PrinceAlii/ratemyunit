@@ -8,6 +8,7 @@ export interface User {
   role: UserRole;
   universityId: string;
   emailVerified: boolean;
+  domainVerified: boolean;
   banned: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -127,6 +128,9 @@ export interface ReviewWithUser extends Review {
   user: {
     displayName: string;
     role: UserRole;
+    emailVerified: boolean;
+    domainVerified: boolean;
+    emailDomain: string;
   };
   voteCount: number;
 }

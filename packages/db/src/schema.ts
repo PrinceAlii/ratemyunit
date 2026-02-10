@@ -39,6 +39,7 @@ export const users = pgTable('users', {
   role: userRoleEnum('role').default('student').notNull(),
   universityId: uuid('university_id').references(() => universities.id).notNull(),
   emailVerified: boolean('email_verified').default(false).notNull(),
+  domainVerified: boolean('domain_verified').default(false).notNull(),
   banned: boolean('banned').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

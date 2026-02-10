@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { useAuth } from '../lib/auth-context';
 import { ThumbsUp, ThumbsDown, Flag } from 'lucide-react';
 import type { Unit, ReviewWithUser } from '@ratemyunit/types';
+import { VerificationBadge } from '../components/VerificationBadge';
 
 // Helper to calculate average ratings.
 function calculateAverages(reviews: ReviewWithUser[]) {
@@ -225,6 +226,14 @@ export function UnitDetails() {
                                 </div>
                                 <div className="text-sm font-medium">
                                     Taken in {review.sessionTaken} • Posted by {review.user.displayName}
+                                    {review.displayNameType === 'verified' &&
+                                     review.user.emailVerified &&
+                                     review.user.emailDomain?.endsWith('.edu.au') && (
+                                      <VerificationBadge
+                                        domainVerified={review.user.domainVerified}
+                                        className="ml-1"
+                                      />
+                                    )}
                                 </div>
                             </div>
                             <div className="text-xs font-bold text-muted-foreground">

@@ -7,6 +7,7 @@ import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { StarRating } from './StarRating';
 import { useAuth } from '../lib/auth-context';
+import { VerificationBadge } from './VerificationBadge';
 
 interface ReviewFormProps {
   unitId: string;
@@ -244,8 +245,17 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
              >
                  <option value="nickname">Nickname</option>
                  <option value="anonymous">Anonymous</option>
-                 <option value="verified">Verified Name</option>
+                 <option value="verified">
+                   Verified Name{user?.emailVerified && user?.email?.endsWith('.edu.au') ? ' ✓' : ''}
+                 </option>
              </select>
+             {formData.displayNameType === 'verified' && user?.emailVerified && user?.email?.endsWith('.edu.au') && (
+               <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1 font-medium">
+                 <span>Your review will show</span>
+                 <VerificationBadge domainVerified={user.domainVerified} />
+                 <span>next to your name</span>
+               </div>
+             )}
           </div>
         </div>
 

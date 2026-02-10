@@ -142,7 +142,10 @@ export async function adminRoutes(app: FastifyInstance) {
   app.delete('/users/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
+    app.log.info({ userId: id, currentUserId: request.user?.id }, 'Attempting to delete user');
+
     if (request.user && request.user.id === id) {
+      app.log.warn({ userId: id }, 'User tried to delete their own account');
       return reply.status(400).send({
         success: false,
         error: 'You cannot delete your own account.',

@@ -13,8 +13,8 @@ export async function unitsRoutes(app: FastifyInstance) {
     const searchQuerySchema = z.object({
       q: z.string().optional(),
       search: z.string().optional(),
-      faculty: z.string().optional(),
-      universityId: z.string().uuid().optional(),
+      faculty: z.string().transform(v => v === '' ? undefined : v).optional(),
+      universityId: z.string().uuid().or(z.literal('')).transform(v => v === '' ? undefined : v).optional(),
       minRating: z.coerce.number().min(1).max(5).optional(),
       sort: z.enum(['rating_desc', 'rating_asc', 'recent', 'most_reviewed']).optional(),
       limit: z.coerce.number().int().min(1).max(50).default(20),

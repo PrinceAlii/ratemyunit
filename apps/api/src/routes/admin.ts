@@ -105,6 +105,8 @@ export async function adminRoutes(app: FastifyInstance) {
       role: users.role,
       banned: users.banned,
       createdAt: users.createdAt,
+      lastLoginAt: users.lastLoginAt,
+      lastIp: users.lastIp,
     }).from(users)
       .orderBy(desc(users.createdAt))
       .limit(limit)

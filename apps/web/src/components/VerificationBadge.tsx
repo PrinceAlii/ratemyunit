@@ -15,10 +15,11 @@ export function VerificationBadge({ domainVerified, className = '' }: Verificati
     : "text-green-600";
 
   return (
-    <BadgeCheck
-      className={`h-4 w-4 inline-block ${badgeColor} ${className}`}
-      aria-label={tooltipText}
-      title={tooltipText}
-    />
+    <span title={tooltipText} className="inline-flex">
+      <BadgeCheck
+        className={`h-4 w-4 inline-block ${badgeColor} ${className}`}
+        aria-label={tooltipText}
+      />
+    </span>
   );
 }

@@ -23,6 +23,7 @@
     "studio": "drizzle-kit studio",
     "seed": "tsx src/seed.ts",
     "fix-uts-templates": "tsx src/scripts/fix-uts-templates.ts",
+    "cleanup-templates": "tsx src/scripts/remove-non-list-templates.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

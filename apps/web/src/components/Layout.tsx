@@ -64,8 +64,30 @@ export function Layout() {
       </main>
       
       <footer className="border-t-4 border-black py-6 bg-secondary">
-        <div className="container mx-auto px-4 text-center text-sm font-bold uppercase text-secondary-foreground">
-          &copy; {new Date().getFullYear()} RateMyUnit. All rights reserved.
+        <div className="container mx-auto px-4 space-y-3">
+          <div className="text-center text-sm font-bold text-secondary-foreground">
+            Missing a subject?{' '}
+            <a
+              href="mailto:hello@ratemyunit.dev"
+              className="underline hover:text-primary transition-colors"
+            >
+              Let us know
+            </a>
+          </div>
+          <div className="text-center text-sm font-bold uppercase text-secondary-foreground">
+            &copy; {new Date().getFullYear()} RateMyUnit. All rights reserved.
+          </div>
+          <div className="text-center text-xs font-medium text-secondary-foreground/80">
+            Made by{' '}
+            <a
+              href="https://www.alibo.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold underline hover:text-primary transition-colors"
+            >
+              Ali
+            </a>
+          </div>
         </div>
       </footer>
     </div>

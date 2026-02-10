@@ -99,10 +99,26 @@ export async function unitsRoutes(app: FastifyInstance) {
         .orderBy(sortClause)
         .limit(limitVal)
         .offset(offsetVal);
+
+    // Get total count for pagination
+    const countResult = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(units)
+        .leftJoin(avgRatingSq, eq(units.id, avgRatingSq.unitId))
+        .where(whereClause);
+    
+    const total = Number(countResult[0]?.count || 0);
       
     return reply.send({
       success: true,
       data: results,
+      pagination: {
+          total,
+          limit: limitVal,
+          offset: offsetVal,
+          page: Math.floor(offsetVal / limitVal) + 1,
+          totalPages: Math.ceil(total / limitVal)
+      }
     });
   });
 

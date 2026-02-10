@@ -194,13 +194,6 @@ export async function authRoutes(app: FastifyInstance) {
    * Logout and destroy session.
    */
   app.post('/logout', { preHandler: authenticateUser }, async (request, reply) => {
-    if (!request.user) {
-      return reply.status(401).send({
-        success: false,
-        error: 'Not authenticated.',
-      });
-    }
-
     const sessionId = request.cookies['auth_session'];
     if (sessionId) {
       await lucia.invalidateSession(sessionId);

@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '@ratemyunit/db/client';
-import { units, reviews, users, universities } from '@ratemyunit/db/schema';
+import { units, reviews, users, universities, userTelemetry } from '@ratemyunit/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
 import { requireAdmin } from '../middleware/auth.js';
 import { scraperQueue } from '../lib/queue.js';
 import { moderateReviewSchema, banUserSchema } from '@ratemyunit/validators';
+import { lucia } from '../lib/auth.js';
 
 const scrapeSchema = z.object({
   unitCode: z.string().min(1),
@@ -132,6 +133,58 @@ export async function adminRoutes(app: FastifyInstance) {
       .where(eq(users.id, id));
 
     return reply.send({ success: true, message: `User ${banned ? 'banned' : 'unbanned'}.` });
+  });
+
+  /**
+   * DELETE /api/admin/users/:id
+   * Permanently delete a user and all their data (cascading).
+   */
+  app.delete('/users/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    if (request.user && request.user.id === id) {
+      return reply.status(400).send({
+        success: false,
+        error: 'You cannot delete your own account.',
+      });
+    }
+
+    // Check if user exists
+    const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    if (!user) {
+      return reply.status(404).send({ success: false, error: 'User not found' });
+    }
+
+    // Invalidate sessions in Lucia
+    await lucia.invalidateUserSessions(id);
+
+    // Delete from DB - other tables (reviews, telemetry, sessions) will cascade
+    await db.delete(users).where(eq(users.id, id));
+
+    return reply.send({
+      success: true,
+      message: 'User and all associated data deleted successfully.',
+    });
+  });
+
+  /**
+   * GET /api/admin/users/:id/telemetry
+   * Get login and activity logs for a specific user.
+   */
+  app.get('/users/:id/telemetry', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const logs = await db
+      .select()
+      .from(userTelemetry)
+      .where(eq(userTelemetry.userId, id))
+      .orderBy(desc(userTelemetry.createdAt))
+      .limit(100);
+
+    return reply.send({
+      success: true,
+      data: logs,
+    });
   });
 
   // --- Scraper Routes ---

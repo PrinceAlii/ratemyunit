@@ -21,6 +21,7 @@ import {
 import { authenticateUser, requireAuth } from '../middleware/auth.js';
 import { config } from '../config.js';
 import { sendEmail, generateVerificationEmail, generatePasswordResetEmail } from '../lib/email.js';
+import { recordTelemetry } from '../lib/telemetry.js';
 
 export async function authRoutes(app: FastifyInstance) {
   /**
@@ -108,6 +109,9 @@ export async function authRoutes(app: FastifyInstance) {
     const verificationToken = await createEmailVerificationToken(newUser.id);
     const verificationLink = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
+    // Record initial telemetry
+    await recordTelemetry(newUser.id, request);
+
     await sendEmail({
       to: newUser.email,
       subject: 'Verify Your Email - RateMyUnit',
@@ -171,6 +175,9 @@ export async function authRoutes(app: FastifyInstance) {
 
     const session = await lucia.createSession(user.id, {});
     const sessionCookie = lucia.createSessionCookie(session.id);
+
+    // Record login telemetry
+    await recordTelemetry(user.id, request);
 
     reply.setCookie(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
 

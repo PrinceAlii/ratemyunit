@@ -61,6 +61,11 @@ export function generateVerificationEmail(verificationLink: string): string {
         <title>Verify Your Email</title>
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="margin-bottom: 20px;">
+          <div style="display: inline-block; background: #FFD700; border: 4px solid #000; padding: 10px 20px;">
+            <span style="font-size: 24px; font-weight: 900; color: #000; text-transform: uppercase; letter-spacing: -1px;">RateMyUnit</span>
+          </div>
+        </div>
         <div style="background: #f9f9f9; border: 3px solid #000; padding: 30px; margin: 20px 0;">
           <h1 style="color: #000; margin-top: 0; font-size: 28px; font-weight: 900; text-transform: uppercase;">Verify Your Email</h1>
 
@@ -104,6 +109,11 @@ export function generatePasswordResetEmail(resetLink: string): string {
         <title>Reset Your Password</title>
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="margin-bottom: 20px;">
+          <div style="display: inline-block; background: #FFD700; border: 4px solid #000; padding: 10px 20px;">
+            <span style="font-size: 24px; font-weight: 900; color: #000; text-transform: uppercase; letter-spacing: -1px;">RateMyUnit</span>
+          </div>
+        </div>
         <div style="background: #f9f9f9; border: 3px solid #000; padding: 30px; margin: 20px 0;">
           <h1 style="color: #000; margin-top: 0; font-size: 28px; font-weight: 900; text-transform: uppercase;">Reset Your Password</h1>
 

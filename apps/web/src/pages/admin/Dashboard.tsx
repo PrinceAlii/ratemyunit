@@ -1,21 +1,19 @@
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { ShieldCheck, Users, MessageSquare, AlertTriangle, BarChart3, Check, Trash2, Database, FileText } from 'lucide-react';
+import { useAuth } from '../../lib/auth-context';
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/button';
-import { ConfirmDialog } from '../../components/ui/confirm-dialog';
-import { useAuth } from '../../lib/auth-context';
-import { Navigate } from 'react-router-dom';
-import { ShieldCheck, Users, MessageSquare, AlertTriangle, BarChart3, Check, Trash2, Ban, Database, FileText } from 'lucide-react';
 import { DataScraper } from './DataScraper';
 import { SubjectTemplates } from './SubjectTemplates';
+import { UserManagement } from './UserManagement';
 
 export function AdminDashboard() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'users' | 'templates' | 'scraper'>('overview');
-  const [banDialogOpen, setBanDialogOpen] = useState(false);
-  const [userToBan, setUserToBan] = useState<{ id: string; email: string; banned: boolean } | null>(null);
 
   const { data: stats } = useQuery({
     queryKey: ['admin', 'stats'],
@@ -27,12 +25,6 @@ export function AdminDashboard() {
     queryKey: ['admin', 'flagged'],
     queryFn: () => api.get<Array<{ id: string; unitCode: string; userEmail: string; reviewText: string }>>('/api/admin/reviews/flagged'),
     enabled: activeTab === 'moderation',
-  });
-
-  const { data: allUsers } = useQuery({
-    queryKey: ['admin', 'users'],
-    queryFn: () => api.get<Array<{ id: string; email: string; displayName: string | null; role: string; banned: boolean }>>('/api/admin/users'),
-    enabled: activeTab === 'users',
   });
 
   const moderateMutation = useMutation({
@@ -47,32 +39,6 @@ export function AdminDashboard() {
     },
   });
 
-  const banMutation = useMutation({
-    mutationFn: ({ id, banned }: { id: string; banned: boolean }) =>
-      api.post(`/api/admin/users/${id}/ban`, { banned }),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      setBanDialogOpen(false);
-      setUserToBan(null);
-      toast.success(variables.banned ? 'User banned successfully' : 'User unbanned successfully');
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to update user status: ${error.message}`);
-      setBanDialogOpen(false);
-    },
-  });
-
-  const handleBanClick = (userId: string, userEmail: string, currentBanStatus: boolean) => {
-    setUserToBan({ id: userId, email: userEmail, banned: currentBanStatus });
-    setBanDialogOpen(true);
-  };
-
-  const confirmBan = () => {
-    if (userToBan) {
-      banMutation.mutate({ id: userToBan.id, banned: !userToBan.banned });
-    }
-  };
-
   if (!user || user.role !== 'admin') {
     return <Navigate to="/" replace />;
   }
@@ -84,11 +50,11 @@ export function AdminDashboard() {
         <h1 className="text-4xl md:text-5xl font-display font-black uppercase">Admin Dashboard</h1>
       </div>
 
-      <div className="flex gap-2 mb-8 border-b-4 border-foreground pb-2">
+      <div className="flex gap-2 mb-8 border-b-4 border-foreground pb-2 overflow-x-auto">
         <Button
           variant={activeTab === 'overview' ? 'default' : 'ghost'}
           onClick={() => setActiveTab('overview')}
-          className="border-3 border-transparent data-[active=true]:border-foreground font-bold"
+          className="border-3 border-transparent data-[active=true]:border-foreground font-bold whitespace-nowrap"
           data-active={activeTab === 'overview'}
         >
           <BarChart3 className="mr-2 h-5 w-5" />
@@ -97,7 +63,7 @@ export function AdminDashboard() {
         <Button
           variant={activeTab === 'moderation' ? 'default' : 'ghost'}
           onClick={() => setActiveTab('moderation')}
-          className="border-3 border-transparent data-[active=true]:border-foreground font-bold"
+          className="border-3 border-transparent data-[active=true]:border-foreground font-bold whitespace-nowrap"
           data-active={activeTab === 'moderation'}
         >
           <AlertTriangle className="mr-2 h-5 w-5" />
@@ -106,7 +72,7 @@ export function AdminDashboard() {
         <Button
           variant={activeTab === 'users' ? 'default' : 'ghost'}
           onClick={() => setActiveTab('users')}
-          className="border-3 border-transparent data-[active=true]:border-foreground font-bold"
+          className="border-3 border-transparent data-[active=true]:border-foreground font-bold whitespace-nowrap"
           data-active={activeTab === 'users'}
         >
           <Users className="mr-2 h-5 w-5" />
@@ -115,7 +81,7 @@ export function AdminDashboard() {
         <Button
           variant={activeTab === 'templates' ? 'default' : 'ghost'}
           onClick={() => setActiveTab('templates')}
-          className="border-3 border-transparent data-[active=true]:border-foreground font-bold"
+          className="border-3 border-transparent data-[active=true]:border-foreground font-bold whitespace-nowrap"
           data-active={activeTab === 'templates'}
         >
           <FileText className="mr-2 h-5 w-5" />
@@ -124,11 +90,11 @@ export function AdminDashboard() {
         <Button
           variant={activeTab === 'scraper' ? 'default' : 'ghost'}
           onClick={() => setActiveTab('scraper')}
-          className="border-3 border-transparent data-[active=true]:border-foreground font-bold"
+          className="border-3 border-transparent data-[active=true]:border-foreground font-bold whitespace-nowrap"
           data-active={activeTab === 'scraper'}
         >
           <Database className="mr-2 h-5 w-5" />
-          Data Scraping
+          Scraper
         </Button>
       </div>
 
@@ -204,82 +170,11 @@ export function AdminDashboard() {
         </div>
       )}
 
-      {activeTab === 'users' && (
-        <div className="space-y-4">
-          <h2 className="text-2xl font-display font-black uppercase">User Management</h2>
-          {!allUsers || allUsers.length === 0 ? (
-            <div className="text-center py-12 border-4 border-foreground bg-muted shadow-neo">
-              <Users className="mx-auto h-12 w-12 text-muted-foreground opacity-50 mb-4" />
-              <h3 className="text-lg font-bold mb-2">No users found</h3>
-              <p className="font-medium">
-                Users will appear here after registration.
-              </p>
-            </div>
-          ) : (
-            <div className="border-4 border-foreground overflow-hidden shadow-neo">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-muted font-bold border-b-4 border-foreground">
-                  <tr>
-                    <th className="px-4 py-4 uppercase">User</th>
-                    <th className="px-4 py-4 uppercase">Role</th>
-                    <th className="px-4 py-4 uppercase">Status</th>
-                    <th className="px-4 py-4 text-right uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y-3 divide-foreground">
-                  {allUsers.map((u) => (
-                    <tr key={u.id} className="hover:bg-muted/50">
-                      <td className="px-4 py-4">
-                        <div className="font-bold">{u.displayName || 'No Name'}</div>
-                        <div className="text-xs font-medium text-muted-foreground">{u.email}</div>
-                      </td>
-                      <td className="px-4 py-4 capitalize font-bold">{u.role}</td>
-                      <td className="px-4 py-4">
-                        {u.banned ? (
-                          <span className="px-3 py-1 bg-destructive text-destructive-foreground text-xs font-black uppercase border-2 border-foreground">Banned</span>
-                        ) : (
-                          <span className="px-3 py-1 bg-green-500 text-white text-xs font-black uppercase border-2 border-foreground">Active</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        {u.role !== 'admin' && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className={`border-2 font-bold ${u.banned ? "border-green-600 text-green-600 hover:bg-green-600 hover:text-white" : "border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"}`}
-                            onClick={() => handleBanClick(u.id, u.email, u.banned)}
-                          >
-                            <Ban className="h-4 w-4 mr-1" />
-                            {u.banned ? 'Unban' : 'Ban'}
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+      {activeTab === 'users' && <UserManagement />}
 
       {activeTab === 'templates' && <SubjectTemplates />}
 
       {activeTab === 'scraper' && <DataScraper />}
-
-      <ConfirmDialog
-        open={banDialogOpen}
-        onOpenChange={setBanDialogOpen}
-        title={userToBan?.banned ? 'Unban User' : 'Ban User'}
-        description={
-          userToBan?.banned
-            ? `Are you sure you want to unban ${userToBan?.email}? They will be able to access the platform again.`
-            : `Are you sure you want to ban ${userToBan?.email}? They will no longer be able to access the platform.`
-        }
-        confirmText={userToBan?.banned ? 'Unban' : 'Ban'}
-        onConfirm={confirmBan}
-        variant={userToBan?.banned ? 'default' : 'destructive'}
-      />
     </div>
   );
 }

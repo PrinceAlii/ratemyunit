@@ -6,6 +6,9 @@ import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
+import { VerifyEmail } from './pages/VerifyEmail';
 import { HomePage } from './pages/Home';
 import { UnitDetails } from './pages/UnitDetails';
 import { BrowsePage } from './pages/Browse';
@@ -32,6 +35,9 @@ function App() {
               <Route path="/browse" element={<BrowsePage />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/units/:unitCode" element={<UnitDetails />} />
               <Route
                 path="/admin"

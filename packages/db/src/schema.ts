@@ -41,9 +41,26 @@ export const users = pgTable('users', {
   emailVerified: boolean('email_verified').default(false).notNull(),
   domainVerified: boolean('domain_verified').default(false).notNull(),
   banned: boolean('banned').default(false).notNull(),
+  lastLoginAt: timestamp('last_login_at'),
+  lastIp: varchar('last_ip', { length: 45 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+// User Telemetry Table
+export const userTelemetry = pgTable('user_telemetry', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  ipAddress: varchar('ip_address', { length: 45 }).notNull(),
+  userAgent: text('user_agent').notNull(),
+  browser: varchar('browser', { length: 100 }),
+  os: varchar('os', { length: 100 }),
+  device: varchar('device', { length: 100 }),
+  deviceType: varchar('device_type', { length: 50 }), // mobile, tablet, desktop
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => ({
+  userIdIdx: index('user_telemetry_user_id_idx').on(t.userId),
+}));
 
 // Sessions Table (for Lucia)
 export const sessions = pgTable('sessions', {
@@ -198,6 +215,14 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   reviewFlags: many(reviewFlags),
   sessions: many(sessions),
   createdTemplates: many(subjectCodeTemplates),
+  telemetry: many(userTelemetry),
+}));
+
+export const userTelemetryRelations = relations(userTelemetry, ({ one }) => ({
+  user: one(users, {
+    fields: [userTelemetry.userId],
+    references: [users.id],
+  }),
 }));
 
 export const unitsRelations = relations(units, ({ one, many }) => ({

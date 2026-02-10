@@ -78,14 +78,14 @@ export function Layout() {
             &copy; {new Date().getFullYear()} RateMyUnit. All rights reserved.
           </div>
           <div className="text-center text-xs font-medium text-secondary-foreground/80">
-            Made by{' '}
+            Made with ⚡ by{' '}
             <a
               href="https://www.alibo.dev"
               target="_blank"
               rel="noopener noreferrer"
               className="font-bold underline hover:text-primary transition-colors"
             >
-              Ali
+              Ali Bonagdaran
             </a>
           </div>
         </div>

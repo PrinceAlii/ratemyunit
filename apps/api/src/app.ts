@@ -3,7 +3,7 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-// import csrf from '@fastify/csrf-protection'; // TEMPORARILY DISABLED
+import csrf from '@fastify/csrf-protection';
 import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
@@ -29,29 +29,17 @@ export async function buildApp() {
 
   await app.register(cookie);
 
-  // CSRF Protection - TEMPORARILY DISABLED FOR DEBUGGING
-  // TODO: Re-enable with proper route exclusions
-  /*
+  // CSRF Protection
   await app.register(csrf, {
     sessionPlugin: '@fastify/cookie',
     getToken: (req) => req.headers['x-csrf-token'] as string,
     cookieOpts: {
       signed: false,
       httpOnly: true,
-      sameSite: 'strict',
+      sameSite: 'lax',
       secure: config.NODE_ENV === 'production',
     },
   });
-
-  // Skip CSRF for specific non-sensitive or token-establishing routes
-  app.addHook('onRequest', async (request) => {
-    const skipCsrfRoutes = ['/api/auth/csrf', '/api/auth/logout'];
-    if (skipCsrfRoutes.some(route => request.url.startsWith(route))) {
-      // @ts-ignore - skip CSRF for these specific routes
-      request.csrfSkip = true;
-    }
-  });
-  */
 
   // Rate Limiting
   await app.register(rateLimit, {

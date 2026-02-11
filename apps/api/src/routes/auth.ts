@@ -334,11 +334,9 @@ export async function authRoutes(app: FastifyInstance) {
   /**
    * GET /api/auth/csrf
    * Generate a CSRF token for the frontend.
-   * TEMPORARILY DISABLED - Returns dummy token
    */
   app.get('/csrf', async (_request, reply) => {
-    // CSRF disabled for debugging - return dummy token
-    const token = 'debug-csrf-disabled';
+    const token = await reply.generateCsrf();
     return reply.send({
       success: true,
       data: { token },

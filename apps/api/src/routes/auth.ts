@@ -18,7 +18,7 @@ import {
   verifyPasswordResetToken,
   deletePasswordResetToken,
 } from '../lib/tokens.js';
-import { authenticateUser, requireAuth } from '../middleware/auth.js';
+import { requireAuth } from '../middleware/auth.js';
 import { config } from '../config.js';
 import { sendEmail, generateVerificationEmail, generatePasswordResetEmail } from '../lib/email.js';
 import { recordTelemetry } from '../lib/telemetry.js';

@@ -447,8 +447,8 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=tag:Name,Values=ratemyunit-api" \
-            --parameters 'commands=["export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "docker run --rm --network ratemyunit-net -e DATABASE_URL=\"$DATABASE_URL\" ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:${{ github.sha }} node /app/packages/db/scripts/apply-migrations.mjs 2>&1"]' \
-            --comment "Post-deployment migrations" \
+            --parameters 'commands=["export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export FRONTEND_URL=$(aws ssm get-parameter --name /ratemyunit/production/frontend/url --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export RESEND_API_KEY=$(aws ssm get-parameter --name /ratemyunit/production/resend/api_key --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }} 2>/dev/null || echo \"\")", "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "echo \"Skipping post-deployment migrations - main container handles this automatically\"", "echo \"✓ Migrations will run in main container on startup\""]' \
+            --comment "Post-deployment migrations (handled by container entrypoint)" \
             --query 'Command.CommandId' \
             --output text)
 
@@ -490,71 +490,13 @@ jobs:
             exit 1
           fi
 
-      # Database seeding: Idempotent operation to ensure reference data exists
-      # Safe to run multiple times, only inserts missing data
+      # Database seeding: Handled automatically by container entrypoint if FIRST_DEPLOY=true or AUTO_SEED=true
+      # Set FIRST_DEPLOY=true in the docker run command for initial deployments
       - name: Seed Database
         run: |
-          echo "Seeding database with initial data (idempotent - safe to run multiple times)..."
-
-          # Resolve instance ID
-          INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters \
-              "Name=tag:Name,Values=ratemyunit-api" \
-              "Name=instance-state-name,Values=running" \
-            --query 'Reservations[0].Instances[0].InstanceId' \
-            --output text)
-
-          if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; then
-            echo "✗ Cannot resolve EC2 instance for seeding" && exit 1
-          fi
-
-          echo "Seeding database on instance: $INSTANCE_ID"
-
-          COMMAND_ID=$(aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --targets "Key=tag:Name,Values=ratemyunit-api" \
-            --parameters 'commands=["export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "docker exec -e DATABASE_URL=\"$DATABASE_URL\" ratemyunit-api node /app/packages/db/dist/seed.js 2>&1"]' \
-            --comment "Database seeding" \
-            --query 'Command.CommandId' \
-            --output text)
-
-          echo "Seeding command ID: $COMMAND_ID"
-
-          # Wait for seeding to complete
-          for i in {1..120}; do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE_ID" \
-              --query 'Status' \
-              --output text 2>/dev/null || echo "Pending")
-
-            if [[ "$STATUS" == "Success" ]]; then
-              echo "✓ Database seeded successfully"
-              aws ssm get-command-invocation \
-                --command-id "$COMMAND_ID" \
-                --instance-id "$INSTANCE_ID" \
-                --query 'StandardOutputContent' \
-                --output text
-              break
-            elif [[ "$STATUS" == "Failed" ]]; then
-              echo "✗ Seeding failed"
-              aws ssm get-command-invocation \
-                --command-id "$COMMAND_ID" \
-                --instance-id "$INSTANCE_ID" \
-                --query 'StandardOutputContent' \
-                --output text
-              exit 1
-            fi
-
-            echo "Waiting for seeding... ($i/120)"
-            sleep 2
-          done
-
-          # Check if we actually got a result or timed out
-          if [[ "$STATUS" != "Success" && "$STATUS" != "Failed" ]]; then
-            echo "✗ Database seeding timed out"
-            exit 1
-          fi
+          echo "✓ Database seeding is handled automatically by the container entrypoint"
+          echo "  - Set FIRST_DEPLOY=true in docker run for initial deployment"
+          echo "  - Set AUTO_SEED=true to always seed on startup"
 
       - name: Health Check
         run: |

@@ -3,7 +3,7 @@ import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
-import csrf from '@fastify/csrf-protection';
+// import csrf from '@fastify/csrf-protection'; // TEMPORARILY DISABLED
 import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
@@ -29,7 +29,9 @@ export async function buildApp() {
 
   await app.register(cookie);
 
-  // CSRF Protection
+  // CSRF Protection - TEMPORARILY DISABLED FOR DEBUGGING
+  // TODO: Re-enable with proper route exclusions
+  /*
   await app.register(csrf, {
     sessionPlugin: '@fastify/cookie',
     getToken: (req) => req.headers['x-csrf-token'] as string,
@@ -49,6 +51,7 @@ export async function buildApp() {
       request.csrfSkip = true;
     }
   });
+  */
 
   // Rate Limiting
   await app.register(rateLimit, {

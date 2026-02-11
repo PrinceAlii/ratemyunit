@@ -11,7 +11,7 @@ export const lucia = new Lucia(adapter, {
   sessionCookie: {
     attributes: {
       secure: config.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax', // Changed from 'strict' to allow cookies in POST/DELETE requests
       path: '/',
     },
   },

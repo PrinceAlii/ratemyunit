@@ -1,11 +1,12 @@
 import { Lucia } from 'lucia';
 import { DrizzlePostgreSQLAdapter } from '@lucia-auth/adapter-drizzle';
+import type { Adapter } from 'lucia';
 import { db } from '@ratemyunit/db/client';
 import { users, sessions } from '@ratemyunit/db/schema';
 import { config } from '../config.js';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const adapter = new DrizzlePostgreSQLAdapter(db, sessions as any, users as any);
+// Use controlled type assertion at adapter boundary
+const adapter: Adapter = new DrizzlePostgreSQLAdapter(db, sessions, users) as Adapter;
 
 export const lucia = new Lucia(adapter, {
   sessionCookie: {
@@ -28,14 +29,7 @@ export const lucia = new Lucia(adapter, {
   },
 });
 
-declare module 'lucia' {
-  interface Register {
-    Lucia: typeof lucia;
-    DatabaseUserAttributes: DatabaseUserAttributes;
-  }
-}
-
-interface DatabaseUserAttributes {
+export interface DatabaseUserAttributes {
   id: string;
   email: string;
   displayName: string | null;
@@ -43,4 +37,11 @@ interface DatabaseUserAttributes {
   universityId: string;
   emailVerified: boolean;
   banned: boolean;
+}
+
+declare module 'lucia' {
+  interface Register {
+    Lucia: typeof lucia;
+    DatabaseUserAttributes: DatabaseUserAttributes;
+  }
 }

@@ -1,18 +1,10 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { lucia } from '../lib/auth.js';
+import { lucia, type DatabaseUserAttributes } from '../lib/auth.js';
 
 // Extend Fastify request type to include user.
 declare module 'fastify' {
   interface FastifyRequest {
-    user: {
-      id: string;
-      email: string;
-      displayName: string | null;
-      role: 'student' | 'admin' | 'moderator';
-      universityId: string;
-      emailVerified: boolean;
-      banned: boolean;
-    } | null;
+    user: DatabaseUserAttributes | null;
   }
 }
 
@@ -47,8 +39,8 @@ export async function authenticateUser(
     return;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  request.user = user as any;
+  // TypeScript now knows the type through DatabaseUserAttributes
+  request.user = user;
 }
 
 /**

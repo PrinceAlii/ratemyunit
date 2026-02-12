@@ -7,19 +7,10 @@ import { db } from '@ratemyunit/db/client';
 import { universities, subjectCodeTemplates } from '@ratemyunit/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { subjectTemplateService } from '../../services/template.js';
-import pino from 'pino';
-import { config } from '../../config.js';
+import { createLogger } from '../../lib/logger.js';
 import { XMLParser } from 'fast-xml-parser';
 
-const logger = pino({
-  level: config.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true,
-    },
-  },
-});
+const logger = createLogger('courseloop-scraper');
 
 export class CourseLoopScraper extends BaseScraper {
   

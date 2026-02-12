@@ -158,26 +158,47 @@ export async function buildApp() {
     return reply.sendFile('index.html');
   });
 
-  app.setErrorHandler((error, _request, reply) => {
-    app.log.error(error);
+  app.setErrorHandler((error: Error | { statusCode?: number; code?: string; validation?: unknown; issues?: unknown }, request, reply) => {
+    // Add request context to all errors
+    const context = {
+      requestId: request.id,
+      method: request.method,
+      url: request.url,
+      userId: request.user?.id || 'anonymous',
+    };
 
-    const fastifyError = error as { validation?: unknown; statusCode?: number; message?: string };
-
-    if (fastifyError.validation) {
-      return reply.status(400).send({
+    // Handle custom app errors
+    if ('statusCode' in error && 'code' in error && error.statusCode && error.code) {
+      const appError = error as { statusCode: number; code: string; message: string };
+      request.log.info({ ...context, error: appError.message }, 'Application error');
+      return reply.code(appError.statusCode).send({
         success: false,
-        error: 'Validation error',
-        details: fastifyError.validation,
+        error: appError.message,
+        code: appError.code,
       });
     }
 
-    const statusCode = fastifyError.statusCode || 500;
-    const message =
-      config.NODE_ENV === 'production' ? 'Internal server error' : (fastifyError.message || 'An error occurred');
+    // Handle Zod validation errors
+    if ('validation' in error || 'issues' in error) {
+      const zodError = error as { issues?: unknown; validation?: unknown };
+      request.log.info({ ...context, issues: zodError.issues || zodError.validation }, 'Validation error');
+      return reply.code(400).send({
+        success: false,
+        error: 'Validation failed',
+        code: 'VALIDATION_ERROR',
+        details: zodError.issues || zodError.validation,
+      });
+    }
 
-    return reply.status(statusCode).send({
+    // Unexpected errors - log full stack
+    const errorObj = error as Error;
+    request.log.error({ ...context, error: errorObj.message, stack: errorObj.stack }, 'Unexpected error');
+
+    return reply.code(500).send({
       success: false,
-      error: message,
+      error: config.NODE_ENV === 'production' ? 'Internal server error' : errorObj.message,
+      code: 'INTERNAL_ERROR',
+      requestId: request.id,  // Help user report issues
     });
   });
 

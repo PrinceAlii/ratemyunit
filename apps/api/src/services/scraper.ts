@@ -5,18 +5,9 @@ import { chromium, Browser } from 'playwright';
 import { ScraperFactory, type ScraperType } from '../scrapers/factory.js';
 import { ScraperConfigSchema } from '../scrapers/strategies/base.js';
 import type { ScraperResult } from '../scrapers/uts/types.js';
-import pino from 'pino';
-import { config } from '../config.js';
+import { createLogger } from '../lib/logger.js';
 
-const logger = pino({
-  level: config.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true,
-    },
-  },
-});
+const logger = createLogger('scraper');
 
 export class ScraperService {
   
@@ -82,30 +73,50 @@ export class ScraperService {
     return { uni, scraper: ScraperFactory.createScraper(uni.scraperType as ScraperType, uni.name, parseResult.data) };
   }
 
+  private async upsertUnit(uniId: string, data: NonNullable<ScraperResult['data']>) {
+    return db
+      .insert(units)
+      .values({
+        universityId: uniId,
+        unitCode: data.code,
+        unitName: data.name,
+        description: data.description,
+        creditPoints: data.creditPoints,
+        faculty: data.faculty,
+        sessions: data.sessions,
+        scrapedAt: new Date(),
+        active: true,
+      })
+      .onConflictDoUpdate({
+        target: [units.universityId, units.unitCode],
+        set: {
+          unitName: data.name,
+          description: data.description,
+          creditPoints: data.creditPoints,
+          faculty: data.faculty,
+          sessions: data.sessions,
+          scrapedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+  }
+
   async discoverUnits(universityId: string, existingBrowser?: Browser): Promise<string[]> {
-    logger.info(`🔧 ScraperService.discoverUnits called with universityId: ${universityId}`);
+    logger.info(`🔧 ScraperService.discoverUnits called for uni: ${universityId}`);
     const { uni, scraper } = await this.getUniversityScraper(universityId);
-    logger.info(`🎓 Running discovery for ${uni.name} using ${uni.scraperType} scraper`);
     
     let browser = existingBrowser;
     let shouldClose = false;
 
     if (!browser) {
-        logger.info(`🌐 Launching browser for discovery...`);
         browser = await chromium.launch({ headless: true });
         shouldClose = true;
     }
 
     try {
-        logger.info(`📞 Calling scraper.discoverSubjects()...`);
-        const result = await scraper.discoverSubjects(browser);
-        logger.info(`✅ scraper.discoverSubjects() returned ${result.length} codes`);
-        return result;
+        return await scraper.discoverSubjects(browser);
     } finally {
-        if (shouldClose && browser) {
-            logger.info(`🔒 Closing browser...`);
-            await browser.close();
-        }
+        if (shouldClose && browser) await browser.close();
     }
   }
 
@@ -129,38 +140,10 @@ export class ScraperService {
       const result = await scraper.scrapeSubject(browser, unitCode);
 
       if (!result.success || !result.data) {
-        return {
-          success: false,
-          unitCode,
-          error: result.error,
-        };
+        return { success: false, unitCode, error: result.error };
       }
 
-      await db
-        .insert(units)
-        .values({
-          universityId: uni.id,
-          unitCode: result.data.code,
-          unitName: result.data.name,
-          description: result.data.description,
-          creditPoints: result.data.creditPoints,
-          faculty: result.data.faculty,
-          sessions: JSON.stringify(result.data.sessions),
-          scrapedAt: new Date(),
-          active: true,
-        })
-        .onConflictDoUpdate({
-          target: [units.universityId, units.unitCode],
-          set: {
-            unitName: result.data.name,
-            description: result.data.description,
-            creditPoints: result.data.creditPoints,
-            faculty: result.data.faculty,
-            sessions: JSON.stringify(result.data.sessions),
-            scrapedAt: new Date(),
-            updatedAt: new Date(),
-          },
-        });
+      await this.upsertUnit(uni.id, result.data);
 
       return {
         success: true,
@@ -174,9 +157,7 @@ export class ScraperService {
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     } finally {
-      if (shouldClose && browser) {
-        await browser.close();
-      }
+      if (shouldClose && browser) await browser.close();
     }
   }
 
@@ -192,44 +173,22 @@ export class ScraperService {
     const { uni, scraper } = await this.getUniversityScraper(universityId);
     
     const browser = await chromium.launch({ headless: true });
-    
+
     try {
-      // Use reduce for sequential async execution and accumulating results immutably
-      const results = await unitCodes.reduce(async (accPromise, code, i) => {
-        const acc = await accPromise;
+      const results: ScraperResult[] = [];
+
+      for (let i = 0; i < unitCodes.length; i++) {
         if (i > 0) await new Promise(r => setTimeout(r, delayMs));
 
+        const code = unitCodes[i];
         const res = await scraper.scrapeSubject(browser, code);
-        
+
         if (res.success && res.data) {
-           await db
-            .insert(units)
-            .values({
-                universityId: uni.id,
-                unitCode: res.data.code,
-                unitName: res.data.name,
-                description: res.data.description,
-                creditPoints: res.data.creditPoints,
-                faculty: res.data.faculty,
-                sessions: JSON.stringify(res.data.sessions),
-                scrapedAt: new Date(),
-                active: true,
-            })
-            .onConflictDoUpdate({
-                target: [units.universityId, units.unitCode],
-                set: {
-                unitName: res.data.name,
-                description: res.data.description,
-                creditPoints: res.data.creditPoints,
-                faculty: res.data.faculty,
-                sessions: JSON.stringify(res.data.sessions),
-                scrapedAt: new Date(),
-                updatedAt: new Date(),
-                },
-            });
+           await this.upsertUnit(uni.id, res.data);
         }
-        return [...acc, res];
-      }, Promise.resolve([] as ScraperResult[]));
+
+        results.push(res);
+      }
 
       return results;
     } finally {

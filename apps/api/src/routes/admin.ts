@@ -123,7 +123,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const { banned } = banUserSchema.parse(request.body);
 
-    if (request.user && request.user.id === id) {
+    if (request.user!.id === id) {
       return reply.status(400).send({
         success: false,
         error: 'You cannot ban your own account.',
@@ -146,7 +146,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
     app.log.info({ userId: id, currentUserId: request.user?.id }, 'Attempting to delete user');
 
-    if (request.user && request.user.id === id) {
+    if (request.user!.id === id) {
       app.log.warn({ userId: id }, 'User tried to delete their own account');
       return reply.status(400).send({
         success: false,

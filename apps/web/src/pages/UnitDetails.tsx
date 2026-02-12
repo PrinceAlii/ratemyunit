@@ -11,28 +11,7 @@ import { useAuth } from '../lib/auth-context';
 import { ThumbsUp, ThumbsDown, Flag } from 'lucide-react';
 import type { Unit, ReviewWithUser } from '@ratemyunit/types';
 import { VerificationBadge } from '../components/VerificationBadge';
-
-// Helper to calculate average ratings.
-function calculateAverages(reviews: ReviewWithUser[]) {
-  if (!reviews.length) return null;
-
-  const sum = reviews.reduce((acc, review) => ({
-    overall: acc.overall + review.overallRating,
-    teaching: acc.teaching + review.teachingQualityRating,
-    workload: acc.workload + review.workloadRating,
-    difficulty: acc.difficulty + review.difficultyRating,
-    usefulness: acc.usefulness + review.usefulnessRating,
-  }), { overall: 0, teaching: 0, workload: 0, difficulty: 0, usefulness: 0 });
-
-  return {
-    overall: (sum.overall / reviews.length).toFixed(1),
-    teaching: (sum.teaching / reviews.length).toFixed(1),
-    workload: (sum.workload / reviews.length).toFixed(1),
-    difficulty: (sum.difficulty / reviews.length).toFixed(1),
-    usefulness: (sum.usefulness / reviews.length).toFixed(1),
-    count: reviews.length
-  };
-}
+import { calculateAverages, formatRating } from '../lib/calculations';
 
 export function UnitDetails() {
   const { unitCode } = useParams<{ unitCode: string }>();
@@ -134,8 +113,8 @@ export function UnitDetails() {
               </span>
               {averages && (
                 <div className="flex items-center gap-2">
-                   <StarRating value={Number(averages.overall)} readOnly />
-                   <span className="font-black text-lg">{averages.overall}</span>
+                   <StarRating value={averages.overall} readOnly />
+                   <span className="font-black text-lg">{formatRating(averages.overall)}</span>
                    <span className="font-medium">({averages.count} reviews)</span>
                 </div>
               )}
@@ -162,15 +141,15 @@ export function UnitDetails() {
       {averages && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="p-5 border-4 border-foreground bg-primary text-primary-foreground shadow-neo">
-            <div className="text-4xl font-black mb-1">{averages.overall}</div>
+            <div className="text-4xl font-black mb-1">{formatRating(averages.overall)}</div>
             <div className="text-sm font-bold uppercase">Overall</div>
           </div>
           <div className="p-5 border-4 border-foreground bg-secondary text-secondary-foreground shadow-neo">
-            <div className="text-4xl font-black mb-1">{averages.teaching}</div>
+            <div className="text-4xl font-black mb-1">{formatRating(averages.teaching)}</div>
             <div className="text-sm font-bold uppercase">Teaching</div>
           </div>
           <div className="p-5 border-4 border-foreground bg-accent text-accent-foreground shadow-neo">
-            <div className="text-4xl font-black mb-1">{averages.workload}</div>
+            <div className="text-4xl font-black mb-1">{formatRating(averages.workload)}</div>
             <div className="text-sm font-bold uppercase">Workload</div>
           </div>
           <div className="p-5 border-4 border-foreground bg-card shadow-neo">

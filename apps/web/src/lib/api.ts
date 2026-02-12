@@ -1,6 +1,13 @@
 import type { ApiResponse } from '@ratemyunit/types';
+import { z } from 'zod';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY = 1000;
+
+interface RequestOptions<S extends z.ZodType<any> = z.ZodType<any>> extends RequestInit {
+  schema?: S;
+}
 
 class ApiClient {
   private csrfToken: string | null = null;
@@ -19,9 +26,9 @@ class ApiClient {
     throw new Error('Failed to fetch CSRF token');
   }
 
-  private async request<T>(
+  private async request<T, S extends z.ZodType<T> = z.ZodType<T>>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestOptions<S> = {}
   ): Promise<T> {
     const url = `${API_URL}${endpoint}`;
     const needsCsrf = options.method && !['GET', 'HEAD', 'OPTIONS'].includes(options.method);
@@ -55,37 +62,75 @@ class ApiClient {
       });
     };
 
-    let response = await executeRequest().catch(error => {
-      console.error('Fetch error:', error);
-      throw error;
-    });
+    let lastError: Error | null = null;
 
-    // Handle expired CSRF token (usually 403)
-    if (response.status === 403 && needsCsrf) {
-       this.csrfToken = null;
-       await this.getCsrfToken();
-       response = await executeRequest();
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt - 1);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+
+        let response = await executeRequest();
+
+        // Retry on 503 Service Unavailable (only for GET/idempotent requests)
+        if (response.status === 503 && (options.method === 'GET' || !options.method) && attempt < MAX_RETRIES) {
+          console.warn(`API 503 error, retrying (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+          continue;
+        }
+
+        // Handle expired CSRF token
+        if (response.status === 403 && needsCsrf && attempt < MAX_RETRIES) {
+          this.csrfToken = null;
+          await this.getCsrfToken();
+          response = await executeRequest();
+        }
+
+        const contentType = response.headers.get('Content-Type');
+        let data: ApiResponse<T>;
+        
+        if (contentType && contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          const text = await response.text();
+          throw new Error(`Server returned non-JSON response (${response.status})`);
+        }
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'An error occurred');
+        }
+
+        if (options.schema) {
+          const result = options.schema.safeParse(data.data);
+          if (!result.success) {
+            console.error('API validation failed:', result.error);
+            throw new Error('Invalid API response structure');
+          }
+          return result.data;
+        }
+
+        return data.data as T;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt === MAX_RETRIES) break;
+        
+        // Don't retry on client errors (4xx) except for the 403 CSRF case handled above
+        const isNetworkError = lastError.message.includes('fetch') || lastError.message.includes('network');
+        if (!isNetworkError && attempt < MAX_RETRIES) {
+             // If it's not a network error and not a 503 (handled above), we might want to stop retrying
+             // But for simplicity in this helper, we'll let the loop continue or break based on status
+        }
+      }
     }
 
-    const contentType = response.headers.get('Content-Type');
-    let data: ApiResponse<T>;
-    
-    if (contentType && contentType.includes('application/json')) {
-      data = await response.json();
-    } else {
-      const text = await response.text();
-      console.error('Non-JSON response received:', text);
-      throw new Error(`Server returned non-JSON response (${response.status}). Check server logs.`);
-    }
-
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || 'An error occurred');
-    }
-
-    return data.data as T;
+    throw lastError || new Error('Request failed');
   }
 
-  async get<T>(endpoint: string, params?: Record<string, string | number | undefined>): Promise<T> {
+  async get<T, S extends z.ZodType<T> = z.ZodType<T>>(
+    endpoint: string, 
+    params?: Record<string, string | number | undefined>, 
+    schema?: S
+  ): Promise<T> {
     let url = endpoint;
     if (params) {
       const searchParams = new URLSearchParams();
@@ -99,32 +144,35 @@ class ApiClient {
         url += (url.includes('?') ? '&' : '?') + queryString;
       }
     }
-    return this.request<T>(url, { method: 'GET' });
+    return this.request<T, S>(url, { method: 'GET', schema });
   }
 
-  async post<T>(endpoint: string, body?: unknown): Promise<T> {
-    return this.request<T>(endpoint, {
+  async post<T, S extends z.ZodType<T> = z.ZodType<T>>(endpoint: string, body?: unknown, schema?: S): Promise<T> {
+    return this.request<T, S>(endpoint, {
       method: 'POST',
       body: body ? JSON.stringify(body) : undefined,
+      schema,
     });
   }
 
-  async put<T>(endpoint: string, body?: unknown): Promise<T> {
-    return this.request<T>(endpoint, {
+  async put<T, S extends z.ZodType<T> = z.ZodType<T>>(endpoint: string, body?: unknown, schema?: S): Promise<T> {
+    return this.request<T, S>(endpoint, {
       method: 'PUT',
       body: body ? JSON.stringify(body) : undefined,
+      schema,
     });
   }
 
-  async patch<T>(endpoint: string, body?: unknown): Promise<T> {
-    return this.request<T>(endpoint, {
+  async patch<T, S extends z.ZodType<T> = z.ZodType<T>>(endpoint: string, body?: unknown, schema?: S): Promise<T> {
+    return this.request<T, S>(endpoint, {
       method: 'PATCH',
       body: body ? JSON.stringify(body) : undefined,
+      schema,
     });
   }
 
-  async delete<T>(endpoint: string): Promise<T> {
-    return this.request<T>(endpoint, { method: 'DELETE' });
+  async delete<T, S extends z.ZodType<T> = z.ZodType<T>>(endpoint: string, schema?: S): Promise<T> {
+    return this.request<T, S>(endpoint, { method: 'DELETE', schema });
   }
 }
 

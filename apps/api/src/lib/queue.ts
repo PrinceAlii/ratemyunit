@@ -4,17 +4,9 @@ import { chromium, Browser } from 'playwright';
 import { config } from '../config.js';
 import { scraperService } from '../services/scraper.js';
 import { createPool, Pool } from 'generic-pool';
-import pino from 'pino';
+import { createLogger } from './logger.js';
 
-const logger = pino({
-  level: config.NODE_ENV === 'production' ? 'info' : 'debug',
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true,
-    },
-  },
-});
+const logger = createLogger('queue');
 
 const connection = new IORedis(config.REDIS_URL, {
   maxRetriesPerRequest: null, // Required by BullMQ

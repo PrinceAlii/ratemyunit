@@ -20,17 +20,13 @@ export async function reviewsRoutes(app: FastifyInstance) {
    * Create a new review.
    */
   app.post('/', async (request, reply) => {
-    if (!request.user) {
-        return reply.status(401).send({ error: 'Unauthorized' });
-    }
-
     const body = createReviewSchema.parse(request.body);
 
     const [existingReview] = await db
       .select()
       .from(reviews)
       .where(and(
-        eq(reviews.userId, request.user.id),
+        eq(reviews.userId, request.user!.id),
         eq(reviews.unitId, body.unitId)
       ))
       .limit(1);
@@ -46,7 +42,7 @@ export async function reviewsRoutes(app: FastifyInstance) {
       .insert(reviews)
       .values({
         ...body,
-        userId: request.user.id,
+        userId: request.user!.id,
         status: 'auto-approved',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -65,10 +61,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
    * Update an existing review.
    */
   app.put('/:id', async (request, reply) => {
-    if (!request.user) {
-        return reply.status(401).send({ error: 'Unauthorized' });
-    }
-
     const paramsSchema = z.object({ id: z.string().uuid('Invalid review ID') });
     const { id } = paramsSchema.parse(request.params);
     const body = updateReviewSchema.parse(request.body);
@@ -86,7 +78,7 @@ export async function reviewsRoutes(app: FastifyInstance) {
       });
     }
 
-    if (review.userId !== request.user.id && request.user.role !== 'admin') {
+    if (review.userId !== request.user!.id && request.user!.role !== 'admin') {
       return reply.status(403).send({
         success: false,
         error: 'You are not authorized to edit this review.',
@@ -114,10 +106,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
    * Delete a review.
    */
   app.delete('/:id', async (request, reply) => {
-    if (!request.user) {
-        return reply.status(401).send({ error: 'Unauthorized' });
-    }
-
     const paramsSchema = z.object({ id: z.string().uuid('Invalid review ID') });
     const { id } = paramsSchema.parse(request.params);
 
@@ -134,7 +122,7 @@ export async function reviewsRoutes(app: FastifyInstance) {
       });
     }
 
-    if (review.userId !== request.user.id && request.user.role !== 'admin') {
+    if (review.userId !== request.user!.id && request.user!.role !== 'admin') {
       return reply.status(403).send({
         success: false,
         error: 'You are not authorized to delete this review.',
@@ -154,9 +142,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
    * Vote on a review (helpful/not helpful).
    */
   app.post('/:id/vote', async (request, reply) => {
-    if (!request.user) {
-        return reply.status(401).send({ error: 'Unauthorized' });
-    }
     const paramsSchema = z.object({ id: z.string().uuid('Invalid review ID') });
     const { id } = paramsSchema.parse(request.params);
     const { voteType } = voteReviewSchema.parse(request.body);
@@ -166,7 +151,7 @@ export async function reviewsRoutes(app: FastifyInstance) {
       .insert(reviewVotes)
       .values({
         reviewId: id,
-        userId: request.user.id,
+        userId: request.user!.id,
         voteType,
       })
       .onConflictDoUpdate({
@@ -185,9 +170,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
    * Flag a review for moderation.
    */
   app.post('/:id/flag', async (request, reply) => {
-    if (!request.user) {
-        return reply.status(401).send({ error: 'Unauthorized' });
-    }
     const paramsSchema = z.object({ id: z.string().uuid('Invalid review ID') });
     const { id } = paramsSchema.parse(request.params);
     const body = flagReviewSchema.parse(request.body);
@@ -198,7 +180,7 @@ export async function reviewsRoutes(app: FastifyInstance) {
       .from(reviewFlags)
       .where(and(
         eq(reviewFlags.reviewId, id),
-        eq(reviewFlags.userId, request.user.id)
+        eq(reviewFlags.userId, request.user!.id)
       ))
       .limit(1);
 
@@ -212,7 +194,7 @@ export async function reviewsRoutes(app: FastifyInstance) {
     // Record flag
     await db.insert(reviewFlags).values({
       reviewId: id,
-      userId: request.user.id,
+      userId: request.user!.id,
       ...body,
     });
 

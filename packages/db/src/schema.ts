@@ -97,7 +97,7 @@ export const units = pgTable('units', {
   creditPoints: integer('credit_points'),
   prerequisites: text('prerequisites'),
   antiRequisites: text('anti_requisites'),
-  sessions: text('sessions'), // JSONB stored as text, will parse in application
+  sessions: jsonb('sessions').$type<string[]>(),
   faculty: varchar('faculty', { length: 255 }),
   scrapedAt: timestamp('scraped_at'),
   active: boolean('active').default(true).notNull(),
@@ -111,7 +111,7 @@ export const units = pgTable('units', {
   assessmentStrategy: text('assessment_strategy'),
 
   // Learning Outcomes - new fields for UTS scraper
-  learningOutcomes: text('learning_outcomes'),
+  learningOutcomes: jsonb('learning_outcomes').$type<string[]>(),
   syllabus: text('syllabus'),
 
   // Status Tracking - new fields for UTS scraper
@@ -120,7 +120,7 @@ export const units = pgTable('units', {
   lastModifiedCourseLoop: timestamp('last_modified_course_loop'),
 
   // Delivery Information - new fields for UTS scraper
-  deliveryModes: text('delivery_modes'),
+  deliveryModes: jsonb('delivery_modes').$type<string[]>(),
 }, (t) => ({
   unitCodeIdx: index('units_unit_code_idx').on(t.unitCode),
   unitNameIdx: index('units_unit_name_idx').on(t.unitName),

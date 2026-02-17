@@ -218,7 +218,20 @@ const AUSTRALIAN_UNIVERSITIES = [
     scraperType: 'courseloop',
     scraperRoutes: {
       base: 'https://www.handbook.unsw.edu.au',
-      subject: '/undergraduate/courses/2025/:code',
+      subject: '/undergraduate/courses/2026/:code',
+      discovery: '/sitemap.xml'
+    }
+  },
+  {
+    name: 'University of New South Wales (Postgraduate)',
+    abbreviation: 'UNSW-PG',
+    emailDomain: 'pgstudent.unsw.edu.au',
+    websiteUrl: 'https://www.unsw.edu.au',
+    handbookUrl: 'https://www.handbook.unsw.edu.au',
+    scraperType: 'courseloop',
+    scraperRoutes: {
+      base: 'https://www.handbook.unsw.edu.au',
+      subject: '/postgraduate/courses/2026/:code',
       discovery: '/sitemap.xml'
     }
   },

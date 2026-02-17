@@ -42,9 +42,10 @@ class ApiClient {
     }
 
     const executeRequest = async (): Promise<Response> => {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
+      const headers: Record<string, string> = {};
+      if (options.body !== undefined) {
+        headers['Content-Type'] = 'application/json';
+      }
 
       if (options.headers) {
         const inputHeaders = options.headers as Record<string, string>;

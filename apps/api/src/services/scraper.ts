@@ -1,6 +1,6 @@
 import { db } from '@ratemyunit/db/client';
 import { units, universities } from '@ratemyunit/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { chromium, Browser } from 'playwright';
 import { ScraperFactory, type ScraperType } from '../scrapers/factory.js';
 import { ScraperConfigSchema } from '../scrapers/strategies/base.js';
@@ -83,7 +83,7 @@ export class ScraperService {
         description: data.description,
         creditPoints: data.creditPoints,
         faculty: data.faculty,
-        sessions: JSON.stringify(data.sessions),
+        sessions: sql`${JSON.stringify(data.sessions)}::jsonb`,
         scrapedAt: new Date(),
         active: true,
       })
@@ -94,7 +94,7 @@ export class ScraperService {
           description: data.description,
           creditPoints: data.creditPoints,
           faculty: data.faculty,
-          sessions: JSON.stringify(data.sessions),
+          sessions: sql`${JSON.stringify(data.sessions)}::jsonb`,
           scrapedAt: new Date(),
           updatedAt: new Date(),
         },

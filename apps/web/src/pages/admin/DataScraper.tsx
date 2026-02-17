@@ -121,17 +121,22 @@ export function DataScraper() {
     refetchInterval: jobsDialogOpen ? 5000 : false,
   });
 
+  const [deleteAllUnitsDialogOpen, setDeleteAllUnitsDialogOpen] = useState(false);
+
   const { data: recentScrapes } = useQuery({
     queryKey: ['admin', 'recent-scrapes'],
     queryFn: async () => {
-      const response = await api.get<Array<{
-        id: string;
-        unitCode: string;
-        unitName: string;
-        scrapedAt: string | null;
-        universityName?: string;
-      }>>('/api/units/search', { limit: 10, sort: 'recent' });
-      return response;
+      const response = await api.get<{
+        data: Array<{
+          id: string;
+          unitCode: string;
+          unitName: string;
+          scrapedAt: string | null;
+          universityName?: string;
+        }>;
+        pagination: { total: number };
+      }>('/api/units/search', { limit: 10, sort: 'recent' });
+      return response.data;
     },
     refetchInterval: 10000,
   });
@@ -234,6 +239,20 @@ export function DataScraper() {
     },
     onError: (error: Error) => {
       toast.error(`Failed to cancel job: ${error.message}`);
+    },
+  });
+
+  const deleteAllUnitsMutation = useMutation({
+    mutationFn: () => api.delete<{ message: string }>('/api/admin/units'),
+    onSuccess: (data) => {
+      toast.success(data.message);
+      setDeleteAllUnitsDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['admin'] });
+      queryClient.invalidateQueries({ queryKey: ['units'] });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete units: ${error.message}`);
+      setDeleteAllUnitsDialogOpen(false);
     },
   });
 
@@ -444,8 +463,37 @@ export function DataScraper() {
               </>
             )}
           </Button>
+
+          <Button
+            onClick={() => setDeleteAllUnitsDialogOpen(true)}
+            disabled={deleteAllUnitsMutation.isPending}
+            variant="destructive"
+            className="h-12 border-4 font-bold"
+          >
+            {deleteAllUnitsMutation.isPending ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <X className="h-5 w-5 mr-2" />
+                Delete All Units
+              </>
+            )}
+          </Button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={deleteAllUnitsDialogOpen}
+        onOpenChange={setDeleteAllUnitsDialogOpen}
+        title="Delete All Units"
+        description="This will permanently delete all indexed units and their associated reviews. This cannot be undone."
+        confirmText="Delete All"
+        variant="destructive"
+        onConfirm={() => deleteAllUnitsMutation.mutate()}
+      />
 
       {/* Global University Selector */}
       <div className="p-6 border-4 border-foreground bg-card shadow-neo">

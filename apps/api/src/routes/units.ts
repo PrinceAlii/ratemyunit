@@ -111,14 +111,16 @@ export async function unitsRoutes(app: FastifyInstance) {
       
     return reply.send({
       success: true,
-      data: results,
-      pagination: {
+      data: {
+        data: results,
+        pagination: {
           total,
           limit: limitVal,
           offset: offsetVal,
           page: Math.floor(offsetVal / limitVal) + 1,
-          totalPages: Math.ceil(total / limitVal)
-      }
+          totalPages: Math.ceil(total / limitVal),
+        },
+      },
     });
   });
 

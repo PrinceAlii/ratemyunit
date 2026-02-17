@@ -172,15 +172,19 @@ export function setupWorker() {
                 
                 // Check if we should retry (Blocking errors or Timeouts)
                 if (result.error && (
-                    result.error.includes('Blocking error') || 
-                    result.error.includes('429') || 
-                    result.error.includes('403') || 
+                    result.error.includes('Blocking error') ||
+                    result.error.includes('429') ||
+                    result.error.includes('403') ||
                     result.error.includes('Timeout') ||
                     result.error.includes('Navigation failed')
                 )) {
-                    consecutiveBlockingErrors++; 
+                    consecutiveBlockingErrors++;
                     logger.warn(`🔄 Retrying job ${job.id} due to transient error: ${result.error}. Consecutive errors: ${consecutiveBlockingErrors}`);
                     throw new Error(result.error); // Throwing triggers BullMQ retry with backoff
+                } else {
+                    // Non-blocking failure (e.g. unit not found) - reset blocking counter
+                    consecutiveBlockingErrors = 0;
+                    backoffMultiplier = 1;
                 }
             } else {
                 // Success - reset blocking counter

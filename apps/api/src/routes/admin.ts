@@ -532,4 +532,17 @@ export async function adminRoutes(app: FastifyInstance) {
       });
     }
   });
+
+  /**
+   * DELETE /api/admin/units
+   * Delete all indexed units and their associated reviews.
+   */
+  app.delete('/units', async (_request, reply) => {
+    const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(units);
+    await db.delete(units);
+    return reply.send({
+      success: true,
+      message: `Deleted ${count} units and all associated reviews.`,
+    });
+  });
 }

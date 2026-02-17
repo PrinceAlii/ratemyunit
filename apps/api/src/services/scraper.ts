@@ -151,6 +151,7 @@ export class ScraperService {
         unitName: result.data.name,
       };
     } catch (error) {
+      logger.error({ error, unitCode }, 'Failed to scrape unit');
       return {
         success: false,
         unitCode,

@@ -30,9 +30,8 @@ interface ScrapeStatus {
 
 interface BulkScrapeResult {
   total: number;
-  successful: number;
-  failed: number;
-  errors: Array<{ code: string; error: string }>;
+  queued: number;
+  message: string;
 }
 
 interface QueueStatus {
@@ -164,9 +163,8 @@ export function DataScraper() {
       universityId: selectedUni || undefined
     }),
     onSuccess: (data) => {
-      const message = `Scraped ${data.successful}/${data.total} units successfully. ${data.failed} failed.`;
-      setBulkMessage({ type: 'success', text: message });
-      toast.success(message);
+      setBulkMessage({ type: 'success', text: data.message });
+      toast.success(data.message);
       setBulkCodes('');
       setBulkDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['admin'] });
@@ -654,7 +652,7 @@ export function DataScraper() {
         <h3 className="text-xl font-display font-black uppercase mb-4">Recent Scrapes</h3>
         {!recentScrapes ? (
           <LoadingSpinner />
-        ) : recentScrapes.length === 0 ? (
+        ) : !Array.isArray(recentScrapes) || recentScrapes.length === 0 ? (
           <p className="text-center py-8 font-bold">No scrapes yet.</p>
         ) : (
           <div className="border-3 border-foreground overflow-hidden">

@@ -544,7 +544,7 @@ export async function adminRoutes(app: FastifyInstance) {
     await db.delete(units);
     return reply.send({
       success: true,
-      message: `Deleted ${count} units and all associated reviews.`,
+      data: { message: `Deleted ${count} units and all associated reviews.` },
     });
   });
 }

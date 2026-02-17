@@ -93,7 +93,7 @@ class ApiClient {
           data = await response.json();
         } else {
           const text = await response.text();
-          throw new Error(`Server returned non-JSON response (${response.status})`);
+          throw new Error(`Server returned non-JSON response (${response.status}): ${text}`);
         }
 
         if (!response.ok || !data.success) {

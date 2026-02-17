@@ -83,7 +83,7 @@ export class ScraperService {
         description: data.description,
         creditPoints: data.creditPoints,
         faculty: data.faculty,
-        sessions: data.sessions,
+        sessions: JSON.stringify(data.sessions),
         scrapedAt: new Date(),
         active: true,
       })
@@ -94,7 +94,7 @@ export class ScraperService {
           description: data.description,
           creditPoints: data.creditPoints,
           faculty: data.faculty,
-          sessions: data.sessions,
+          sessions: JSON.stringify(data.sessions),
           scrapedAt: new Date(),
           updatedAt: new Date(),
         },
@@ -103,7 +103,7 @@ export class ScraperService {
 
   async discoverUnits(universityId: string, existingBrowser?: Browser): Promise<string[]> {
     logger.info(`🔧 ScraperService.discoverUnits called for uni: ${universityId}`);
-    const { uni, scraper } = await this.getUniversityScraper(universityId);
+    const { scraper } = await this.getUniversityScraper(universityId);
     
     let browser = existingBrowser;
     let shouldClose = false;

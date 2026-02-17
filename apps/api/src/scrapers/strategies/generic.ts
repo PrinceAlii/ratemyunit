@@ -31,7 +31,8 @@ export class GenericDomScraper extends BaseScraper {
       return await this.extractFromPage(page, cleanCode);
 
     } catch (error) {
-       return { success: false, subjectCode: cleanCode, error: String(error), scrapedAt };
+       logger.error({ err: error, subjectCode: cleanCode }, 'scrapeSubject failed');
+       return { success: false, subjectCode: cleanCode, error: error instanceof Error ? error.message : String(error), scrapedAt };
     } finally {
       await page.close();
     }
@@ -120,7 +121,8 @@ export class GenericDomScraper extends BaseScraper {
             scrapedAt
         };
     } catch (e) {
-        return { success: false, subjectCode, error: String(e), scrapedAt };
+        logger.error({ err: e, subjectCode }, 'extractFromPage failed');
+        return { success: false, subjectCode, error: e instanceof Error ? e.message : String(e), scrapedAt };
     }
   }
 

@@ -320,7 +320,9 @@ export async function adminRoutes(app: FastifyInstance) {
       type: 'discovery',
       universityId: id
     }, {
-      jobId: `discovery-${id}` // Deduplicate discovery jobs
+      jobId: `discovery-${id}`, // Deduplicate discovery jobs
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 10000 },
     });
 
     return { success: true, message: 'Discovery scan queued' };

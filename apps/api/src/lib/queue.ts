@@ -151,6 +151,10 @@ export function setupWorker() {
               } else {
                   logger.warn(`⚠️ No jobs to queue (codes array was empty)`);
               }
+
+              // Success - reset blocking counter
+              consecutiveBlockingErrors = 0;
+              backoffMultiplier = 1;
           } catch (e) {
               logger.error({ err: e }, `❌ Discovery failed for ${universityId}`);
               throw e;
@@ -229,12 +233,6 @@ export function setupWorker() {
     logger.error({ err }, `Job ${job?.id} failed`);
   });
   
-  // Cleanup on exit
-  process.on('SIGTERM', async () => {
-      await browserPool.drain().then(() => browserPool.clear());
-      await worker.close();
-  });
-
   logger.info('✅ Scraper Worker ready');
   return worker;
 }

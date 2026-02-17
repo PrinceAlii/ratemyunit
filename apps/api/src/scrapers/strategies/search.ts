@@ -1,6 +1,9 @@
 import { Browser } from 'playwright';
 import { GenericDomScraper } from './generic.js';
 import { ScraperResult } from '../uts/types.js';
+import { createLogger } from '../../lib/logger.js';
+
+const logger = createLogger('search-scraper');
 
 export class SearchDomScraper extends GenericDomScraper {
 
@@ -46,11 +49,12 @@ export class SearchDomScraper extends GenericDomScraper {
       return await this.extractFromPage(page, cleanCode);
 
     } catch (error) {
-      return { 
-        success: false, 
-        subjectCode: cleanCode, 
-        error: `Search/Scrape failed: ${error instanceof Error ? error.message : String(error)}`, 
-        scrapedAt 
+      logger.error({ err: error, subjectCode: cleanCode }, 'Search/Scrape failed');
+      return {
+        success: false,
+        subjectCode: cleanCode,
+        error: `Search/Scrape failed: ${error instanceof Error ? error.message : String(error)}`,
+        scrapedAt
       };
     } finally {
       await page.close();

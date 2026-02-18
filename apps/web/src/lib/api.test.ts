@@ -233,6 +233,21 @@ describe('ApiClient', () => {
       const [, opts] = mockFetch.mock.calls[1];
       expect(opts.method).toBe('DELETE');
     });
+
+    it('makes a DELETE request with body', async () => {
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse({ success: true, data: { token: 'csrf' } }),
+      );
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse({ success: true, data: null }),
+      );
+
+      await api.delete('/api/reviews/1', { confirm: true });
+
+      const [, opts] = mockFetch.mock.calls[1];
+      expect(opts.method).toBe('DELETE');
+      expect(opts.body).toBe(JSON.stringify({ confirm: true }));
+    });
   });
 
   describe('patch', () => {

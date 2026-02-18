@@ -241,7 +241,7 @@ export function DataScraper() {
   });
 
   const deleteAllUnitsMutation = useMutation({
-    mutationFn: () => api.delete<{ message: string }>('/api/admin/units'),
+    mutationFn: () => api.delete<{ message: string }>('/api/admin/units', { confirm: true }),
     onSuccess: (data) => {
       toast.success(data.message);
       setDeleteAllUnitsDialogOpen(false);

@@ -187,8 +187,12 @@ class ApiClient {
     });
   }
 
-  async delete<T, S extends z.ZodType<T> = z.ZodType<T>>(endpoint: string, schema?: S): Promise<T> {
-    return this.request<T, S>(endpoint, { method: 'DELETE', schema });
+  async delete<T, S extends z.ZodType<T> = z.ZodType<T>>(endpoint: string, body?: unknown, schema?: S): Promise<T> {
+    return this.request<T, S>(endpoint, { 
+      method: 'DELETE', 
+      body: body ? JSON.stringify(body) : undefined,
+      schema 
+    });
   }
 }
 

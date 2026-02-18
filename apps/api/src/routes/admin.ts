@@ -74,7 +74,7 @@ export async function adminRoutes(app: FastifyInstance) {
    * Approve or remove a review.
    */
   app.post('/reviews/:id/moderate', async (request, reply) => {
-    const { id } = request.params as { id: string };
+    const { id } = z.object({ id: z.string().uuid('Invalid review ID') }).parse(request.params);
     const { action } = moderateReviewSchema.parse(request.body);
 
     const status = action === 'restore' ? 'approved' : 'removed';
@@ -120,7 +120,7 @@ export async function adminRoutes(app: FastifyInstance) {
    * Ban or unban a user.
    */
   app.post('/users/:id/ban', async (request, reply) => {
-    const { id } = request.params as { id: string };
+    const { id } = z.object({ id: z.string().uuid('Invalid user ID') }).parse(request.params);
     const { banned } = banUserSchema.parse(request.body);
 
     if (request.user!.id === id) {
@@ -142,7 +142,7 @@ export async function adminRoutes(app: FastifyInstance) {
    * Permanently delete a user and all their data (cascading).
    */
   app.delete('/users/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
+    const { id } = z.object({ id: z.string().uuid('Invalid user ID') }).parse(request.params);
 
     app.log.info({ userId: id, currentUserId: request.user?.id }, 'Attempting to delete user');
 
@@ -177,7 +177,7 @@ export async function adminRoutes(app: FastifyInstance) {
    * Get login and activity logs for a specific user.
    */
   app.get('/users/:id/telemetry', async (request, reply) => {
-    const { id } = request.params as { id: string };
+    const { id } = z.object({ id: z.string().uuid('Invalid user ID') }).parse(request.params);
 
     const logs = await db
       .select()
@@ -538,13 +538,25 @@ export async function adminRoutes(app: FastifyInstance) {
   /**
    * DELETE /api/admin/units
    * Delete all indexed units and their associated reviews.
+   * Requires { confirm: true } in the request body to prevent accidental data loss.
    */
-  app.delete('/units', async (_request, reply) => {
+  app.delete('/units', async (request, reply) => {
+    const bodySchema = z.object({ confirm: z.literal(true) });
+    const result = bodySchema.safeParse(request.body);
+
+    if (!result.success) {
+      return reply.status(400).send({
+        success: false,
+        error: 'This operation requires { "confirm": true } in the request body.',
+      });
+    }
+
     const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(units);
     await db.delete(units);
+    await scraperQueue.obliterate({ force: true });
     return reply.send({
       success: true,
-      data: { message: `Deleted ${count} units and all associated reviews.` },
+      data: { message: `Deleted ${count} units and cleared the scraper queue.` },
     });
   });
 }

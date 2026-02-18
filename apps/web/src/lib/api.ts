@@ -5,6 +5,13 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY = 1000;
 
+class HttpError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
 interface RequestOptions<S extends z.ZodType<any> = z.ZodType<any>> extends RequestInit {
   schema?: S;
 }
@@ -80,25 +87,35 @@ class ApiClient {
           continue;
         }
 
-        // Handle expired CSRF token
+        // Handle expired CSRF token — only refresh when the 403 is actually a CSRF failure,
+        // not for legitimate "Forbidden" responses (e.g. "not authorized to edit this review").
         if (response.status === 403 && needsCsrf && attempt < MAX_RETRIES) {
-          this.csrfToken = null;
-          await this.getCsrfToken();
-          response = await executeRequest();
+          try {
+            const cloned = response.clone();
+            const errorBody = await cloned.json();
+            const errorMsg: string = (errorBody?.message ?? errorBody?.error ?? '').toLowerCase();
+            if (errorMsg.includes('csrf')) {
+              this.csrfToken = null;
+              await this.getCsrfToken();
+              response = await executeRequest();
+            }
+          } catch {
+            // If we can't parse the body, fall through to normal error handling.
+          }
         }
 
         const contentType = response.headers.get('Content-Type');
         let data: ApiResponse<T>;
-        
+
         if (contentType && contentType.includes('application/json')) {
           data = await response.json();
         } else {
           const text = await response.text();
-          throw new Error(`Server returned non-JSON response (${response.status}): ${text}`);
+          throw new HttpError(`Server returned non-JSON response (${response.status}): ${text}`, response.status);
         }
 
         if (!response.ok || !data.success) {
-          throw new Error(data.error || 'An error occurred');
+          throw new HttpError(data.error || 'An error occurred', response.status);
         }
 
         if (options.schema) {
@@ -114,12 +131,10 @@ class ApiClient {
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         if (attempt === MAX_RETRIES) break;
-        
-        // Don't retry on client errors (4xx) except for the 403 CSRF case handled above
-        const isNetworkError = lastError.message.includes('fetch') || lastError.message.includes('network');
-        if (!isNetworkError && attempt < MAX_RETRIES) {
-             // If it's not a network error and not a 503 (handled above), we might want to stop retrying
-             // But for simplicity in this helper, we'll let the loop continue or break based on status
+
+        // Client errors (4xx) are not retryable — fail fast to avoid unnecessary latency.
+        if (lastError instanceof HttpError && lastError.status >= 400 && lastError.status < 500) {
+          break;
         }
       }
     }

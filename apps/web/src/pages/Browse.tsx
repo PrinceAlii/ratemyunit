@@ -85,16 +85,12 @@ export function BrowsePage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const faculties = [
-    'Faculty of Engineering and IT',
-    'Faculty of Arts and Social Sciences',
-    'Faculty of Business',
-    'Faculty of Design, Architecture and Building',
-    'Faculty of Health',
-    'Faculty of Law',
-    'Faculty of Science',
-    'TD School',
-  ];
+  // Fetch distinct faculties for the selected university so the filter reflects real data.
+  const { data: availableFaculties } = useQuery({
+    queryKey: ['faculties', universityId],
+    queryFn: () => api.get<string[]>('/api/public/faculties', universityId ? { universityId } : undefined),
+    enabled: true,
+  });
 
   const renderPagination = () => {
     if (!pagination || pagination.totalPages <= 1) return null;
@@ -162,7 +158,7 @@ export function BrowsePage() {
             <p className="text-lg font-medium">
               Search subjects across all Australian universities.
             </p>
-            {pagination && (
+            {pagination && pagination.total > 0 && (
               <p className="text-sm font-black uppercase bg-muted px-3 py-1 border-2 border-foreground">
                 Showing {pagination.offset + 1}-{Math.min(pagination.offset + pagination.limit, pagination.total)} of {pagination.total} units
               </p>
@@ -218,7 +214,7 @@ export function BrowsePage() {
                 }}
               >
                 <option value="">All Faculties</option>
-                {faculties.map((f) => (
+                {availableFaculties?.map((f) => (
                   <option key={f} value={f}>
                     {f}
                   </option>

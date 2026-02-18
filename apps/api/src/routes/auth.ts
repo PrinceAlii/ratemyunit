@@ -68,19 +68,12 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    // Check if user already exists.
+    // Check if user already exists before doing the expensive Argon2 hash.
     const [existingUser] = await db
       .select()
       .from(users)
       .where(eq(users.email, body.email))
       .limit(1);
-
-    const passwordHash = await hash(body.password, {
-      memoryCost: 47104,
-      timeCost: 3,
-      outputLen: 32,
-      parallelism: 1,
-    });
 
     if (existingUser) {
       return reply.status(400).send({
@@ -88,6 +81,13 @@ export async function authRoutes(app: FastifyInstance) {
         error: 'An account with this email already exists.',
       });
     }
+
+    const passwordHash = await hash(body.password, {
+      memoryCost: 47104,
+      timeCost: 3,
+      outputLen: 32,
+      parallelism: 1,
+    });
 
     // Determine if domain is verified (email matches selected university)
     const domainVerified = matchedUniversity && matchedUniversity.id === selectedUniversity.id;

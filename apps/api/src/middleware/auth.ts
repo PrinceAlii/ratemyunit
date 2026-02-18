@@ -84,6 +84,9 @@ export async function requireAdmin(
 ): Promise<void> {
   await requireAuth(request, reply);
 
+  // If requireAuth already sent a response (401/403), don't try to send another one.
+  if (reply.sent) return;
+
   if (request.user?.role !== 'admin') {
     return reply.status(403).send({
       success: false,

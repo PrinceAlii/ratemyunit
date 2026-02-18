@@ -26,6 +26,7 @@
     "db:setup": "drizzle-kit push --force && bash scripts/seed.sh",
     "fix-uts-templates": "tsx src/scripts/fix-uts-templates.ts",
     "cleanup-templates": "tsx src/scripts/remove-non-list-templates.ts",
+    "remove-broad-templates": "tsx src/scripts/remove-broad-range-templates.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"
   },

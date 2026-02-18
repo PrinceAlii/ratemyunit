@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { db } from '@ratemyunit/db/client';
-import { universities } from '@ratemyunit/db/schema';
-import { eq, asc } from 'drizzle-orm';
+import { universities, units } from '@ratemyunit/db/schema';
+import { and, eq, asc, isNotNull } from 'drizzle-orm';
 
 export async function publicDataRoutes(app: FastifyInstance) {
   /**
@@ -24,6 +25,35 @@ export async function publicDataRoutes(app: FastifyInstance) {
     return reply.send({
       success: true,
       data: activeUnis,
+    });
+  });
+
+  /**
+   * GET /api/public/faculties
+   * Get distinct faculties, optionally filtered by university.
+   * Used by the Browse page filter to show relevant faculty options.
+   */
+  app.get('/faculties', async (request, reply) => {
+    const querySchema = z.object({
+      universityId: z.string().uuid().optional(),
+    });
+
+    const { universityId } = querySchema.parse(request.query);
+
+    const whereClause = universityId
+      ? and(isNotNull(units.faculty), eq(units.universityId, universityId))
+      : isNotNull(units.faculty);
+
+    const rows = await db
+      .selectDistinct({ faculty: units.faculty })
+      .from(units)
+      .where(whereClause)
+      .orderBy(asc(units.faculty));
+    const faculties = rows.map((r) => r.faculty).filter(Boolean) as string[];
+
+    return reply.send({
+      success: true,
+      data: faculties,
     });
   });
 }

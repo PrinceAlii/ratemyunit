@@ -141,10 +141,39 @@ export async function reviewsRoutes(app: FastifyInstance) {
    * POST /api/reviews/:id/vote
    * Vote on a review (helpful/not helpful).
    */
-  app.post('/:id/vote', async (request, reply) => {
+  app.post('/:id/vote', {
+    config: {
+      rateLimit: {
+        max: 30,
+        timeWindow: '1 minute',
+      },
+    },
+  }, async (request, reply) => {
     const paramsSchema = z.object({ id: z.string().uuid('Invalid review ID') });
     const { id } = paramsSchema.parse(request.params);
     const { voteType } = voteReviewSchema.parse(request.body);
+
+    // Check review exists
+    const [review] = await db
+      .select()
+      .from(reviews)
+      .where(eq(reviews.id, id))
+      .limit(1);
+
+    if (!review) {
+      return reply.status(404).send({
+        success: false,
+        error: 'Review not found.',
+      });
+    }
+
+    // Prevent self-voting
+    if (request.user!.id === review.userId) {
+      return reply.status(400).send({
+        success: false,
+        error: 'You cannot vote on your own review.',
+      });
+    }
 
     // Upsert vote
     await db
@@ -169,10 +198,31 @@ export async function reviewsRoutes(app: FastifyInstance) {
    * POST /api/reviews/:id/flag
    * Flag a review for moderation.
    */
-  app.post('/:id/flag', async (request, reply) => {
+  app.post('/:id/flag', {
+    config: {
+      rateLimit: {
+        max: 10,
+        timeWindow: '1 hour',
+      },
+    },
+  }, async (request, reply) => {
     const paramsSchema = z.object({ id: z.string().uuid('Invalid review ID') });
     const { id } = paramsSchema.parse(request.params);
     const body = flagReviewSchema.parse(request.body);
+
+    // Check review exists
+    const [review] = await db
+      .select()
+      .from(reviews)
+      .where(eq(reviews.id, id))
+      .limit(1);
+
+    if (!review) {
+      return reply.status(404).send({
+        success: false,
+        error: 'Review not found.',
+      });
+    }
 
     // Check if user already flagged this review
     const [existingFlag] = await db
@@ -198,13 +248,13 @@ export async function reviewsRoutes(app: FastifyInstance) {
       ...body,
     });
 
-    // Auto-flag logic: Count total flags
+    // Auto-flag: require at least 3 flags before hiding a review to prevent single-user censorship.
     const [flagCount] = await db
       .select({ value: count() })
       .from(reviewFlags)
       .where(eq(reviewFlags.reviewId, id));
 
-    if (flagCount.value >= 1) {
+    if (flagCount.value >= 3) {
       await db
         .update(reviews)
         .set({ status: 'flagged' })

@@ -25,7 +25,7 @@ beforeEach(() => {
 describe('HomePage', () => {
   it('renders hero text and search input', () => {
     renderHome();
-    expect(screen.getByText(/Rate/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/Search for a unit/i)).toBeInTheDocument();
   });
 

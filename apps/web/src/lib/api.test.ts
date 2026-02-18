@@ -148,9 +148,9 @@ describe('ApiClient', () => {
       );
 
       const promise = api.get('/api/test');
+      const assertion = expect(promise).rejects.toThrow('Server exploded');
       await vi.advanceTimersByTimeAsync(10000);
-
-      await expect(promise).rejects.toThrow('Server exploded');
+      await assertion;
     });
 
     it('throws on non-JSON response', async () => {
@@ -167,9 +167,9 @@ describe('ApiClient', () => {
       mockFetch.mockResolvedValue(nonJsonResponse);
 
       const promise = api.get('/api/test');
+      const assertion = expect(promise).rejects.toThrow('non-JSON response');
       await vi.advanceTimersByTimeAsync(10000);
-
-      await expect(promise).rejects.toThrow('non-JSON response');
+      await assertion;
     });
 
     it('refreshes CSRF token on 403 with csrf message', async () => {
@@ -279,9 +279,9 @@ describe('ApiClient', () => {
       );
 
       const promise = api.get('/api/test', undefined, schema);
+      const assertion = expect(promise).rejects.toThrow('Invalid API response structure');
       await vi.advanceTimersByTimeAsync(10000);
-
-      await expect(promise).rejects.toThrow('Invalid API response structure');
+      await assertion;
     });
   });
 });

@@ -158,8 +158,8 @@ describe('UnitDetails', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Overall')).toBeInTheDocument();
-      expect(screen.getByText('Teaching')).toBeInTheDocument();
-      expect(screen.getByText('Workload')).toBeInTheDocument();
+      expect(screen.getAllByText('Teaching').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Workload').length).toBeGreaterThan(0);
     });
   });
 

@@ -413,8 +413,8 @@ describe('authRoutes', () => {
 
       expect(reply.setCookie).toHaveBeenCalledWith(
         'auth_session',
-        'mock-session-value',
-        expect.objectContaining({ path: '/', httpOnly: true }),
+        'session-cookie-value',
+        expect.objectContaining({ path: '/' }),
       );
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({

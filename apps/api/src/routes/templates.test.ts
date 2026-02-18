@@ -10,9 +10,19 @@ import { TEST_IDS, mockAdmin } from '../__tests__/helpers/fixtures';
 
 // --- Mocks ------------------------------------------------------------------
 
-const mockSelect = vi.fn();
-const mockInsert = vi.fn();
-const mockUpdate = vi.fn();
+const {
+  mockSelect, mockInsert, mockUpdate,
+  mockValidateTemplate, mockGenerateCodesFromTemplateData,
+  mockAddBulk, mockGetJobCounts,
+} = vi.hoisted(() => ({
+  mockSelect: vi.fn(),
+  mockInsert: vi.fn(),
+  mockUpdate: vi.fn(),
+  mockValidateTemplate: vi.fn(),
+  mockGenerateCodesFromTemplateData: vi.fn(),
+  mockAddBulk: vi.fn(),
+  mockGetJobCounts: vi.fn(),
+}));
 
 vi.mock('@ratemyunit/db/client', () => ({
   db: {
@@ -57,18 +67,12 @@ vi.mock('../middleware/auth.js', () => ({
   requireAdmin: vi.fn(),
 }));
 
-const mockValidateTemplate = vi.fn();
-const mockGenerateCodesFromTemplateData = vi.fn();
-
 vi.mock('../services/template.js', () => ({
   subjectTemplateService: {
     validateTemplate: mockValidateTemplate,
     generateCodesFromTemplateData: mockGenerateCodesFromTemplateData,
   },
 }));
-
-const mockAddBulk = vi.fn();
-const mockGetJobCounts = vi.fn();
 
 vi.mock('../lib/queue.js', () => ({
   scraperQueue: {

@@ -31,7 +31,6 @@ describe('config', () => {
 
   it('applies default values', async () => {
     process.env = {
-      ...process.env,
       DATABASE_URL: validEnv.DATABASE_URL,
       JWT_SECRET: validEnv.JWT_SECRET,
     };

@@ -62,6 +62,7 @@ async function fixUtsTemplates() {
   // 5. Group codes by prefix/faculty logic
   const groups: Record<string, string[]> = {
     'IT Subjects (31XXX-32XXX)': [],
+    'Engineering Subjects (4XXXX)': [],
     'Business Subjects (2XXXX)': [],
     'Health Subjects (9XXXX, 09XXX)': [],
     'Law Subjects (7XXXX)': [],
@@ -76,7 +77,7 @@ async function fixUtsTemplates() {
 
   for (const code of validCodes) {
       if (code.startsWith('31') || code.startsWith('32')) groups['IT Subjects (31XXX-32XXX)'].push(code);
-      else if (code.startsWith('4')) continue;
+      else if (code.startsWith('4')) groups['Engineering Subjects (4XXXX)'].push(code);
       else if (code.startsWith('2')) groups['Business Subjects (2XXXX)'].push(code);
       else if (code.startsWith('09') || code.startsWith('90') || code.startsWith('91') || code.startsWith('92') || code.startsWith('93') || code.startsWith('96')) groups['Health Subjects (9XXXX, 09XXX)'].push(code);
       else if (code.startsWith('7')) groups['Law Subjects (7XXXX)'].push(code);

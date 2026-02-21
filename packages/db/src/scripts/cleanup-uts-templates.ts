@@ -75,7 +75,7 @@ function formatStats(stats: TemplateStats | null) {
 }
 
 async function cleanupUtsTemplates() {
-  console.log('🧹 Cleaning up UTS templates...');
+  console.log('Cleaning up UTS templates...');
 
   const [uts] = await db
     .select()
@@ -84,7 +84,7 @@ async function cleanupUtsTemplates() {
     .limit(1);
 
   if (!uts) {
-    console.error('❌ UTS not found in database');
+    console.error('UTS not found in database');
     process.exit(1);
   }
 
@@ -109,11 +109,11 @@ async function cleanupUtsTemplates() {
     const stats = template.templateType === 'list'
       ? formatStats(getNumericStats(normalizeCodes(template.codeList)))
       : 'non-list';
-    console.log(`  ✓ ${template.name} (${template.templateType}) -> ${stats}`);
+    console.log(`  - ${template.name} (${template.templateType}) -> ${stats}`);
   });
 
   if (removalCandidates.length === 0) {
-    console.log('✅ No templates matched cleanup criteria.');
+    console.log('No templates matched cleanup criteria.');
     return;
   }
 
@@ -134,8 +134,8 @@ async function cleanupUtsTemplates() {
     .delete(subjectCodeTemplates)
     .where(inArray(subjectCodeTemplates.id, removalCandidates.map((template) => template.id)));
 
-  console.log(`✅ Deleted ${removalCandidates.length} template(s).`);
-  console.log('✅ UTS template cleanup complete.');
+  console.log(`Deleted ${removalCandidates.length} template(s).`);
+  console.log('UTS template cleanup complete.');
 }
 
 cleanupUtsTemplates().catch((err) => {

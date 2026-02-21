@@ -5,6 +5,9 @@ import { setupWorker, scraperQueue, browserPool } from './lib/queue.js';
 import { dbClient } from '@ratemyunit/db/client';
 import { sql } from 'drizzle-orm';
 import { db } from '@ratemyunit/db';
+import { createLogger } from './lib/logger.js';
+
+const logger = createLogger('server');
 
 async function verifyDatabaseMigrations() {
   try {
@@ -20,8 +23,8 @@ async function verifyDatabaseMigrations() {
     const migrationsTableExists = result[0]?.exists;
 
     if (!migrationsTableExists) {
-      console.warn('⚠️  WARNING: Migrations table not found. Database may not be initialized.');
-      console.warn('   Run migrations with: npm run db:migrate');
+      logger.warn('⚠️  WARNING: Migrations table not found. Database may not be initialized.');
+      logger.warn('   Run migrations with: npm run db:migrate');
       return false;
     }
 
@@ -31,11 +34,11 @@ async function verifyDatabaseMigrations() {
     `);
 
     const migrationsCount = Number(migrationsResult[0]?.count || 0);
-    console.log(`✅ Database migrations verified: ${migrationsCount} migration(s) applied`);
+    logger.info(`✅ Database migrations verified: ${migrationsCount} migration(s) applied`);
 
     return true;
   } catch (error) {
-    console.error('❌ Failed to verify database migrations:', error);
+    logger.error({ err: error }, '❌ Failed to verify database migrations');
     throw error;
   }
 }
@@ -54,46 +57,43 @@ async function start() {
       host: '0.0.0.0',
     });
 
-    console.log(`
-    🚀 RateMyUnit API Server started!
-
-    📍 API: http://localhost:${config.PORT}
-    📚 Docs: http://localhost:${config.PORT}/documentation
-    🏥 Health: http://localhost:${config.PORT}/health
-    🌍 Environment: ${config.NODE_ENV}
-    `);
+    logger.info(`RateMyUnit API Server started`);
+    logger.info(`API: http://localhost:${config.PORT}`);
+    logger.info(`Docs: http://localhost:${config.PORT}/documentation`);
+    logger.info(`Health: http://localhost:${config.PORT}/health`);
+    logger.info(`Environment: ${config.NODE_ENV}`);
 
     // Graceful Shutdown
     const gracefulShutdown = async (signal: string) => {
-      console.log(`${signal} received, starting graceful shutdown...`);
+      logger.info(`${signal} received, starting graceful shutdown...`);
 
       // Force shutdown after 30 seconds
       const timeout = setTimeout(() => {
-        console.error('Shutdown timeout exceeded, forcing exit');
+        logger.error('Shutdown timeout exceeded, forcing exit');
         process.exit(1);
       }, 30000);
 
       try {
         await app.close();
-        console.log('HTTP server closed');
+        logger.info('HTTP server closed');
 
         await worker.close();
-        console.log('Worker stopped');
+        logger.info('Worker stopped');
 
         await scraperQueue.close();
-        console.log('Queue connection closed');
+        logger.info('Queue connection closed');
 
         await browserPool.drain().then(() => browserPool.clear());
-        console.log('Browser pool drained');
+        logger.info('Browser pool drained');
 
         await dbClient.end();
-        console.log('Database connections closed');
+        logger.info('Database connections closed');
 
         clearTimeout(timeout);
-        console.log('Graceful shutdown complete');
+        logger.info('Graceful shutdown complete');
         process.exit(0);
       } catch (error) {
-        console.error('Error during graceful shutdown:', error);
+        logger.error({ err: error }, 'Error during graceful shutdown');
         process.exit(1);
       }
     };
@@ -102,7 +102,7 @@ async function start() {
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
   } catch (error) {
-    console.error('Failed to start server:', error);
+    logger.error({ err: error }, 'Failed to start server');
     process.exit(1);
   }
 }

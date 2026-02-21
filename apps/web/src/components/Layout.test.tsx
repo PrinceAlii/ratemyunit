@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../lib/auth-context', () => ({
@@ -29,6 +29,7 @@ function renderLayout(user: Record<string, unknown> | null = null) {
           <Route element={<Layout />}>
             <Route index element={<div>Home Content</div>} />
           </Route>
+          <Route path="/login" element={<div>Login</div>} />
         </Routes>
       </MemoryRouter>
     ),
@@ -71,7 +72,9 @@ describe('Layout', () => {
 
   it('logout button calls logout', async () => {
     const { logout } = renderLayout({ id: '1', email: 'test@test.com', displayName: 'Test', role: 'student' });
-    fireEvent.click(screen.getByText('Logout'));
+    await act(async () => {
+      fireEvent.click(screen.getByText('Logout'));
+    });
     expect(logout).toHaveBeenCalled();
   });
 

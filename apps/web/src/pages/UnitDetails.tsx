@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
@@ -6,36 +6,74 @@ import { ReviewForm } from '../components/ReviewForm';
 import { StarRating } from '../components/StarRating';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useAuth } from '../lib/auth-context';
 import { ThumbsUp, ThumbsDown, Flag } from 'lucide-react';
-import type { Unit, ReviewWithUser } from '@ratemyunit/types';
+import type { Unit, ReviewWithUser, UnitWithStats } from '@ratemyunit/types';
 import { VerificationBadge } from '../components/VerificationBadge';
 import { calculateAverages, formatRating } from '../lib/calculations';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+interface PaginatedResponse<T> {
+  data: T;
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    page: number;
+    totalPages: number;
+  };
+}
+
 export function UnitDetails() {
-  const { unitCode } = useParams<{ unitCode: string }>();
+  const { unitId } = useParams<{ unitId: string }>();
+  const navigate = useNavigate();
   const [showReviewForm, setShowReviewForm] = useState(false);
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
+  const identifier = unitId?.trim() || '';
+  const identifierIsUuid = UUID_REGEX.test(identifier);
+
+  const { data: searchResponse, isLoading: searchLoading } = useQuery({
+    queryKey: ['unit-search', identifier],
+    queryFn: () => api.get<PaginatedResponse<UnitWithStats[]>>('/api/units/search', {
+      q: identifier,
+      limit: 50,
+    }),
+    enabled: !!identifier && !identifierIsUuid,
+  });
+
+  const exactMatches = useMemo(() => {
+    if (!searchResponse?.data || !identifier) return [];
+    const lowered = identifier.toLowerCase();
+    return searchResponse.data.filter((candidate) => candidate.unitCode.toLowerCase() === lowered);
+  }, [searchResponse, identifier]);
+
+  const resolvedId = identifierIsUuid
+    ? identifier
+    : exactMatches.length === 1
+      ? exactMatches[0].id
+      : null;
+
   const { data: unit, isLoading: unitLoading } = useQuery({
-    queryKey: ['unit', unitCode],
-    queryFn: () => api.get<Unit>(`/api/units/${unitCode}`),
-    enabled: !!unitCode,
+    queryKey: ['unit', resolvedId],
+    queryFn: () => api.get<Unit>(`/api/units/${resolvedId}`),
+    enabled: !!resolvedId,
   });
 
   const { data: reviews, isLoading: reviewsLoading } = useQuery({
-    queryKey: ['reviews', unit?.id],
-    queryFn: () => api.get<ReviewWithUser[]>(`/api/units/${unitCode}/reviews`),
-    enabled: !!unitCode && !!unit,
+    queryKey: ['reviews', resolvedId],
+    queryFn: () => api.get<ReviewWithUser[]>(`/api/units/${resolvedId}/reviews`),
+    enabled: !!resolvedId && !!unit,
   });
 
   const voteMutation = useMutation({
     mutationFn: ({ reviewId, voteType }: { reviewId: string; voteType: 'helpful' | 'not_helpful' }) =>
       api.post(`/api/reviews/${reviewId}/vote`, { voteType }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reviews', unit?.id] });
+      queryClient.invalidateQueries({ queryKey: ['reviews', resolvedId] });
       toast.success('Vote recorded');
     },
     onError: (error: Error) => {
@@ -48,14 +86,18 @@ export function UnitDetails() {
       api.post(`/api/reviews/${reviewId}/flag`, { reason: 'inappropriate' }),
     onSuccess: () => {
       toast.success('Review flagged for moderation');
-      queryClient.invalidateQueries({ queryKey: ['reviews', unit?.id] });
+      queryClient.invalidateQueries({ queryKey: ['reviews', resolvedId] });
     },
     onError: (error: Error) => {
       toast.error(`Failed to flag review: ${error.message}`);
     },
   });
 
-  if (unitLoading) {
+  const showLoading = identifierIsUuid
+    ? unitLoading
+    : searchLoading || (resolvedId ? unitLoading : false);
+
+  if (showLoading) {
     return (
       <div className="container max-w-5xl mx-auto px-4 py-8 space-y-8">
         <div className="space-y-4">
@@ -76,12 +118,51 @@ export function UnitDetails() {
       </div>
     );
   }
-  if (!unit) return (
-    <div className="container py-12 text-center">
-      <h2 className="text-2xl font-bold mb-2">Unit not found</h2>
-      <p className="text-muted-foreground">The unit "{unitCode}" does not exist in our database.</p>
-    </div>
-  );
+
+  if (!identifierIsUuid && !searchLoading && exactMatches.length > 1) {
+    return (
+      <div className="container max-w-3xl mx-auto px-4 py-12 space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold mb-2">Multiple units found</h2>
+          <p className="text-muted-foreground">
+            Select the correct university for "{identifier}".
+          </p>
+        </div>
+
+        <div className="grid gap-4">
+          {exactMatches.map((candidate) => (
+            <button
+              key={candidate.id}
+              type="button"
+              onClick={() => navigate(`/units/${candidate.id}`)}
+              className="text-left border-4 border-foreground bg-card p-5 shadow-neo hover:translate-x-1 hover:translate-y-1 transition-transform"
+            >
+              <div className="flex items-center gap-3 text-sm font-bold uppercase text-muted-foreground">
+                <span>{candidate.universityAbbr || candidate.universityName || 'University'}</span>
+                {candidate.universityName && (
+                  <>
+                    <span>•</span>
+                    <span>{candidate.universityName}</span>
+                  </>
+                )}
+              </div>
+              <div className="mt-2 text-xl font-black">{candidate.unitName}</div>
+              <div className="mt-1 font-mono text-sm">{candidate.unitCode}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!unit) {
+    return (
+      <div className="container py-12 text-center">
+        <h2 className="text-2xl font-bold mb-2">Unit not found</h2>
+        <p className="text-muted-foreground">The unit "{identifier}" does not exist in our database.</p>
+      </div>
+    );
+  }
 
   const averages = reviews ? calculateAverages(reviews) : null;
 

@@ -120,7 +120,7 @@ describe('BrowsePage', () => {
     });
   });
 
-  it('clicking unit card navigates to /units/:code', async () => {
+  it('clicking unit card navigates to /units/:id', async () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getByText('31251')).toBeInTheDocument();
@@ -128,7 +128,7 @@ describe('BrowsePage', () => {
 
     const card = screen.getByText('Data Structures').closest('[class*="cursor-pointer"]');
     if (card) fireEvent.click(card);
-    expect(mockNavigate).toHaveBeenCalledWith('/units/31251');
+    expect(mockNavigate).toHaveBeenCalledWith('/units/u1');
   });
 
   it('sort dropdown renders options', async () => {

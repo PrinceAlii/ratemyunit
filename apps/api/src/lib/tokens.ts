@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash, timingSafeEqual } from 'crypto';
 import { db } from '@ratemyunit/db/client';
 import { emailVerificationTokens, passwordResetTokens } from '@ratemyunit/db/schema';
 import { eq } from 'drizzle-orm';
@@ -13,15 +13,30 @@ function generateToken(): string {
 }
 
 /**
+ * Hash a token for storage/lookup.
+ */
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function tokensMatch(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
+
+/**
  * Create an email verification token for a user.
  */
 export async function createEmailVerificationToken(userId: string): Promise<string> {
   const token = generateToken();
+  const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
 
   await db.insert(emailVerificationTokens).values({
     userId,
-    token,
+    token: tokenHash,
     expiresAt,
   });
 
@@ -32,13 +47,18 @@ export async function createEmailVerificationToken(userId: string): Promise<stri
  * Verify an email verification token.
  */
 export async function verifyEmailToken(token: string): Promise<string | null> {
+  const tokenHash = hashToken(token);
   const [record] = await db
     .select()
     .from(emailVerificationTokens)
-    .where(eq(emailVerificationTokens.token, token))
+    .where(eq(emailVerificationTokens.token, tokenHash))
     .limit(1);
 
   if (!record) {
+    return null;
+  }
+
+  if (!tokensMatch(record.token, tokenHash)) {
     return null;
   }
 
@@ -57,13 +77,14 @@ export async function verifyEmailToken(token: string): Promise<string | null> {
  */
 export async function createPasswordResetToken(userId: string): Promise<string> {
   const token = generateToken();
+  const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
 
   await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, userId));
 
   await db.insert(passwordResetTokens).values({
     userId,
-    token,
+    token: tokenHash,
     expiresAt,
   });
 
@@ -74,13 +95,18 @@ export async function createPasswordResetToken(userId: string): Promise<string> 
  * Verify a password reset token.
  */
 export async function verifyPasswordResetToken(token: string): Promise<string | null> {
+  const tokenHash = hashToken(token);
   const [record] = await db
     .select()
     .from(passwordResetTokens)
-    .where(eq(passwordResetTokens.token, token))
+    .where(eq(passwordResetTokens.token, tokenHash))
     .limit(1);
 
   if (!record) {
+    return null;
+  }
+
+  if (!tokensMatch(record.token, tokenHash)) {
     return null;
   }
 
@@ -97,5 +123,6 @@ export async function verifyPasswordResetToken(token: string): Promise<string | 
  * Delete a password reset token after use.
  */
 export async function deletePasswordResetToken(token: string): Promise<void> {
-  await db.delete(passwordResetTokens).where(eq(passwordResetTokens.token, token));
+  const tokenHash = hashToken(token);
+  await db.delete(passwordResetTokens).where(eq(passwordResetTokens.token, tokenHash));
 }

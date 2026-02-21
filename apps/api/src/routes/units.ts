@@ -4,7 +4,78 @@ import { db } from '@ratemyunit/db/client';
 import { units, reviews, users, reviewVotes, universities } from '@ratemyunit/db/schema';
 import { eq, desc, and, sql, inArray, getTableColumns } from 'drizzle-orm';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isUuid(value: string): boolean {
+  return UUID_REGEX.test(value);
+}
+
 export async function unitsRoutes(app: FastifyInstance) {
+  const unitQuerySchema = z.object({
+    universityId: z.string().uuid().or(z.literal('')).transform(v => v === '' ? undefined : v).optional(),
+    universityAbbr: z.string().transform(v => v === '' ? undefined : v).optional(),
+  });
+
+  const resolveUnit = async (
+    identifier: string,
+    query: z.infer<typeof unitQuerySchema>
+  ): Promise<
+    | { status: 'ok'; unit: Record<string, unknown> }
+    | { status: 'not_found' }
+    | { status: 'ambiguous'; candidates: Array<Record<string, unknown>> }
+  > => {
+    const trimmed = identifier.trim();
+    const identifierIsUuid = isUuid(trimmed);
+
+    const baseQuery = db
+      .select({
+        ...getTableColumns(units),
+        uniId: universities.id,
+        uniName: universities.name,
+        uniAbbr: universities.abbreviation,
+        uniUrl: universities.websiteUrl,
+      })
+      .from(units)
+      .leftJoin(universities, eq(units.universityId, universities.id));
+
+    const conditions = [];
+
+    if (identifierIsUuid) {
+      conditions.push(eq(units.id, trimmed));
+    } else {
+      conditions.push(sql`lower(${units.unitCode}) = ${trimmed.toLowerCase()}`);
+    }
+
+    if (query.universityId) {
+      conditions.push(eq(units.universityId, query.universityId));
+    }
+
+    if (query.universityAbbr) {
+      conditions.push(eq(universities.abbreviation, query.universityAbbr.toUpperCase()));
+    }
+
+    const results = await baseQuery.where(and(...conditions));
+
+    if (results.length === 0) {
+      return { status: 'not_found' };
+    }
+
+    if (!identifierIsUuid && results.length > 1 && !query.universityId && !query.universityAbbr) {
+      const candidates = results.map((result) => ({
+        id: result.id,
+        unitCode: result.unitCode,
+        unitName: result.unitName,
+        universityId: result.universityId,
+        universityName: result.uniName,
+        universityAbbr: result.uniAbbr,
+      }));
+
+      return { status: 'ambiguous', candidates };
+    }
+
+    return { status: 'ok', unit: results[0] };
+  };
+
   /**
    * GET /api/units/search
    * Search for units with filters and sorting.
@@ -65,6 +136,7 @@ export async function unitsRoutes(app: FastifyInstance) {
             description: units.description,
             faculty: units.faculty,
             creditPoints: units.creditPoints,
+            universityId: units.universityId,
             universityName: universities.name,
             universityAbbr: universities.abbreviation,
             averageRating: sql<number>`COALESCE(${avgRatingSq.avgRating}, 0)`,
@@ -125,40 +197,46 @@ export async function unitsRoutes(app: FastifyInstance) {
   });
 
   /**
-   * GET /api/units/:unitCode
-   * Get details for a specific unit.
+   * GET /api/units/:identifier
+   * Get details for a specific unit by UUID or unit code.
    */
-  app.get('/:unitCode', async (request, reply) => {
-    const { unitCode } = request.params as { unitCode: string };
+  app.get('/:identifier', async (request, reply) => {
+    const paramsSchema = z.object({ identifier: z.string().min(1) });
+    const { identifier } = paramsSchema.parse(request.params);
+    const query = unitQuerySchema.parse(request.query);
 
-    const [result] = await db
-      .select({
-        ...getTableColumns(units),
-        uniId: universities.id,
-        uniName: universities.name,
-        uniAbbr: universities.abbreviation,
-        uniUrl: universities.websiteUrl,
-      })
-      .from(units)
-      .leftJoin(universities, eq(units.universityId, universities.id))
-      .where(eq(units.unitCode, unitCode))
-      .limit(1);
+    const resolved = await resolveUnit(identifier, query);
 
-    if (!result) {
+    if (resolved.status === 'not_found') {
       return reply.status(404).send({
         success: false,
         error: 'Unit not found',
       });
     }
 
+    if (resolved.status === 'ambiguous') {
+      return reply.status(409).send({
+        success: false,
+        error: 'Multiple units match this code. Provide universityId or universityAbbr.',
+        data: { candidates: resolved.candidates },
+      });
+    }
+
+    const result = resolved.unit as {
+      uniId: string | null;
+      uniName: string | null;
+      uniAbbr: string | null;
+      uniUrl: string | null;
+    };
+
     const unit = {
-      ...result,
+      ...resolved.unit,
       university: {
         id: result.uniId,
         name: result.uniName,
         abbreviation: result.uniAbbr,
         websiteUrl: result.uniUrl,
-      }
+      },
     };
 
     return reply.send({
@@ -168,24 +246,32 @@ export async function unitsRoutes(app: FastifyInstance) {
   });
 
   /**
-   * GET /api/units/:unitCode/reviews
-   * Get reviews for a unit.
+   * GET /api/units/:identifier/reviews
+   * Get reviews for a unit by UUID or unit code.
    */
-  app.get('/:unitCode/reviews', async (request, reply) => {
-    const { unitCode } = request.params as { unitCode: string };
+  app.get('/:identifier/reviews', async (request, reply) => {
+    const paramsSchema = z.object({ identifier: z.string().min(1) });
+    const { identifier } = paramsSchema.parse(request.params);
+    const query = unitQuerySchema.parse(request.query);
 
-    const [unit] = await db
-      .select({ id: units.id })
-      .from(units)
-      .where(eq(units.unitCode, unitCode))
-      .limit(1);
+    const resolved = await resolveUnit(identifier, query);
 
-    if (!unit) {
+    if (resolved.status === 'not_found') {
       return reply.status(404).send({
         success: false,
         error: 'Unit not found',
       });
     }
+
+    if (resolved.status === 'ambiguous') {
+      return reply.status(409).send({
+        success: false,
+        error: 'Multiple units match this code. Provide universityId or universityAbbr.',
+        data: { candidates: resolved.candidates },
+      });
+    }
+
+    const unit = resolved.unit as { id: string };
 
     const unitReviews = await db
       .select({

@@ -34,6 +34,12 @@ interface BulkScrapeResult {
   message: string;
 }
 
+interface RangeScrapeResult {
+  total: number;
+  queued: number;
+  message: string;
+}
+
 interface QueueStatus {
   paused: boolean;
   counts: {
@@ -75,14 +81,19 @@ export function DataScraper() {
   const [selectedUni, setSelectedUni] = useState('');
   const [singleCode, setSingleCode] = useState('');
   const [bulkCodes, setBulkCodes] = useState('');
+  const [rangeStart, setRangeStart] = useState('');
+  const [rangeEnd, setRangeEnd] = useState('');
 
   const [singleMessage, setSingleMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [bulkMessage, setBulkMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [rangeMessage, setRangeMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [scanMessage, setScanMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [scanDialogOpen, setScanDialogOpen] = useState(false);
+  const [rangeDialogOpen, setRangeDialogOpen] = useState(false);
   const [pendingBulkCodes, setPendingBulkCodes] = useState<string[]>([]);
+  const [pendingRange, setPendingRange] = useState<{ start: string; end: string } | null>(null);
 
   // Queue management state
   const [jobsDialogOpen, setJobsDialogOpen] = useState(false);
@@ -173,6 +184,28 @@ export function DataScraper() {
       setBulkMessage({ type: 'error', text: error.message });
       toast.error(`Bulk scrape failed: ${error.message}`);
       setBulkDialogOpen(false);
+    },
+  });
+
+  const rangeMutation = useMutation({
+    mutationFn: (range: { start: string; end: string }) => api.post<RangeScrapeResult>('/api/admin/scrape/range', {
+      startCode: range.start,
+      endCode: range.end,
+      universityId: selectedUni || undefined,
+    }),
+    onSuccess: (data) => {
+      setRangeMessage({ type: 'success', text: data.message });
+      toast.success(data.message);
+      setRangeStart('');
+      setRangeEnd('');
+      setPendingRange(null);
+      setRangeDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['admin'] });
+    },
+    onError: (error: Error) => {
+      setRangeMessage({ type: 'error', text: error.message });
+      toast.error(`Range scrape failed: ${error.message}`);
+      setRangeDialogOpen(false);
     },
   });
 
@@ -286,6 +319,23 @@ export function DataScraper() {
 
   const confirmBulkScrape = () => {
     bulkMutation.mutate(pendingBulkCodes);
+  };
+
+  const handleRangeScrape = () => {
+    if (!rangeStart.trim() || !rangeEnd.trim()) {
+      setRangeMessage({ type: 'error', text: 'Please enter both start and end codes' });
+      return;
+    }
+
+    setRangeMessage(null);
+    setPendingRange({ start: rangeStart.trim(), end: rangeEnd.trim() });
+    setRangeDialogOpen(true);
+  };
+
+  const confirmRangeScrape = () => {
+    if (pendingRange) {
+      rangeMutation.mutate(pendingRange);
+    }
   };
 
   const handleScanClick = () => {
@@ -601,6 +651,58 @@ export function DataScraper() {
         </div>
       </div>
 
+      {/* Range Scraper */}
+      <div className="p-6 border-4 border-foreground bg-card shadow-neo">
+        <h3 className="text-xl font-display font-black uppercase mb-4">Range Scraper</h3>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="range-start" className="font-bold uppercase text-sm">Start Code</Label>
+              <Input
+                id="range-start"
+                placeholder="e.g., 31001"
+                value={rangeStart}
+                onChange={(e) => setRangeStart(e.target.value)}
+                disabled={rangeMutation.isPending}
+                className="h-12 border-3"
+              />
+            </div>
+            <div>
+              <Label htmlFor="range-end" className="font-bold uppercase text-sm">End Code</Label>
+              <Input
+                id="range-end"
+                placeholder="e.g., 31999"
+                value={rangeEnd}
+                onChange={(e) => setRangeEnd(e.target.value)}
+                disabled={rangeMutation.isPending}
+                className="h-12 border-3"
+              />
+            </div>
+          </div>
+          <Button onClick={handleRangeScrape} disabled={rangeMutation.isPending} className="h-12 border-4 font-bold">
+            {rangeMutation.isPending ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                Queuing...
+              </>
+            ) : (
+              'Scrape Range'
+            )}
+          </Button>
+          {rangeMessage && (
+            <div
+              className={`p-4 text-sm font-bold border-3 ${
+                rangeMessage.type === 'success'
+                  ? 'bg-green-100 text-green-800 border-green-700'
+                  : 'bg-red-100 text-red-800 border-red-700'
+              }`}
+            >
+              {rangeMessage.text}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Bulk Scraper */}
       <div className="p-6 border-4 border-foreground bg-card shadow-neo">
         <h3 className="text-xl font-display font-black uppercase mb-4">Bulk Scraper</h3>
@@ -692,6 +794,16 @@ export function DataScraper() {
         description={`Are you sure you want to scrape ${pendingBulkCodes.length} subject${pendingBulkCodes.length !== 1 ? 's' : ''}? This may take several minutes.`}
         confirmText="Start Scraping"
         onConfirm={confirmBulkScrape}
+      />
+
+      {/* Range Scrape Confirmation Dialog */}
+      <ConfirmDialog
+        open={rangeDialogOpen}
+        onOpenChange={setRangeDialogOpen}
+        title="Confirm Range Scrape"
+        description={`Are you sure you want to scrape codes from ${pendingRange?.start || ''} to ${pendingRange?.end || ''}? This may take several minutes.`}
+        confirmText="Start Scraping"
+        onConfirm={confirmRangeScrape}
       />
 
        {/* Scan Confirmation Dialog */}

@@ -74,6 +74,18 @@ describe('config', () => {
     expect(config.RESEND_API_KEY).toBe('re_abc123');
   });
 
+  it('requires RESEND_API_KEY in production', async () => {
+    process.env = { ...process.env, ...validEnv, NODE_ENV: 'production' };
+    delete process.env.RESEND_API_KEY;
+    await expect(import('./config')).rejects.toThrow('Missing RESEND_API_KEY in production');
+  });
+
+  it('accepts RESEND_API_KEY in production', async () => {
+    process.env = { ...process.env, ...validEnv, NODE_ENV: 'production', RESEND_API_KEY: 're_abc123' };
+    const { config } = await import('./config');
+    expect(config.RESEND_API_KEY).toBe('re_abc123');
+  });
+
   it('rejects RESEND_API_KEY not starting with re_', async () => {
     process.env = { ...process.env, ...validEnv, RESEND_API_KEY: 'invalid_key' };
     await expect(import('./config')).rejects.toThrow('Invalid environment variables');

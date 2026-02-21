@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import pino from 'pino';
+
+const logger = pino({
+  level: process.env.NODE_ENV === 'production' ? 'info' : process.env.NODE_ENV === 'test' ? 'silent' : 'debug',
+});
 
 const configSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -17,15 +22,27 @@ function loadConfig(): Config {
   const result = configSchema.safeParse(process.env);
 
   if (!result.success) {
-    console.error('❌ Configuration validation failed. Please check your environment variables.');
-    console.error('Validation errors:');
-    result.error.issues.forEach(issue => {
-      console.error(`  - ${issue.path.join('.')}: ${issue.message}`);
-    });
+    if (process.env.NODE_ENV !== 'test') {
+      logger.error('❌ Configuration validation failed. Please check your environment variables.');
+      logger.error('Validation errors:');
+      result.error.issues.forEach(issue => {
+        logger.error(`  - ${issue.path.join('.')}: ${issue.message}`);
+      });
+    }
     throw new Error('Invalid environment variables');
   }
 
-  return result.data;
+  const data = result.data;
+  const isTestEnv = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
+
+  if (data.NODE_ENV === 'production' && !data.RESEND_API_KEY) {
+    if (!isTestEnv) {
+      logger.error('❌ RESEND_API_KEY is required in production to send transactional emails.');
+    }
+    throw new Error('Missing RESEND_API_KEY in production');
+  }
+
+  return data;
 }
 
 export const config = loadConfig();

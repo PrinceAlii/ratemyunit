@@ -23,7 +23,7 @@ const mockGet = api.get as ReturnType<typeof vi.fn>;
 const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
 
 const mockUnit = {
-  id: 'unit-1',
+  id: '11111111-1111-4111-8111-111111111111',
   unitCode: '31251',
   unitName: 'Data Structures and Algorithms',
   description: 'Learn about data structures.',
@@ -57,16 +57,16 @@ const mockReviews = [
   },
 ];
 
-function renderPage(unitCode = '31251') {
+function renderPage(unitId = '11111111-1111-4111-8111-111111111111') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/units/${unitCode}`]}>
+      <MemoryRouter initialEntries={[`/units/${unitId}`]}>
         <Routes>
-          <Route path="/units/:unitCode" element={<UnitDetails />} />
+          <Route path="/units/:unitId" element={<UnitDetails />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -128,9 +128,9 @@ describe('UnitDetails', () => {
   it('shows 404 when unit not found', async () => {
     mockGet.mockImplementation((url: string) => {
       if (url.includes('/reviews')) return Promise.resolve([]);
-      return Promise.resolve(undefined);
+      return Promise.reject(new Error('Not found'));
     });
-    renderPage('INVALID');
+    renderPage('00000000-0000-4000-8000-000000000000');
 
     await waitFor(() => {
       expect(screen.getByText(/unit not found/i)).toBeInTheDocument();

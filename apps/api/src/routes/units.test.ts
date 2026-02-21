@@ -130,6 +130,7 @@ describe('unitsRoutes', () => {
           description: 'Learn about DS.',
           faculty: 'FEIT',
           creditPoints: 6,
+          universityId: TEST_IDS.university,
           universityName: 'UTS',
           universityAbbr: 'UTS',
           averageRating: 4.2,
@@ -210,9 +211,9 @@ describe('unitsRoutes', () => {
     });
   });
 
-  // ---- GET /:unitCode ------------------------------------------------------
+  // ---- GET /:identifier ----------------------------------------------------
 
-  describe('GET /:unitCode', () => {
+  describe('GET /:identifier', () => {
     it('returns unit details with university info', async () => {
       const dbResult = {
         ...mockUnit,
@@ -223,9 +224,9 @@ describe('unitsRoutes', () => {
       };
       mockSelect.mockReturnValueOnce(createChainBuilder([dbResult]));
 
-      const request = createMockRequest({ params: { unitCode: '31251' } });
+      const request = createMockRequest({ params: { identifier: '31251' } });
       const reply = createMockReply();
-      await handlers['GET /:unitCode'](request, reply);
+      await handlers['GET /:identifier'](request, reply);
 
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -245,20 +246,55 @@ describe('unitsRoutes', () => {
     it('returns 404 when unit not found', async () => {
       mockSelect.mockReturnValueOnce(createChainBuilder([]));
 
-      const request = createMockRequest({ params: { unitCode: 'INVALID' } });
+      const request = createMockRequest({ params: { identifier: 'INVALID' } });
       const reply = createMockReply();
-      await handlers['GET /:unitCode'](request, reply);
+      await handlers['GET /:identifier'](request, reply);
 
       expect(reply.status).toHaveBeenCalledWith(404);
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({ error: 'Unit not found' }),
       );
     });
+
+    it('returns 409 when multiple units match a code', async () => {
+      const dbResult = {
+        ...mockUnit,
+        uniId: TEST_IDS.university,
+        uniName: 'UTS',
+        uniAbbr: 'UTS',
+        uniUrl: 'https://uts.edu.au',
+      };
+      const otherResult = {
+        ...mockUnit,
+        id: 'other-unit',
+        universityId: 'other-uni',
+        uniId: 'other-uni',
+        uniName: 'Other University',
+        uniAbbr: 'OU',
+        uniUrl: 'https://other.example.com',
+      };
+
+      mockSelect.mockReturnValueOnce(createChainBuilder([dbResult, otherResult]));
+
+      const request = createMockRequest({ params: { identifier: '31251' } });
+      const reply = createMockReply();
+      await handlers['GET /:identifier'](request, reply);
+
+      expect(reply.status).toHaveBeenCalledWith(409);
+      expect(reply.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          data: expect.objectContaining({
+            candidates: expect.any(Array),
+          }),
+        }),
+      );
+    });
   });
 
-  // ---- GET /:unitCode/reviews ----------------------------------------------
+  // ---- GET /:identifier/reviews --------------------------------------------
 
-  describe('GET /:unitCode/reviews', () => {
+  describe('GET /:identifier/reviews', () => {
     it('returns reviews for unit with processed display names', async () => {
       const reviewData = [
         {
@@ -277,14 +313,21 @@ describe('unitsRoutes', () => {
         },
       ];
 
-      // First select: find unit by code
-      mockSelect.mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.unit }]));
+      // First select: resolve unit
+      mockSelect.mockReturnValueOnce(createChainBuilder([{
+        id: TEST_IDS.unit,
+        unitCode: '31251',
+        unitName: 'Data Structures',
+        universityId: TEST_IDS.university,
+        uniName: 'UTS',
+        uniAbbr: 'UTS',
+      }]));
       // Second select: reviews
       mockSelect.mockReturnValueOnce(createChainBuilder(reviewData));
 
-      const request = createMockRequest({ params: { unitCode: '31251' } });
+      const request = createMockRequest({ params: { identifier: '31251' } });
       const reply = createMockReply();
-      await handlers['GET /:unitCode/reviews'](request, reply);
+      await handlers['GET /:identifier/reviews'](request, reply);
 
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -304,9 +347,9 @@ describe('unitsRoutes', () => {
     it('returns 404 when unit not found', async () => {
       mockSelect.mockReturnValueOnce(createChainBuilder([]));
 
-      const request = createMockRequest({ params: { unitCode: 'INVALID' } });
+      const request = createMockRequest({ params: { identifier: 'INVALID' } });
       const reply = createMockReply();
-      await handlers['GET /:unitCode/reviews'](request, reply);
+      await handlers['GET /:identifier/reviews'](request, reply);
 
       expect(reply.status).toHaveBeenCalledWith(404);
       expect(reply.send).toHaveBeenCalledWith(
@@ -333,12 +376,19 @@ describe('unitsRoutes', () => {
       ];
 
       mockSelect
-        .mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.unit }]))
+        .mockReturnValueOnce(createChainBuilder([{
+          id: TEST_IDS.unit,
+          unitCode: '31251',
+          unitName: 'Data Structures',
+          universityId: TEST_IDS.university,
+          uniName: 'UTS',
+          uniAbbr: 'UTS',
+        }]))
         .mockReturnValueOnce(createChainBuilder(reviewData));
 
-      const request = createMockRequest({ params: { unitCode: '31251' } });
+      const request = createMockRequest({ params: { identifier: '31251' } });
       const reply = createMockReply();
-      await handlers['GET /:unitCode/reviews'](request, reply);
+      await handlers['GET /:identifier/reviews'](request, reply);
 
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -371,12 +421,19 @@ describe('unitsRoutes', () => {
       ];
 
       mockSelect
-        .mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.unit }]))
+        .mockReturnValueOnce(createChainBuilder([{
+          id: TEST_IDS.unit,
+          unitCode: '31251',
+          unitName: 'Data Structures',
+          universityId: TEST_IDS.university,
+          uniName: 'UTS',
+          uniAbbr: 'UTS',
+        }]))
         .mockReturnValueOnce(createChainBuilder(reviewData));
 
-      const request = createMockRequest({ params: { unitCode: '31251' } });
+      const request = createMockRequest({ params: { identifier: '31251' } });
       const reply = createMockReply();
-      await handlers['GET /:unitCode/reviews'](request, reply);
+      await handlers['GET /:identifier/reviews'](request, reply);
 
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -394,12 +451,19 @@ describe('unitsRoutes', () => {
 
     it('returns empty array when no approved reviews', async () => {
       mockSelect
-        .mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.unit }]))
+        .mockReturnValueOnce(createChainBuilder([{
+          id: TEST_IDS.unit,
+          unitCode: '31251',
+          unitName: 'Data Structures',
+          universityId: TEST_IDS.university,
+          uniName: 'UTS',
+          uniAbbr: 'UTS',
+        }]))
         .mockReturnValueOnce(createChainBuilder([]));
 
-      const request = createMockRequest({ params: { unitCode: '31251' } });
+      const request = createMockRequest({ params: { identifier: '31251' } });
       const reply = createMockReply();
-      await handlers['GET /:unitCode/reviews'](request, reply);
+      await handlers['GET /:identifier/reviews'](request, reply);
 
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({ success: true, data: [] }),

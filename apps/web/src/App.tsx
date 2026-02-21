@@ -50,7 +50,7 @@ function App() {
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                   <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/verify-email" element={<VerifyEmail />} />
-                  <Route path="/units/:unitCode" element={<ErrorBoundary><UnitDetails /></ErrorBoundary>} />
+                  <Route path="/units/:unitId" element={<ErrorBoundary><UnitDetails /></ErrorBoundary>} />
                   <Route
                     path="/admin"
                     element={

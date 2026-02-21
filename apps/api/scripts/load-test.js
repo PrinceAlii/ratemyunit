@@ -19,12 +19,12 @@ const BASE_URL = __ENV.API_URL || 'http://localhost:3000';
 
 export default function() {
   // Test typical user journey
-  const searchRes = http.get(`${BASE_URL}/api/units?search=computer`);
+  const searchRes = http.get(`${BASE_URL}/api/units/search?search=computer`);
   check(searchRes, {
     'search succeeds': (r) => r.status === 200,
     'search has results': (r) => {
         try {
-            return JSON.parse(r.body).data?.length >= 0;
+            return JSON.parse(r.body).data?.data?.length >= 0;
         } catch (e) { return false; }
     }
   });
@@ -41,8 +41,8 @@ export default function() {
     if (units.length > 0) {
       // Pick a random unit from results
       const unit = units[Math.floor(Math.random() * units.length)];
-      // Use unitCode for the public route
-      const unitRes = http.get(`${BASE_URL}/api/units/${unit.unitCode}`);
+      // Use unit ID to avoid ambiguity across universities
+      const unitRes = http.get(`${BASE_URL}/api/units/${unit.id}`);
       check(unitRes, {
         'unit detail succeeds': (r) => r.status === 200,
       });

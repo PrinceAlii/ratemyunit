@@ -25,16 +25,22 @@ function jsonResponse(
 
 describe('ApiClient', () => {
   let api: typeof import('./api').api;
+  let consoleWarnSpy: ReturnType<typeof vi.spyOn> | null = null;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.resetModules();
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     // Re-import to get a fresh ApiClient instance (resets csrfToken)
     const mod = await import('./api');
     api = mod.api;
   });
 
   afterEach(() => {
+    consoleWarnSpy?.mockRestore();
+    consoleErrorSpy?.mockRestore();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });

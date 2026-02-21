@@ -25,6 +25,7 @@ export async function buildApp() {
     logger: {
       level: config.NODE_ENV === 'development' ? 'info' : 'warn',
     },
+    bodyLimit: 1024 * 1024,
   });
 
   await app.register(cookie);

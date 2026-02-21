@@ -464,16 +464,25 @@ describe('adminRoutes', () => {
   // ---- POST /scrape/range ---------------------------------------------------
 
   describe('POST /scrape/range', () => {
-    it('returns 501 not implemented', async () => {
-      const request = createMockRequest({});
+    it('queues range scrape jobs', async () => {
+      mockSelect.mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.university }]));
+      mockQueue.getJobCounts.mockResolvedValue({ waiting: 0, active: 0 });
+      mockQueue.addBulk.mockResolvedValue(undefined);
+
+      const request = createMockRequest({
+        body: { startCode: '100', endCode: '102' },
+      });
       const reply = createMockReply();
       await handlers['POST /scrape/range'](request, reply);
 
-      expect(reply.status).toHaveBeenCalledWith(501);
+      expect(mockQueue.addBulk).toHaveBeenCalled();
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({
-          success: false,
-          error: 'Range scraping for generic universities not yet implemented',
+          success: true,
+          data: expect.objectContaining({
+            total: 3,
+            queued: 3,
+          }),
         }),
       );
     });

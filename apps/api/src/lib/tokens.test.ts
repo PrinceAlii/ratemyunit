@@ -25,6 +25,7 @@ import {
   verifyPasswordResetToken,
   deletePasswordResetToken,
 } from './tokens';
+import { createHash } from 'crypto';
 
 const mockDb = db as unknown as {
   insert: ReturnType<typeof vi.fn>;
@@ -57,18 +58,20 @@ describe('createEmailVerificationToken', () => {
     expect(typeof token).toBe('string');
     expect(token.length).toBeGreaterThan(0);
     expect(mockDb.insert).toHaveBeenCalled();
-    expect(insertChain.values).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'user-1', token: expect.any(String) })
-    );
+    const valuesArg = insertChain.values.mock.calls[0]?.[0] as { token?: string };
+    expect(valuesArg?.token).toBeDefined();
+    expect(valuesArg?.token).not.toBe(token);
+    expect(valuesArg?.token?.length).toBe(64);
   });
 });
 
 describe('verifyEmailToken', () => {
   it('returns userId for valid token', async () => {
+    const tokenHash = createHash('sha256').update('valid-token').digest('hex');
     const record = {
       id: 'rec-1',
       userId: 'user-1',
-      token: 'valid-token',
+      token: tokenHash,
       expiresAt: new Date(Date.now() + 86400000),
     };
     const selectChain = chainable([record]);
@@ -91,10 +94,11 @@ describe('verifyEmailToken', () => {
   });
 
   it('returns null and deletes expired token', async () => {
+    const tokenHash = createHash('sha256').update('expired-token').digest('hex');
     const record = {
       id: 'rec-1',
       userId: 'user-1',
-      token: 'expired-token',
+      token: tokenHash,
       expiresAt: new Date(Date.now() - 86400000),
     };
     const selectChain = chainable([record]);
@@ -119,15 +123,20 @@ describe('createPasswordResetToken', () => {
     expect(typeof token).toBe('string');
     expect(mockDb.delete).toHaveBeenCalled();
     expect(mockDb.insert).toHaveBeenCalled();
+    const valuesArg = insertChain.values.mock.calls[0]?.[0] as { token?: string };
+    expect(valuesArg?.token).toBeDefined();
+    expect(valuesArg?.token).not.toBe(token);
+    expect(valuesArg?.token?.length).toBe(64);
   });
 });
 
 describe('verifyPasswordResetToken', () => {
   it('returns userId for valid token', async () => {
+    const tokenHash = createHash('sha256').update('valid-token').digest('hex');
     const record = {
       id: 'rec-1',
       userId: 'user-1',
-      token: 'valid-token',
+      token: tokenHash,
       expiresAt: new Date(Date.now() + 86400000),
     };
     const selectChain = chainable([record]);
@@ -138,10 +147,11 @@ describe('verifyPasswordResetToken', () => {
   });
 
   it('returns null for expired token', async () => {
+    const tokenHash = createHash('sha256').update('expired-token').digest('hex');
     const record = {
       id: 'rec-1',
       userId: 'user-1',
-      token: 'expired-token',
+      token: tokenHash,
       expiresAt: new Date(Date.now() - 86400000),
     };
     const selectChain = chainable([record]);

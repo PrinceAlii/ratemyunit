@@ -92,13 +92,13 @@ describe('loginSchema', () => {
 });
 
 describe('verifyEmailSchema', () => {
-  it('accepts valid UUID token', () => {
-    const result = verifyEmailSchema.safeParse({ token: '11111111-1111-4111-a111-111111111111' });
+  it('accepts valid base64url token', () => {
+    const result = verifyEmailSchema.safeParse({ token: 'nTg7a2rj5h7wZ8d8B3Wq4T1Q9f_7mK2pL5u8V3y1xZ0' });
     expect(result.success).toBe(true);
   });
 
   it('rejects invalid token', () => {
-    const result = verifyEmailSchema.safeParse({ token: 'not-a-uuid' });
+    const result = verifyEmailSchema.safeParse({ token: 'not a token' });
     expect(result.success).toBe(false);
   });
 });
@@ -123,7 +123,7 @@ describe('forgotPasswordSchema', () => {
 describe('resetPasswordSchema', () => {
   it('accepts valid input', () => {
     const result = resetPasswordSchema.safeParse({
-      token: '11111111-1111-4111-a111-111111111111',
+      token: 'nTg7a2rj5h7wZ8d8B3Wq4T1Q9f_7mK2pL5u8V3y1xZ0',
       password: 'newpassword123',
     });
     expect(result.success).toBe(true);
@@ -131,7 +131,7 @@ describe('resetPasswordSchema', () => {
 
   it('rejects short password', () => {
     const result = resetPasswordSchema.safeParse({
-      token: '11111111-1111-4111-a111-111111111111',
+      token: 'nTg7a2rj5h7wZ8d8B3Wq4T1Q9f_7mK2pL5u8V3y1xZ0',
       password: 'short',
     });
     expect(result.success).toBe(false);
@@ -139,7 +139,7 @@ describe('resetPasswordSchema', () => {
 
   it('rejects invalid token', () => {
     const result = resetPasswordSchema.safeParse({
-      token: 'not-a-uuid',
+      token: 'not a token',
       password: 'newpassword123',
     });
     expect(result.success).toBe(false);

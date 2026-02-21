@@ -7,6 +7,7 @@ import { requireAdmin } from '../middleware/auth.js';
 import { scraperQueue } from '../lib/queue.js';
 import { moderateReviewSchema, banUserSchema } from '@ratemyunit/validators';
 import { lucia } from '../lib/auth.js';
+import { subjectTemplateService } from '../services/template.js';
 
 const scrapeSchema = z.object({
   unitCode: z.string().min(1),
@@ -16,6 +17,13 @@ const scrapeSchema = z.object({
 const bulkScrapeSchema = z.object({
   unitCodes: z.array(z.string().min(1)).min(1).max(100),
   universityId: z.string().uuid().optional(),
+});
+
+const rangeScrapeSchema = z.object({
+  startCode: z.string().min(1),
+  endCode: z.string().min(1),
+  universityId: z.string().uuid().optional(),
+  delay: z.number().int().min(0).optional().default(0),
 });
 
 export async function adminRoutes(app: FastifyInstance) {
@@ -276,8 +284,106 @@ export async function adminRoutes(app: FastifyInstance) {
    * POST /api/admin/scrape/range
    * Scrape a range of unit codes.
    */
-  app.post('/scrape/range', async (_request, reply) => {
-    return reply.status(501).send({ success: false, error: 'Range scraping for generic universities not yet implemented' });
+  app.post('/scrape/range', async (request, reply) => {
+    const result = rangeScrapeSchema.safeParse(request.body);
+    if (!result.success) {
+      return reply.status(400).send({
+        success: false,
+        error: 'Invalid request body',
+        details: result.error,
+      });
+    }
+
+    const { startCode, endCode, universityId, delay } = result.data;
+
+    const effectiveUniId = universityId || (await db
+      .select()
+      .from(universities)
+      .where(eq(universities.abbreviation, 'UTS'))
+      .limit(1)
+      .then(r => r[0]?.id));
+
+    if (!effectiveUniId) {
+      return reply.status(400).send({
+        success: false,
+        error: 'University ID required or default UTS not found',
+      });
+    }
+
+    let codes: string[] = [];
+    try {
+      codes = subjectTemplateService.generateCodesFromTemplateData({
+        id: 'range-scrape',
+        templateType: 'range',
+        startCode,
+        endCode,
+        codeList: null,
+        pattern: null,
+      });
+    } catch (error) {
+      return reply.status(400).send({
+        success: false,
+        error: error instanceof Error ? error.message : 'Invalid range',
+      });
+    }
+
+    if (codes.length === 0) {
+      return reply.status(400).send({
+        success: false,
+        error: 'Range generates no codes',
+      });
+    }
+
+    const MAX_QUEUE_SIZE = 10000;
+    const currentCounts = await scraperQueue.getJobCounts('waiting', 'active');
+    const currentTotal = currentCounts.waiting + currentCounts.active;
+
+    if (currentTotal + codes.length > MAX_QUEUE_SIZE) {
+      return reply.status(429).send({
+        success: false,
+        error: `Queue capacity exceeded. Current: ${currentTotal}, New: ${codes.length}, Max: ${MAX_QUEUE_SIZE}. Please wait for existing jobs to complete or use a smaller range.`,
+      });
+    }
+
+    const CHUNK_SIZE = 1000;
+    let queuedCount = 0;
+
+    for (let i = 0; i < codes.length; i += CHUNK_SIZE) {
+      const chunk = codes.slice(i, i + CHUNK_SIZE);
+      const jobs = chunk.map(code => ({
+        name: 'scrape-unit',
+        data: {
+          type: 'scrape' as const,
+          unitCode: code,
+          universityId: effectiveUniId,
+        },
+        opts: {
+          jobId: `scrape-${effectiveUniId}-${code}`,
+          delay,
+          backoff: {
+            type: 'exponential' as const,
+            delay: 5000,
+          },
+          attempts: 5,
+        },
+      }));
+
+      await scraperQueue.addBulk(jobs);
+      queuedCount += jobs.length;
+
+      if (i + CHUNK_SIZE < codes.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    return reply.send({
+      success: true,
+      data: {
+        total: codes.length,
+        queued: queuedCount,
+        message: `Queued ${queuedCount} jobs for background processing.`,
+      },
+    });
   });
 
   /**

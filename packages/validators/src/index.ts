@@ -16,8 +16,14 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+const tokenSchema = z
+  .string()
+  .min(32, 'Token is too short')
+  .max(200, 'Token is too long')
+  .regex(/^[A-Za-z0-9_-]+$/, 'Invalid token');
+
 export const verifyEmailSchema = z.object({
-  token: z.string().uuid('Invalid token'),
+  token: tokenSchema,
 });
 
 export const forgotPasswordSchema = z.object({
@@ -25,7 +31,7 @@ export const forgotPasswordSchema = z.object({
 });
 
 export const resetPasswordSchema = z.object({
-  token: z.string().uuid('Invalid token'),
+  token: tokenSchema,
   password: z
     .string()
     .min(8, 'Password must be at least 8 characters')

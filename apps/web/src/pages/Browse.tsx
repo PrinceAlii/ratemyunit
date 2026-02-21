@@ -302,7 +302,7 @@ export function BrowsePage() {
                   <div
                     key={unit.unitCode}
                     className="group relative flex flex-col sm:flex-row gap-4 p-5 border-4 border-foreground bg-card shadow-neo hover:shadow-neo-lg hover:-translate-y-1 transition-all cursor-pointer"
-                    onClick={() => navigate(`/units/${unit.unitCode}`)}
+                    onClick={() => navigate(`/units/${unit.id}`)}
                   >
                     <div className="flex-1 space-y-2">
                       {/* Header Row: University Badge & Code */}

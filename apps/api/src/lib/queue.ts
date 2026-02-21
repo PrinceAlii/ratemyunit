@@ -1,5 +1,4 @@
-import { Queue, Worker } from 'bullmq';
-import IORedis from 'ioredis';
+import { Queue, Worker, type ConnectionOptions } from 'bullmq';
 import { chromium, Browser } from 'playwright';
 import { config } from '../config.js';
 import { scraperService } from '../services/scraper.js';
@@ -8,9 +7,21 @@ import { createLogger } from './logger.js';
 
 const logger = createLogger('queue');
 
-const connection = new IORedis(config.REDIS_URL, {
+const redisUrl = new URL(config.REDIS_URL);
+const db =
+  redisUrl.pathname && redisUrl.pathname !== '/'
+    ? Number(redisUrl.pathname.slice(1))
+    : undefined;
+
+const connection: ConnectionOptions = {
+  host: redisUrl.hostname,
+  port: redisUrl.port ? Number(redisUrl.port) : 6379,
+  username: redisUrl.username || undefined,
+  password: redisUrl.password || undefined,
+  db: Number.isNaN(db) ? undefined : db,
   maxRetriesPerRequest: null, // Required by BullMQ
-});
+  ...(redisUrl.protocol === 'rediss:' ? { tls: {} } : {}),
+};
 
 export const QUEUE_NAME = 'scraper-queue';
 

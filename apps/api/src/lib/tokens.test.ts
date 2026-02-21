@@ -27,21 +27,41 @@ import {
 } from './tokens';
 import { createHash } from 'crypto';
 
-const mockDb = db as unknown as {
-  insert: ReturnType<typeof vi.fn>;
-  select: ReturnType<typeof vi.fn>;
-  delete: ReturnType<typeof vi.fn>;
+type MockFn = ReturnType<typeof vi.fn>;
+
+type MockedDb = {
+  insert: MockFn;
+  select: MockFn;
+  delete: MockFn;
 };
 
-function chainable(resolveValue: unknown = undefined) {
-  const chain: Record<string, unknown> = {};
-  chain.values = vi.fn().mockReturnValue(chain);
-  chain.from = vi.fn().mockReturnValue(chain);
-  chain.where = vi.fn().mockReturnValue(chain);
-  chain.limit = vi.fn().mockResolvedValue(Array.isArray(resolveValue) ? resolveValue : [resolveValue]);
-  chain.then = vi.fn().mockImplementation((r: (v: unknown) => void) =>
+type Chainable = {
+  values: MockFn;
+  from: MockFn;
+  where: MockFn;
+  limit: MockFn;
+  then: MockFn;
+};
+
+const mockDb = db as unknown as MockedDb;
+
+function chainable(resolveValue: unknown = undefined): Chainable {
+  const chain: Chainable = {
+    values: vi.fn(),
+    from: vi.fn(),
+    where: vi.fn(),
+    limit: vi.fn(),
+    then: vi.fn(),
+  };
+
+  chain.values.mockReturnValue(chain);
+  chain.from.mockReturnValue(chain);
+  chain.where.mockReturnValue(chain);
+  chain.limit.mockResolvedValue(Array.isArray(resolveValue) ? resolveValue : [resolveValue]);
+  chain.then.mockImplementation((r: (v: unknown) => void) =>
     Promise.resolve(Array.isArray(resolveValue) ? resolveValue : undefined).then(r)
   );
+
   return chain;
 }
 

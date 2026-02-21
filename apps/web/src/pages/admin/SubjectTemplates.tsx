@@ -35,10 +35,7 @@ interface TemplateFormData {
   name: string;
   universityId: string;
   templateType: TemplateType;
-  startCode: string;
-  endCode: string;
   codeList: string;
-  pattern: string;
   description: string;
   faculty: string;
   priority: string;
@@ -48,10 +45,13 @@ interface TemplateFormData {
 interface FormErrors {
   name?: string;
   universityId?: string;
-  startCode?: string;
-  endCode?: string;
   codeList?: string;
-  pattern?: string;
+}
+
+interface TemplateQueueResult {
+  jobsQueued: number;
+  totalCodes: number;
+  alreadyIndexed?: number;
 }
 
 export function SubjectTemplates() {
@@ -70,11 +70,8 @@ export function SubjectTemplates() {
   const [formData, setFormData] = useState<TemplateFormData>({
     name: '',
     universityId: '',
-    templateType: 'range',
-    startCode: '',
-    endCode: '',
+    templateType: 'list',
     codeList: '',
-    pattern: '',
     description: '',
     faculty: '',
     priority: '0',
@@ -146,9 +143,12 @@ export function SubjectTemplates() {
   });
 
   const queueMutation = useMutation({
-    mutationFn: (id: string) => api.post<{ jobsQueued: number }>(`/api/admin/templates/${id}/queue`, {}),
+    mutationFn: (id: string) => api.post<TemplateQueueResult>(`/api/admin/templates/${id}/queue`, {}),
     onSuccess: (response) => {
-      toast.success(`Successfully queued ${response.jobsQueued} subjects for scraping`);
+      const indexedInfo = response.alreadyIndexed
+        ? ` (${response.alreadyIndexed} already indexed)`
+        : '';
+      toast.success(`Queued ${response.jobsQueued} subjects for scraping${indexedInfo}`);
       queryClient.invalidateQueries({ queryKey: ['admin', 'scrape', 'status'] });
     },
     onError: (error: Error) => {
@@ -160,11 +160,8 @@ export function SubjectTemplates() {
     setFormData({
       name: '',
       universityId: '',
-      templateType: 'range',
-      startCode: '',
-      endCode: '',
+      templateType: 'list',
       codeList: '',
-      pattern: '',
       description: '',
       faculty: '',
       priority: '0',
@@ -184,21 +181,8 @@ export function SubjectTemplates() {
       errors.universityId = 'University is required';
     }
 
-    if (formData.templateType === 'range') {
-      if (!formData.startCode.trim()) {
-        errors.startCode = 'Start code is required for range templates';
-      }
-      if (!formData.endCode.trim()) {
-        errors.endCode = 'End code is required for range templates';
-      }
-    } else if (formData.templateType === 'list') {
-      if (!formData.codeList.trim()) {
-        errors.codeList = 'Code list is required for list templates';
-      }
-    } else if (formData.templateType === 'pattern') {
-      if (!formData.pattern.trim()) {
-        errors.pattern = 'Pattern is required for pattern templates';
-      }
+    if (!formData.codeList.trim()) {
+      errors.codeList = 'Code list is required';
     }
 
     setFormErrors(errors);
@@ -211,15 +195,16 @@ export function SubjectTemplates() {
   };
 
   const handleEditClick = (template: SubjectCodeTemplate) => {
+    if (template.templateType !== 'list') {
+      toast.error('Only list templates can be edited. Please delete legacy templates.');
+      return;
+    }
     setEditingTemplate(template);
     setFormData({
       name: template.name,
       universityId: template.universityId,
       templateType: template.templateType,
-      startCode: template.startCode || '',
-      endCode: template.endCode || '',
       codeList: template.codeList?.join(', ') || '',
-      pattern: template.pattern || '',
       description: template.description || '',
       faculty: template.faculty || '',
       priority: String(template.priority),
@@ -240,6 +225,10 @@ export function SubjectTemplates() {
   };
 
   const handleQueueClick = (template: SubjectCodeTemplate) => {
+    if (template.templateType !== 'list') {
+      toast.error('Only list templates can be queued.');
+      return;
+    }
     queueMutation.mutate(template.id);
   };
 
@@ -251,26 +240,17 @@ export function SubjectTemplates() {
     const payload: Partial<SubjectCodeTemplate> = {
       name: formData.name.trim(),
       universityId: formData.universityId,
-      templateType: formData.templateType,
+      templateType: 'list',
       description: formData.description.trim() || null,
       faculty: formData.faculty.trim() || null,
       priority: parseInt(formData.priority, 10) || 0,
       active: formData.active,
     };
 
-    if (formData.templateType === 'range') {
-      payload.startCode = formData.startCode.trim();
-      payload.endCode = formData.endCode.trim();
-    } else if (formData.templateType === 'list') {
-      payload.codeList = formData.codeList
-        .split(',')
-        .map(c => c.trim())
-        .filter(c => c.length > 0);
-    } else if (formData.templateType === 'pattern') {
-      payload.pattern = formData.pattern.trim();
-      payload.startCode = formData.startCode.trim() || null;
-      payload.endCode = formData.endCode.trim() || null;
-    }
+    payload.codeList = formData.codeList
+      .split(',')
+      .map(c => c.trim())
+      .filter(c => c.length > 0);
 
     createMutation.mutate(payload);
   };
@@ -282,33 +262,16 @@ export function SubjectTemplates() {
 
     const payload: Partial<SubjectCodeTemplate> = {
       name: formData.name.trim(),
-      universityId: formData.universityId,
-      templateType: formData.templateType,
       description: formData.description.trim() || null,
       faculty: formData.faculty.trim() || null,
       priority: parseInt(formData.priority, 10) || 0,
       active: formData.active,
     };
 
-    if (formData.templateType === 'range') {
-      payload.startCode = formData.startCode.trim();
-      payload.endCode = formData.endCode.trim();
-      payload.codeList = null;
-      payload.pattern = null;
-    } else if (formData.templateType === 'list') {
-      payload.codeList = formData.codeList
-        .split(',')
-        .map(c => c.trim())
-        .filter(c => c.length > 0);
-      payload.startCode = null;
-      payload.endCode = null;
-      payload.pattern = null;
-    } else if (formData.templateType === 'pattern') {
-      payload.pattern = formData.pattern.trim();
-      payload.startCode = formData.startCode.trim() || null;
-      payload.endCode = formData.endCode.trim() || null;
-      payload.codeList = null;
-    }
+    payload.codeList = formData.codeList
+      .split(',')
+      .map(c => c.trim())
+      .filter(c => c.length > 0);
 
     updateMutation.mutate({ id: editingTemplate.id, data: payload });
   };
@@ -328,117 +291,24 @@ export function SubjectTemplates() {
   };
 
   const renderDynamicFields = () => {
-    const { templateType } = formData;
-
-    if (templateType === 'range') {
-      return (
-        <>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="startCode" className="font-bold uppercase text-sm">
-                Start Code <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="startCode"
-                placeholder="e.g., 31001"
-                value={formData.startCode}
-                onChange={(e) => setFormData({ ...formData, startCode: e.target.value })}
-                className={`h-12 border-3 ${formErrors.startCode ? 'border-destructive' : ''}`}
-              />
-              {formErrors.startCode && (
-                <p className="text-xs text-destructive font-medium mt-1">{formErrors.startCode}</p>
-              )}
-            </div>
-            <div>
-              <Label htmlFor="endCode" className="font-bold uppercase text-sm">
-                End Code <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                id="endCode"
-                placeholder="e.g., 31999"
-                value={formData.endCode}
-                onChange={(e) => setFormData({ ...formData, endCode: e.target.value })}
-                className={`h-12 border-3 ${formErrors.endCode ? 'border-destructive' : ''}`}
-              />
-              {formErrors.endCode && (
-                <p className="text-xs text-destructive font-medium mt-1">{formErrors.endCode}</p>
-              )}
-            </div>
-          </div>
-        </>
-      );
-    }
-
-    if (templateType === 'list') {
-      return (
-        <div>
-          <Label htmlFor="codeList" className="font-bold uppercase text-sm">
-            Code List (comma-separated) <span className="text-destructive">*</span>
-          </Label>
-          <Textarea
-            id="codeList"
-            placeholder="e.g., 31251, 31252, 31271"
-            value={formData.codeList}
-            onChange={(e) => setFormData({ ...formData, codeList: e.target.value })}
-            rows={4}
-            className={`border-3 font-mono ${formErrors.codeList ? 'border-destructive' : ''}`}
-          />
-          {formErrors.codeList && (
-            <p className="text-xs text-destructive font-medium mt-1">{formErrors.codeList}</p>
-          )}
-        </div>
-      );
-    }
-
-    if (templateType === 'pattern') {
-      return (
-        <>
-          <div>
-            <Label htmlFor="pattern" className="font-bold uppercase text-sm">
-              Regex Pattern <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="pattern"
-              placeholder="e.g., ^31\\d{3}$"
-              value={formData.pattern}
-              onChange={(e) => setFormData({ ...formData, pattern: e.target.value })}
-              className={`h-12 border-3 font-mono ${formErrors.pattern ? 'border-destructive' : ''}`}
-            />
-            {formErrors.pattern && (
-              <p className="text-xs text-destructive font-medium mt-1">{formErrors.pattern}</p>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="startCode" className="font-bold uppercase text-sm">
-                Start Code (optional)
-              </Label>
-              <Input
-                id="startCode"
-                placeholder="e.g., 31001"
-                value={formData.startCode}
-                onChange={(e) => setFormData({ ...formData, startCode: e.target.value })}
-                className="h-12 border-3"
-              />
-            </div>
-            <div>
-              <Label htmlFor="endCode" className="font-bold uppercase text-sm">
-                End Code (optional)
-              </Label>
-              <Input
-                id="endCode"
-                placeholder="e.g., 31999"
-                value={formData.endCode}
-                onChange={(e) => setFormData({ ...formData, endCode: e.target.value })}
-                className="h-12 border-3"
-              />
-            </div>
-          </div>
-        </>
-      );
-    }
-
-    return null;
+    return (
+      <div>
+        <Label htmlFor="codeList" className="font-bold uppercase text-sm">
+          Code List (comma-separated) <span className="text-destructive">*</span>
+        </Label>
+        <Textarea
+          id="codeList"
+          placeholder="e.g., 31251, 31252, 31271"
+          value={formData.codeList}
+          onChange={(e) => setFormData({ ...formData, codeList: e.target.value })}
+          rows={4}
+          className={`border-3 font-mono ${formErrors.codeList ? 'border-destructive' : ''}`}
+        />
+        {formErrors.codeList && (
+          <p className="text-xs text-destructive font-medium mt-1">{formErrors.codeList}</p>
+        )}
+      </div>
+    );
   };
 
   const getTemplateTypeLabel = (type: TemplateType): string => {
@@ -559,7 +429,7 @@ export function SubjectTemplates() {
                           size="sm"
                           variant="default"
                           onClick={() => handleQueueClick(template)}
-                          disabled={queueMutation.isPending}
+                          disabled={queueMutation.isPending || template.templateType !== 'list'}
                           className="h-9"
                         >
                           <Play className="h-4 w-4 mr-1" />
@@ -638,19 +508,15 @@ export function SubjectTemplates() {
             </div>
 
             <div>
-              <Label htmlFor="templateType" className="font-bold uppercase text-sm">
-                Template Type <span className="text-destructive">*</span>
+              <Label className="font-bold uppercase text-sm">
+                Template Type
               </Label>
-              <select
-                id="templateType"
-                className="flex h-12 w-full border-3 border-input bg-background px-3 py-2 text-sm font-medium shadow-neo-sm focus:outline-none focus:shadow-neo"
-                value={formData.templateType}
-                onChange={(e) => setFormData({ ...formData, templateType: e.target.value as TemplateType })}
-              >
-                <option value="range">Range</option>
-                <option value="list">List</option>
-                <option value="pattern">Pattern</option>
-              </select>
+              <div className="flex h-12 w-full items-center border-3 border-input bg-muted px-3 py-2 text-sm font-bold uppercase shadow-neo-sm">
+                List
+              </div>
+              <p className="text-xs text-muted-foreground font-medium mt-1">
+                Only list templates are supported for UTS subject indexing.
+              </p>
             </div>
 
             {renderDynamicFields()}
@@ -776,6 +642,7 @@ export function SubjectTemplates() {
                 }`}
                 value={formData.universityId}
                 onChange={(e) => setFormData({ ...formData, universityId: e.target.value })}
+                disabled
               >
                 <option value="">Select a university</option>
                 {universities?.map((uni) => (
@@ -784,25 +651,24 @@ export function SubjectTemplates() {
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-muted-foreground font-medium mt-1">
+                University cannot be changed after creation.
+              </p>
               {formErrors.universityId && (
                 <p className="text-xs text-destructive font-medium mt-1">{formErrors.universityId}</p>
               )}
             </div>
 
             <div>
-              <Label htmlFor="edit-templateType" className="font-bold uppercase text-sm">
-                Template Type <span className="text-destructive">*</span>
+              <Label className="font-bold uppercase text-sm">
+                Template Type
               </Label>
-              <select
-                id="edit-templateType"
-                className="flex h-12 w-full border-3 border-input bg-background px-3 py-2 text-sm font-medium shadow-neo-sm focus:outline-none focus:shadow-neo"
-                value={formData.templateType}
-                onChange={(e) => setFormData({ ...formData, templateType: e.target.value as TemplateType })}
-              >
-                <option value="range">Range</option>
-                <option value="list">List</option>
-                <option value="pattern">Pattern</option>
-              </select>
+              <div className="flex h-12 w-full items-center border-3 border-input bg-muted px-3 py-2 text-sm font-bold uppercase shadow-neo-sm">
+                List
+              </div>
+              <p className="text-xs text-muted-foreground font-medium mt-1">
+                Template type is fixed to list.
+              </p>
             </div>
 
             {renderDynamicFields()}

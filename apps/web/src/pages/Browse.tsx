@@ -300,7 +300,7 @@ export function BrowsePage() {
               <div className="grid grid-cols-1 gap-4">
                 {units?.map((unit) => (
                   <div
-                    key={unit.unitCode}
+                    key={unit.id}
                     className="group relative flex flex-col sm:flex-row gap-4 p-5 border-4 border-foreground bg-card shadow-neo hover:shadow-neo-lg hover:-translate-y-1 transition-all cursor-pointer"
                     onClick={() => navigate(`/units/${unit.id}`)}
                   >

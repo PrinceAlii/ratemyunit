@@ -2,6 +2,7 @@ import { Browser } from 'playwright';
 import { GenericDomScraper } from './generic.js';
 import { ScraperResult } from '../uts/types.js';
 import { createLogger } from '../../lib/logger.js';
+import { configurePage } from './utils.js';
 
 const logger = createLogger('search-scraper');
 
@@ -26,6 +27,7 @@ export class SearchDomScraper extends GenericDomScraper {
 
     const fullSearchUrl = `${this.config.baseUrl}${searchUrl}`;
     const page = await browser.newPage();
+    await configurePage(page);
 
     try {
       await page.goto(fullSearchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });

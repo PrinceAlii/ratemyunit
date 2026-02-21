@@ -51,7 +51,7 @@ vi.mock('@ratemyunit/db/client', () => ({
 }));
 
 vi.mock('@ratemyunit/db/schema', () => ({
-  units: { id: 'id', unitCode: 'unitCode', createdAt: 'createdAt' },
+  units: { id: 'id', unitCode: 'unitCode', universityId: 'universityId', scrapedAt: 'scrapedAt', createdAt: 'createdAt' },
   reviews: {
     id: 'id',
     userId: 'userId',
@@ -76,6 +76,8 @@ vi.mock('@ratemyunit/db/schema', () => ({
 
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn(),
+  and: vi.fn(),
+  inArray: vi.fn(),
   desc: vi.fn(),
   sql: vi.fn().mockReturnValue('sql-mock'),
 }));
@@ -396,7 +398,10 @@ describe('adminRoutes', () => {
 
   describe('POST /scrape', () => {
     it('queues a scrape job', async () => {
-      mockSelect.mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.university }]));
+      mockSelect
+        .mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.university }]))
+        .mockReturnValueOnce(createChainBuilder([]));
+      mockQueue.getJob.mockResolvedValue(null);
       mockQueue.add.mockResolvedValue(undefined);
 
       const request = createMockRequest({
@@ -405,15 +410,27 @@ describe('adminRoutes', () => {
       const reply = createMockReply();
       await handlers['POST /scrape'](request, reply);
 
-      expect(mockQueue.add).toHaveBeenCalledWith('scrape-unit', {
-        type: 'scrape',
-        unitCode: '31251',
-        universityId: TEST_IDS.university,
-      });
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'scrape-unit',
+        {
+          type: 'scrape',
+          unitCode: '31251',
+          universityId: TEST_IDS.university,
+        },
+        {
+          jobId: `scrape-${TEST_IDS.university}-31251`,
+          attempts: 5,
+          backoff: { type: 'exponential', delay: 5000 },
+        },
+      );
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
           message: 'Scrape job queued for unit 31251',
+          data: {
+            status: 'queued',
+            jobId: `scrape-${TEST_IDS.university}-31251`,
+          },
         }),
       );
     });
@@ -439,7 +456,10 @@ describe('adminRoutes', () => {
 
   describe('POST /scrape/bulk', () => {
     it('queues bulk scrape jobs', async () => {
-      mockSelect.mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.university }]));
+      mockSelect
+        .mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.university }]))
+        .mockReturnValueOnce(createChainBuilder([]));
+      mockQueue.getJob.mockResolvedValue(null);
       mockQueue.addBulk.mockResolvedValue(undefined);
 
       const request = createMockRequest({
@@ -455,6 +475,8 @@ describe('adminRoutes', () => {
           data: expect.objectContaining({
             total: 3,
             queued: 3,
+            alreadyQueued: 0,
+            alreadyIndexed: 0,
           }),
         }),
       );
@@ -465,7 +487,9 @@ describe('adminRoutes', () => {
 
   describe('POST /scrape/range', () => {
     it('queues range scrape jobs', async () => {
-      mockSelect.mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.university }]));
+      mockSelect
+        .mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.university }]))
+        .mockReturnValueOnce(createChainBuilder([]));
       mockQueue.getJobCounts.mockResolvedValue({ waiting: 0, active: 0 });
       mockQueue.addBulk.mockResolvedValue(undefined);
 
@@ -482,6 +506,7 @@ describe('adminRoutes', () => {
           data: expect.objectContaining({
             total: 3,
             queued: 3,
+            alreadyIndexed: 0,
           }),
         }),
       );

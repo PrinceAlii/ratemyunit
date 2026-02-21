@@ -4,6 +4,7 @@ import { ScraperResult } from '../uts/types.js';
 import { safeValidateScrapedSubject } from '../uts/validator.js';
 import he from 'he';
 import { createLogger } from '../../lib/logger.js';
+import { configurePage } from './utils.js';
 
 const logger = createLogger('generic-scraper');
 
@@ -20,6 +21,7 @@ export class GenericDomScraper extends BaseScraper {
 
     const url = `${this.config.baseUrl}${routePattern.replace(':code', cleanCode)}`;
     const page = await browser.newPage();
+    await configurePage(page);
 
     try {
       const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -52,6 +54,7 @@ export class GenericDomScraper extends BaseScraper {
         : this.config.baseUrl;
 
     const page = await browser.newPage();
+    await configurePage(page);
     const discoveredCodes = new Set<string>();
 
     try {

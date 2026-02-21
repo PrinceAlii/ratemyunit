@@ -4,11 +4,14 @@ import { config } from '../config.js';
 import { scraperService } from '../services/scraper.js';
 import { createPool, Pool } from 'generic-pool';
 import { createLogger } from './logger.js';
+import { db } from '@ratemyunit/db/client';
+import { units } from '@ratemyunit/db/schema';
+import { and, eq, inArray } from 'drizzle-orm';
 
 const logger = createLogger('queue');
 
 const redisUrl = new URL(config.REDIS_URL);
-const db =
+const redisDb =
   redisUrl.pathname && redisUrl.pathname !== '/'
     ? Number(redisUrl.pathname.slice(1))
     : undefined;
@@ -18,12 +21,16 @@ const connection: ConnectionOptions = {
   port: redisUrl.port ? Number(redisUrl.port) : 6379,
   username: redisUrl.username || undefined,
   password: redisUrl.password || undefined,
-  db: Number.isNaN(db) ? undefined : db,
+  db: Number.isNaN(redisDb) ? undefined : redisDb,
   maxRetriesPerRequest: null, // Required by BullMQ
   ...(redisUrl.protocol === 'rediss:' ? { tls: {} } : {}),
 };
 
 export const QUEUE_NAME = 'scraper-queue';
+
+const normalizeUnitCode = (code: string) => code.trim().toUpperCase();
+const buildJobId = (universityId: string, unitCode: string) =>
+  `scrape-${universityId}-${normalizeUnitCode(unitCode)}`;
 
 // Queue for producers
 export const scraperQueue = new Queue(QUEUE_NAME, {
@@ -135,8 +142,47 @@ export function setupWorker() {
               const preview = codes.slice(0, 10).join(', ');
               logger.info(`🔎 Discovery found ${codes.length} units${codes.length > 0 ? `: ${preview}${codes.length > 10 ? '...' : ''}` : ''}`);
 
+              const normalizedCodes = Array.from(
+                new Set(codes.map(normalizeUnitCode))
+              );
+
+              const existingUnitCodes = new Set<string>();
+
+              if (normalizedCodes.length > 0) {
+                const existingUnits = await db
+                  .select({ unitCode: units.unitCode })
+                  .from(units)
+                  .where(
+                    and(
+                      eq(units.universityId, universityId),
+                      inArray(units.unitCode, normalizedCodes)
+                    )
+                  );
+
+                existingUnits.forEach((unit: { unitCode: string }) => {
+                  existingUnitCodes.add(normalizeUnitCode(unit.unitCode));
+                });
+              }
+
+              const pendingCodes = normalizedCodes.filter(
+                (code) => !existingUnitCodes.has(code)
+              );
+
+              const jobLookups = await Promise.all(
+                pendingCodes.map((code) =>
+                  scraperQueue.getJob(buildJobId(universityId, code))
+                )
+              );
+
+              const queuedCodes = pendingCodes.filter((_, index) => !jobLookups[index]);
+              const skippedQueued = pendingCodes.filter((_, index) => jobLookups[index]);
+
+              logger.info(
+                `📦 Discovery queue summary: ${queuedCodes.length} queued, ${existingUnitCodes.size} already indexed, ${skippedQueued.length} already queued`
+              );
+
               // Bulk add scrape jobs
-              const jobs = codes.map(code => ({
+              const jobs = queuedCodes.map(code => ({
                   name: `scrape-${code}`,
                   data: {
                       type: 'scrape' as const,
@@ -144,7 +190,7 @@ export function setupWorker() {
                       universityId
                   },
                   opts: { 
-                      jobId: `scrape-${universityId}-${code}`, // Deduplication
+                      jobId: buildJobId(universityId, code), // Deduplication
                       backoff: {
                           type: 'exponential',
                           delay: 5000, // Start with 5s delay
@@ -186,25 +232,37 @@ export function setupWorker() {
                 logger.warn(`⚠️ Scrape failed for ${unitCode}: ${result.error}`);
                 
                 // Check if we should retry (Blocking errors or Timeouts)
-                if (result.error && (
+                const errorMessage = result.error || 'Unknown scraping error';
+                const isRetryable = (
+                  result.error && (
                     result.error.includes('Blocking error') ||
                     result.error.includes('429') ||
                     result.error.includes('403') ||
                     result.error.includes('Timeout') ||
                     result.error.includes('Navigation failed')
-                )) {
+                  )
+                );
+
+                if (isRetryable) {
                     consecutiveBlockingErrors++;
                     logger.warn(`🔄 Retrying job ${job.id} due to transient error: ${result.error}. Consecutive errors: ${consecutiveBlockingErrors}`);
                     throw new Error(result.error); // Throwing triggers BullMQ retry with backoff
-                } else {
-                    // Non-blocking failure (e.g. unit not found) - reset blocking counter
-                    consecutiveBlockingErrors = 0;
-                    backoffMultiplier = 1;
                 }
+
+                // Non-retryable failure (e.g. unit not found) - mark failed without retry
+                await job.discard();
+                consecutiveBlockingErrors = 0;
+                backoffMultiplier = 1;
+                throw new Error(errorMessage);
             } else {
                 // Success - reset blocking counter
                 consecutiveBlockingErrors = 0;
                 backoffMultiplier = 1;
+                await job.updateProgress({
+                  status: 'indexed',
+                  unitCode,
+                  universityId,
+                });
             }
           } catch (e) {
               logger.error({ err: e }, `Scrape failed for ${unitCode}`);

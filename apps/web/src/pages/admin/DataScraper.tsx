@@ -28,15 +28,26 @@ interface ScrapeStatus {
   failed: number;
 }
 
+interface SingleScrapeResult {
+  status: 'queued' | 'already_queued' | 'already_indexed';
+  jobId?: string;
+  state?: string | null;
+  unitId?: string | null;
+  scrapedAt?: string | null;
+}
+
 interface BulkScrapeResult {
   total: number;
   queued: number;
+  alreadyQueued: number;
+  alreadyIndexed: number;
   message: string;
 }
 
 interface RangeScrapeResult {
   total: number;
   queued: number;
+  alreadyIndexed: number;
   message: string;
 }
 
@@ -68,9 +79,12 @@ interface Job {
 
 interface JobsResponse {
   jobs: Job[];
-  total: number;
-  page: number;
-  pageSize: number;
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 }
 
 type JobState = 'waiting' | 'active' | 'completed' | 'failed';
@@ -125,7 +139,7 @@ export function DataScraper() {
     queryFn: () => api.get<JobsResponse>('/api/admin/queue/jobs', {
       state: selectedJobState,
       page: currentPage,
-      pageSize: 20,
+      limit: 20,
     }),
     enabled: jobsDialogOpen,
     refetchInterval: jobsDialogOpen ? 5000 : false,
@@ -152,13 +166,24 @@ export function DataScraper() {
   });
 
   const singleMutation = useMutation({
-    mutationFn: (code: string) => api.post('/api/admin/scrape', {
+    mutationFn: (code: string) => api.post<SingleScrapeResult>('/api/admin/scrape', {
       unitCode: code,
       universityId: selectedUni || undefined 
     }),
-    onSuccess: (_, code) => {
-      setSingleMessage({ type: 'success', text: `Scrape job queued for unit ${code}` });
-      toast.success(`Scrape job queued for unit ${code}`);
+    onSuccess: (data, code) => {
+      let message = '';
+
+      if (data.status === 'already_indexed') {
+        message = `Unit ${code} already indexed`;
+      } else if (data.status === 'already_queued') {
+        const stateText = data.state ? ` (${data.state})` : '';
+        message = `Job already queued for unit ${code}${stateText}`;
+      } else {
+        message = `Scrape job queued for unit ${code}`;
+      }
+
+      setSingleMessage({ type: 'success', text: message });
+      toast.success(message);
       setSingleCode('');
       queryClient.invalidateQueries({ queryKey: ['admin', 'scrape', 'status'] });
     },
@@ -174,8 +199,9 @@ export function DataScraper() {
       universityId: selectedUni || undefined
     }),
     onSuccess: (data) => {
-      setBulkMessage({ type: 'success', text: data.message });
-      toast.success(data.message);
+      const message = `${data.message} (${data.queued} queued, ${data.alreadyQueued} already queued, ${data.alreadyIndexed} already indexed)`;
+      setBulkMessage({ type: 'success', text: message });
+      toast.success(message);
       setBulkCodes('');
       setBulkDialogOpen(false);
       queryClient.invalidateQueries({ queryKey: ['admin'] });
@@ -194,8 +220,9 @@ export function DataScraper() {
       universityId: selectedUni || undefined,
     }),
     onSuccess: (data) => {
-      setRangeMessage({ type: 'success', text: data.message });
-      toast.success(data.message);
+      const message = `${data.message} (${data.queued} queued, ${data.alreadyIndexed} already indexed)`;
+      setRangeMessage({ type: 'success', text: message });
+      toast.success(message);
       setRangeStart('');
       setRangeEnd('');
       setPendingRange(null);
@@ -384,7 +411,7 @@ export function DataScraper() {
     cancelJobMutation.mutate(jobId);
   };
 
-  const totalPages = jobsData ? Math.ceil(jobsData.total / 20) : 1;
+  const totalPages = jobsData ? jobsData.pagination.totalPages : 1;
 
   const getJobTimestamp = (job: Job) => {
       // Use processedOn or finishedOn if available, otherwise fallback to timestamp (creation time)
@@ -927,10 +954,10 @@ export function DataScraper() {
           </div>
 
           {/* Pagination */}
-          {jobsData && jobsData.total > 20 && (
+          {jobsData && jobsData.pagination.total > 20 && (
             <div className="flex items-center justify-between border-t-3 border-foreground pt-4">
               <div className="text-sm font-medium text-muted-foreground">
-                Page {currentPage} of {totalPages} ({jobsData.total} total)
+                Page {currentPage} of {totalPages} ({jobsData.pagination.total} total)
               </div>
               <div className="flex gap-2">
                 <Button

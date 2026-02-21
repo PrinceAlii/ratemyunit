@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '@ratemyunit/db/client';
 import { units, reviews, users, universities, userTelemetry } from '@ratemyunit/db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, and, inArray } from 'drizzle-orm';
 import { requireAdmin } from '../middleware/auth.js';
 import { scraperQueue } from '../lib/queue.js';
 import { moderateReviewSchema, banUserSchema } from '@ratemyunit/validators';
@@ -25,6 +25,52 @@ const rangeScrapeSchema = z.object({
   universityId: z.string().uuid().optional(),
   delay: z.number().int().min(0).optional().default(0),
 });
+
+const queueLookupSchema = z.object({
+  unitCode: z.string().min(1),
+  universityId: z.string().uuid().optional(),
+});
+
+const normalizeUnitCode = (code: string) => code.trim().toUpperCase();
+const buildJobId = (universityId: string, unitCode: string) =>
+  `scrape-${universityId}-${normalizeUnitCode(unitCode)}`;
+
+const resolveUniversityId = async (universityId?: string) => {
+  if (universityId) return universityId;
+  const [uts] = await db
+    .select()
+    .from(universities)
+    .where(eq(universities.abbreviation, 'UTS'))
+    .limit(1);
+  return uts?.id;
+};
+
+const fetchExistingUnitCodes = async (
+  universityId: string,
+  codes: string[],
+  chunkSize = 1000
+) => {
+  const existing = new Set<string>();
+
+  for (let i = 0; i < codes.length; i += chunkSize) {
+    const chunk = codes.slice(i, i + chunkSize);
+    if (chunk.length === 0) continue;
+
+    const rows = await db
+      .select({ unitCode: units.unitCode })
+      .from(units)
+      .where(
+        and(
+          eq(units.universityId, universityId),
+          inArray(units.unitCode, chunk)
+        )
+      );
+
+    rows.forEach((row) => existing.add(normalizeUnitCode(row.unitCode)));
+  }
+
+  return existing;
+};
 
 export async function adminRoutes(app: FastifyInstance) {
   // Protect all admin routes
@@ -218,22 +264,78 @@ export async function adminRoutes(app: FastifyInstance) {
     }
 
     const { unitCode, universityId } = result.data;
-    
+    const normalizedCode = normalizeUnitCode(unitCode);
+
     // Resolve university ID or default to UTS
-    const effectiveUniId = universityId || (await db.select().from(universities).where(eq(universities.abbreviation, 'UTS')).limit(1).then(r => r[0]?.id));
-      
-    if (!effectiveUniId) return reply.status(400).send({ success: false, error: 'University ID required or default UTS not found' });
+    const effectiveUniId = await resolveUniversityId(universityId);
+
+    if (!effectiveUniId) {
+      return reply
+        .status(400)
+        .send({ success: false, error: 'University ID required or default UTS not found' });
+    }
+
+    const [existingUnit] = await db
+      .select({ id: units.id, scrapedAt: units.scrapedAt })
+      .from(units)
+      .where(
+        and(
+          eq(units.universityId, effectiveUniId),
+          eq(units.unitCode, normalizedCode)
+        )
+      )
+      .limit(1);
+
+    if (existingUnit) {
+      return reply.send({
+        success: true,
+        message: `Unit ${normalizedCode} already indexed`,
+        data: {
+          status: 'already_indexed',
+          unitId: existingUnit.id,
+          scrapedAt: existingUnit.scrapedAt,
+        },
+      });
+    }
+
+    const jobId = buildJobId(effectiveUniId, normalizedCode);
+    const existingJob = await scraperQueue.getJob(jobId);
+
+    if (existingJob) {
+      const state = await existingJob.getState();
+      return reply.send({
+        success: true,
+        message: `Job already ${state} for unit ${normalizedCode}`,
+        data: {
+          status: 'already_queued',
+          jobId,
+          state,
+        },
+      });
+    }
 
     // Add to queue with university ID
-    await scraperQueue.add('scrape-unit', { 
+    await scraperQueue.add(
+      'scrape-unit',
+      {
         type: 'scrape',
-        unitCode, 
-        universityId: effectiveUniId 
-    });
+        unitCode: normalizedCode,
+        universityId: effectiveUniId,
+      },
+      {
+        jobId,
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 5000 },
+      }
+    );
 
     return reply.send({
       success: true,
-      message: `Scrape job queued for unit ${unitCode}`,
+      message: `Scrape job queued for unit ${normalizedCode}`,
+      data: {
+        status: 'queued',
+        jobId,
+      },
     });
   });
 
@@ -248,28 +350,63 @@ export async function adminRoutes(app: FastifyInstance) {
     const { unitCodes, universityId } = result.data;
 
     try {
-      const effectiveUniId = universityId || (await db.select().from(universities).where(eq(universities.abbreviation, 'UTS')).limit(1).then(r => r[0]?.id));
+      const effectiveUniId = await resolveUniversityId(universityId);
       
-      if (!effectiveUniId) return reply.status(400).send({ success: false, error: 'University ID required or default UTS not found' });
+      if (!effectiveUniId) {
+        return reply.status(400).send({
+          success: false,
+          error: 'University ID required or default UTS not found',
+        });
+      }
 
-      const finalJobs = unitCodes.map(code => ({
+      const normalizedCodes = Array.from(
+        new Set(unitCodes.map(normalizeUnitCode))
+      );
+
+      const existingUnitCodes = await fetchExistingUnitCodes(
+        effectiveUniId,
+        normalizedCodes
+      );
+
+      const pendingCodes = normalizedCodes.filter(
+        (code) => !existingUnitCodes.has(code)
+      );
+
+      const jobLookups = await Promise.all(
+        pendingCodes.map((code) =>
+          scraperQueue.getJob(buildJobId(effectiveUniId, code))
+        )
+      );
+
+      const alreadyQueuedCodes = pendingCodes.filter((_, i) => jobLookups[i]);
+      const codesToQueue = pendingCodes.filter((_, i) => !jobLookups[i]);
+
+      const finalJobs = codesToQueue.map(code => ({
         name: 'scrape-unit',
         data: {
             type: 'scrape' as const,
             unitCode: code,
             universityId: effectiveUniId
         },
-        opts: { jobId: `scrape-${effectiveUniId}-${code}` }
+        opts: { 
+          jobId: buildJobId(effectiveUniId, code),
+          attempts: 5,
+          backoff: { type: 'exponential' as const, delay: 5000 }
+        }
       }));
 
-      await scraperQueue.addBulk(finalJobs);
+      if (finalJobs.length > 0) {
+        await scraperQueue.addBulk(finalJobs);
+      }
 
       return reply.send({
         success: true,
         data: {
-          total: unitCodes.length,
-          queued: unitCodes.length,
-          message: `Queued ${unitCodes.length} jobs for background processing.`
+          total: normalizedCodes.length,
+          queued: finalJobs.length,
+          alreadyQueued: alreadyQueuedCodes.length,
+          alreadyIndexed: existingUnitCodes.size,
+          message: `Queued ${finalJobs.length} job${finalJobs.length === 1 ? '' : 's'} for background processing.`,
         },
       });
     } catch (error) {
@@ -296,12 +433,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
     const { startCode, endCode, universityId, delay } = result.data;
 
-    const effectiveUniId = universityId || (await db
-      .select()
-      .from(universities)
-      .where(eq(universities.abbreviation, 'UTS'))
-      .limit(1)
-      .then(r => r[0]?.id));
+    const effectiveUniId = await resolveUniversityId(universityId);
 
     if (!effectiveUniId) {
       return reply.status(400).send({
@@ -334,22 +466,43 @@ export async function adminRoutes(app: FastifyInstance) {
       });
     }
 
+    const normalizedCodes = Array.from(new Set(codes.map(normalizeUnitCode)));
+    const existingUnitCodes = await fetchExistingUnitCodes(
+      effectiveUniId,
+      normalizedCodes
+    );
+    const codesToQueue = normalizedCodes.filter(
+      (code) => !existingUnitCodes.has(code)
+    );
+
+    if (codesToQueue.length === 0) {
+      return reply.send({
+        success: true,
+        data: {
+          total: normalizedCodes.length,
+          queued: 0,
+          alreadyIndexed: existingUnitCodes.size,
+          message: 'All codes in this range are already indexed.',
+        },
+      });
+    }
+
     const MAX_QUEUE_SIZE = 10000;
     const currentCounts = await scraperQueue.getJobCounts('waiting', 'active');
     const currentTotal = currentCounts.waiting + currentCounts.active;
 
-    if (currentTotal + codes.length > MAX_QUEUE_SIZE) {
+    if (currentTotal + codesToQueue.length > MAX_QUEUE_SIZE) {
       return reply.status(429).send({
         success: false,
-        error: `Queue capacity exceeded. Current: ${currentTotal}, New: ${codes.length}, Max: ${MAX_QUEUE_SIZE}. Please wait for existing jobs to complete or use a smaller range.`,
+        error: `Queue capacity exceeded. Current: ${currentTotal}, New: ${codesToQueue.length}, Max: ${MAX_QUEUE_SIZE}. Please wait for existing jobs to complete or use a smaller range.`,
       });
     }
 
     const CHUNK_SIZE = 1000;
     let queuedCount = 0;
 
-    for (let i = 0; i < codes.length; i += CHUNK_SIZE) {
-      const chunk = codes.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < codesToQueue.length; i += CHUNK_SIZE) {
+      const chunk = codesToQueue.slice(i, i + CHUNK_SIZE);
       const jobs = chunk.map(code => ({
         name: 'scrape-unit',
         data: {
@@ -358,7 +511,7 @@ export async function adminRoutes(app: FastifyInstance) {
           universityId: effectiveUniId,
         },
         opts: {
-          jobId: `scrape-${effectiveUniId}-${code}`,
+          jobId: buildJobId(effectiveUniId, code),
           delay,
           backoff: {
             type: 'exponential' as const,
@@ -371,7 +524,7 @@ export async function adminRoutes(app: FastifyInstance) {
       await scraperQueue.addBulk(jobs);
       queuedCount += jobs.length;
 
-      if (i + CHUNK_SIZE < codes.length) {
+      if (i + CHUNK_SIZE < codesToQueue.length) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
@@ -379,8 +532,9 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.send({
       success: true,
       data: {
-        total: codes.length,
+        total: normalizedCodes.length,
         queued: queuedCount,
+        alreadyIndexed: existingUnitCodes.size,
         message: `Queued ${queuedCount} jobs for background processing.`,
       },
     });
@@ -412,6 +566,61 @@ export async function adminRoutes(app: FastifyInstance) {
           paused: isPaused
       },
     };
+  });
+
+  /**
+   * GET /api/admin/queue/lookup
+   * Lookup queue status for a specific unit code.
+   */
+  app.get('/queue/lookup', async (request, reply) => {
+    const result = queueLookupSchema.safeParse(request.query);
+
+    if (!result.success) {
+      return reply.status(400).send({
+        success: false,
+        error: 'Invalid query parameters',
+        details: result.error,
+      });
+    }
+
+    const { unitCode, universityId } = result.data;
+    const normalizedCode = normalizeUnitCode(unitCode);
+    const effectiveUniId = await resolveUniversityId(universityId);
+
+    if (!effectiveUniId) {
+      return reply.status(400).send({
+        success: false,
+        error: 'University ID required or default UTS not found',
+      });
+    }
+
+    const [existingUnit] = await db
+      .select({ id: units.id, scrapedAt: units.scrapedAt })
+      .from(units)
+      .where(
+        and(
+          eq(units.universityId, effectiveUniId),
+          eq(units.unitCode, normalizedCode)
+        )
+      )
+      .limit(1);
+
+    const jobId = buildJobId(effectiveUniId, normalizedCode);
+    const existingJob = await scraperQueue.getJob(jobId);
+    const state = existingJob ? await existingJob.getState() : null;
+
+    return reply.send({
+      success: true,
+      data: {
+        unitCode: normalizedCode,
+        universityId: effectiveUniId,
+        jobId,
+        state,
+        indexed: !!existingUnit,
+        unitId: existingUnit?.id || null,
+        scrapedAt: existingUnit?.scrapedAt || null,
+      },
+    });
   });
 
   /**

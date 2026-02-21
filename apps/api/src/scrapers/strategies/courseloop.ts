@@ -8,6 +8,7 @@ import { universities, subjectCodeTemplates } from '@ratemyunit/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { subjectTemplateService } from '../../services/template.js';
 import { createLogger } from '../../lib/logger.js';
+import { configurePage } from './utils.js';
 import { XMLParser } from 'fast-xml-parser';
 
 const logger = createLogger('courseloop-scraper');
@@ -23,6 +24,7 @@ export class CourseLoopScraper extends BaseScraper {
     const url = `${this.config.baseUrl}${relativePath}`;
 
     const page = await browser.newPage();
+    await configurePage(page);
 
     try {
       const response = await page.goto(url, {
@@ -101,6 +103,7 @@ export class CourseLoopScraper extends BaseScraper {
       : this.config.baseUrl;
 
     const page = await browser.newPage();
+    await configurePage(page);
     const discoveredCodes = new Set<string>();
 
     try {

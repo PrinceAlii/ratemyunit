@@ -55,11 +55,16 @@ vi.mock('@ratemyunit/db/schema', () => ({
     name: 'name',
     abbreviation: 'abbreviation',
   },
+  units: {
+    unitCode: 'unitCode',
+    universityId: 'universityId',
+  },
 }));
 
 vi.mock('drizzle-orm', () => ({
   eq: vi.fn(),
   and: vi.fn(),
+  inArray: vi.fn(),
   desc: vi.fn(),
 }));
 
@@ -133,11 +138,11 @@ function captureApp() {
 
 const mockTemplate = {
   id: TEST_IDS.template,
-  name: 'UTS FEIT Range',
-  templateType: 'range' as const,
-  startCode: '31001',
-  endCode: '31010',
-  codeList: null,
+  name: 'UTS FEIT List',
+  templateType: 'list' as const,
+  startCode: null,
+  endCode: null,
+  codeList: ['31001', '31002'],
   pattern: null,
   description: 'UTS FEIT subject codes',
   faculty: 'FEIT',
@@ -253,18 +258,17 @@ describe('templateRoutes', () => {
 
   describe('POST / (create template)', () => {
     const validBody = {
-      templateType: 'range',
+      templateType: 'list',
       universityId: TEST_IDS.university,
-      name: 'UTS FEIT Range',
-      startCode: '31001',
-      endCode: '31010',
+      name: 'UTS FEIT List',
+      codeList: ['31001', '31002'],
       description: 'UTS FEIT subject codes',
       faculty: 'FEIT',
       priority: 1,
       active: true,
     };
 
-    it('creates a range template', async () => {
+    it('creates a list template', async () => {
       // db.select().from(universities).where().limit(1) -> university found
       mockSelect.mockReturnValueOnce(
         createMockQueryBuilder([{ id: TEST_IDS.university, name: 'UTS' }]),
@@ -316,7 +320,7 @@ describe('templateRoutes', () => {
       );
       mockValidateTemplate.mockReturnValue({
         valid: false,
-        errors: ['startCode must be less than endCode'],
+        errors: ['Code list is required'],
       });
 
       const request = createMockRequest({
@@ -331,7 +335,7 @@ describe('templateRoutes', () => {
         expect.objectContaining({
           success: false,
           error: 'Template validation failed',
-          details: ['startCode must be less than endCode'],
+          details: ['Code list is required'],
         }),
       );
     });
@@ -405,13 +409,13 @@ describe('templateRoutes', () => {
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockTemplate]));
       mockValidateTemplate.mockReturnValue({
         valid: false,
-        errors: ['endCode must be greater than startCode'],
+        errors: ['List exceeds maximum of 10000 codes'],
       });
 
       const request = createMockRequest({
         user: mockAdmin,
         params: { id: TEST_IDS.template },
-        body: { startCode: '99999', endCode: '00001' },
+        body: { codeList: ['31001'] },
       });
       const reply = createMockReply();
       await handlers['PATCH /:id'](request, reply);
@@ -421,7 +425,7 @@ describe('templateRoutes', () => {
         expect.objectContaining({
           success: false,
           error: 'Template validation failed',
-          details: ['endCode must be greater than startCode'],
+          details: ['List exceeds maximum of 10000 codes'],
         }),
       );
     });
@@ -511,7 +515,9 @@ describe('templateRoutes', () => {
   describe('POST /:id/queue', () => {
     it('queues scraping jobs', async () => {
       const generatedCodes = ['31001', '31002', '31003'];
-      mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockTemplate]));
+      mockSelect
+        .mockReturnValueOnce(createMockQueryBuilder([mockTemplate]))
+        .mockReturnValueOnce(createMockQueryBuilder([]));
       mockGenerateCodesFromTemplateData.mockReturnValue(generatedCodes);
       mockGetJobCounts.mockResolvedValue({ waiting: 0, active: 0 });
       mockAddBulk.mockResolvedValue(undefined);

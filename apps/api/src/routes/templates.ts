@@ -1,56 +1,27 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '@ratemyunit/db/client';
-import { subjectCodeTemplates, universities } from '@ratemyunit/db/schema';
-import { eq, and, desc } from 'drizzle-orm';
+import { subjectCodeTemplates, universities, units } from '@ratemyunit/db/schema';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { requireAdmin } from '../middleware/auth.js';
 import { subjectTemplateService } from '../services/template.js';
 import { scraperQueue } from '../lib/queue.js';
 
 // Validation schemas
-const createTemplateSchema = z.discriminatedUnion('templateType', [
-  z.object({
-    templateType: z.literal('range'),
-    universityId: z.string().uuid(),
-    name: z.string().min(1).max(255),
-    startCode: z.string().min(1).max(50),
-    endCode: z.string().min(1).max(50),
-    pattern: z.string().max(255).optional(),
-    description: z.string().optional(),
-    faculty: z.string().max(255).optional(),
-    priority: z.number().int().min(0).optional().default(0),
-    active: z.boolean().optional().default(true),
-  }),
-  z.object({
-    templateType: z.literal('list'),
-    universityId: z.string().uuid(),
-    name: z.string().min(1).max(255),
-    codeList: z.array(z.string().min(1)).min(1).max(10000),
-    description: z.string().optional(),
-    faculty: z.string().max(255).optional(),
-    priority: z.number().int().min(0).optional().default(0),
-    active: z.boolean().optional().default(true),
-  }),
-  z.object({
-    templateType: z.literal('pattern'),
-    universityId: z.string().uuid(),
-    name: z.string().min(1).max(255),
-    pattern: z.string().min(1).max(255),
-    startCode: z.string().min(1).max(50),
-    endCode: z.string().min(1).max(50),
-    description: z.string().optional(),
-    faculty: z.string().max(255).optional(),
-    priority: z.number().int().min(0).optional().default(0),
-    active: z.boolean().optional().default(true),
-  }),
-]);
+const createTemplateSchema = z.object({
+  templateType: z.literal('list'),
+  universityId: z.string().uuid(),
+  name: z.string().min(1).max(255),
+  codeList: z.array(z.string().min(1)).min(1).max(10000),
+  description: z.string().optional(),
+  faculty: z.string().max(255).optional(),
+  priority: z.number().int().min(0).optional().default(0),
+  active: z.boolean().optional().default(true),
+});
 
 const updateTemplateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  startCode: z.string().min(1).max(50).optional(),
-  endCode: z.string().min(1).max(50).optional(),
   codeList: z.array(z.string().min(1)).min(1).max(10000).optional(),
-  pattern: z.string().max(255).optional(),
   description: z.string().optional(),
   faculty: z.string().max(255).optional(),
   priority: z.number().int().min(0).optional(),
@@ -69,6 +40,35 @@ const listQuerySchema = z.object({
   universityId: z.string().uuid().optional(),
   active: z.coerce.boolean().optional(),
 });
+
+const normalizeUnitCode = (code: string) => code.trim().toUpperCase();
+
+const fetchExistingUnitCodes = async (
+  universityId: string,
+  codes: string[],
+  chunkSize = 1000
+) => {
+  const existing = new Set<string>();
+
+  for (let i = 0; i < codes.length; i += chunkSize) {
+    const chunk = codes.slice(i, i + chunkSize);
+    if (chunk.length === 0) continue;
+
+    const rows = await db
+      .select({ unitCode: units.unitCode })
+      .from(units)
+      .where(
+        and(
+          eq(units.universityId, universityId),
+          inArray(units.unitCode, chunk)
+        )
+      );
+
+    rows.forEach((row) => existing.add(normalizeUnitCode(row.unitCode)));
+  }
+
+  return existing;
+};
 
 export async function templateRoutes(app: FastifyInstance) {
   // Protect all template routes with admin middleware
@@ -223,10 +223,10 @@ export async function templateRoutes(app: FastifyInstance) {
       const templateData = {
         id: 'temp',
         templateType: data.templateType,
-        startCode: 'startCode' in data ? data.startCode : null,
-        endCode: 'endCode' in data ? data.endCode : null,
-        codeList: 'codeList' in data ? data.codeList : null,
-        pattern: 'pattern' in data ? (data.pattern ?? null) : null,
+        startCode: null,
+        endCode: null,
+        codeList: data.codeList,
+        pattern: null,
       };
 
       const validation = subjectTemplateService.validateTemplate(templateData);
@@ -246,10 +246,10 @@ export async function templateRoutes(app: FastifyInstance) {
           universityId: data.universityId,
           name: data.name,
           templateType: data.templateType,
-          startCode: 'startCode' in data ? data.startCode : null,
-          endCode: 'endCode' in data ? data.endCode : null,
-          codeList: 'codeList' in data ? data.codeList : null,
-          pattern: 'pattern' in data ? data.pattern : null,
+          startCode: null,
+          endCode: null,
+          codeList: data.codeList,
+          pattern: null,
           description: data.description || null,
           faculty: data.faculty || null,
           priority: data.priority || 0,
@@ -311,19 +311,14 @@ export async function templateRoutes(app: FastifyInstance) {
       };
 
       // Validate updated template if structural fields changed
-      if (
-        data.startCode ||
-        data.endCode ||
-        data.codeList ||
-        data.pattern !== undefined
-      ) {
+      if (data.codeList) {
         const templateData = {
           id: existing.id,
           templateType: existing.templateType,
-          startCode: data.startCode || existing.startCode,
-          endCode: data.endCode || existing.endCode,
+          startCode: existing.startCode,
+          endCode: existing.endCode,
           codeList: data.codeList || existing.codeList,
-          pattern: data.pattern !== undefined ? data.pattern : existing.pattern,
+          pattern: existing.pattern,
         };
 
         const validation = subjectTemplateService.validateTemplate(templateData);
@@ -494,6 +489,13 @@ export async function templateRoutes(app: FastifyInstance) {
         });
       }
 
+      if (template.templateType !== 'list') {
+        return reply.status(400).send({
+          success: false,
+          error: 'Only list templates can be queued',
+        });
+      }
+
       const templateData = {
         id: template.id,
         templateType: template.templateType,
@@ -512,15 +514,39 @@ export async function templateRoutes(app: FastifyInstance) {
         });
       }
 
+      const normalizedCodes = Array.from(
+        new Set(codes.map(normalizeUnitCode))
+      );
+      const existingUnitCodes = await fetchExistingUnitCodes(
+        template.universityId,
+        normalizedCodes
+      );
+      const codesToQueue = normalizedCodes.filter(
+        (code) => !existingUnitCodes.has(code)
+      );
+
+      if (codesToQueue.length === 0) {
+        return {
+          success: true,
+          message: 'All template codes are already indexed',
+          data: {
+            jobsQueued: 0,
+            totalCodes: normalizedCodes.length,
+            alreadyIndexed: existingUnitCodes.size,
+            codes: [],
+          },
+        };
+      }
+
       // Implement queue size safety limit
       const MAX_QUEUE_SIZE = 10000;
       const currentCounts = await scraperQueue.getJobCounts('waiting', 'active');
       const currentTotal = currentCounts.waiting + currentCounts.active;
 
-      if (currentTotal + codes.length > MAX_QUEUE_SIZE) {
+      if (currentTotal + codesToQueue.length > MAX_QUEUE_SIZE) {
           return reply.status(429).send({
               success: false,
-              error: `Queue capacity exceeded. Current: ${currentTotal}, New: ${codes.length}, Max: ${MAX_QUEUE_SIZE}. Please wait for existing jobs to complete or use a smaller template.`,
+              error: `Queue capacity exceeded. Current: ${currentTotal}, New: ${codesToQueue.length}, Max: ${MAX_QUEUE_SIZE}. Please wait for existing jobs to complete or use a smaller template.`,
           });
       }
 
@@ -528,8 +554,8 @@ export async function templateRoutes(app: FastifyInstance) {
       const CHUNK_SIZE = 1000;
       let queuedCount = 0;
 
-      for (let i = 0; i < codes.length; i += CHUNK_SIZE) {
-          const chunk = codes.slice(i, i + CHUNK_SIZE);
+      for (let i = 0; i < codesToQueue.length; i += CHUNK_SIZE) {
+          const chunk = codesToQueue.slice(i, i + CHUNK_SIZE);
           const jobs = chunk.map((code) => ({
             name: 'scrape-unit',
             data: {
@@ -552,7 +578,7 @@ export async function templateRoutes(app: FastifyInstance) {
           queuedCount += jobs.length;
           
           // Brief pause if there are more chunks
-          if (i + CHUNK_SIZE < codes.length) {
+          if (i + CHUNK_SIZE < codesToQueue.length) {
               await new Promise(resolve => setTimeout(resolve, 100));
           }
       }
@@ -562,8 +588,9 @@ export async function templateRoutes(app: FastifyInstance) {
         message: `Queued ${queuedCount} scraping jobs`,
         data: {
           jobsQueued: queuedCount,
-          codes: codes.slice(0, 100),
-          totalCodes: codes.length,
+          codes: codesToQueue.slice(0, 100),
+          totalCodes: normalizedCodes.length,
+          alreadyIndexed: existingUnitCodes.size,
         },
       };
     } catch (error) {

@@ -84,6 +84,12 @@ describe('Layout', () => {
     expect(screen.getByText(new RegExp(year))).toBeInTheDocument();
   });
 
+  it('footer includes privacy and terms links', () => {
+    renderLayout();
+    expect(screen.getByRole('link', { name: /privacy policy/i })).toHaveAttribute('href', '/privacy');
+    expect(screen.getByRole('link', { name: /terms of use/i })).toHaveAttribute('href', '/terms');
+  });
+
   it('renders outlet content', () => {
     renderLayout();
     expect(screen.getByText('Home Content')).toBeInTheDocument();

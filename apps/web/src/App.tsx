@@ -16,6 +16,8 @@ const VerifyEmail = lazy(() => import('./pages/VerifyEmail').then((m) => ({ defa
 const HomePage = lazy(() => import('./pages/Home').then((m) => ({ default: m.HomePage })));
 const UnitDetails = lazy(() => import('./pages/UnitDetails').then((m) => ({ default: m.UnitDetails })));
 const BrowsePage = lazy(() => import('./pages/Browse').then((m) => ({ default: m.BrowsePage })));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy').then((m) => ({ default: m.PrivacyPolicy })));
+const TermsOfUse = lazy(() => import('./pages/TermsOfUse').then((m) => ({ default: m.TermsOfUse })));
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard').then((m) => ({ default: m.AdminDashboard })));
 const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })));
 
@@ -51,6 +53,8 @@ function App() {
                   <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/verify-email" element={<VerifyEmail />} />
                   <Route path="/units/:unitId" element={<ErrorBoundary><UnitDetails /></ErrorBoundary>} />
+                  <Route path="/privacy" element={<ErrorBoundary><PrivacyPolicy /></ErrorBoundary>} />
+                  <Route path="/terms" element={<ErrorBoundary><TermsOfUse /></ErrorBoundary>} />
                   <Route
                     path="/admin"
                     element={

@@ -77,6 +77,11 @@ export function Layout() {
           <div className="text-center text-sm font-bold uppercase text-secondary-foreground">
             &copy; {new Date().getFullYear()} RateMyUnit. All rights reserved.
           </div>
+          <div className="text-center text-xs font-bold uppercase tracking-wide text-secondary-foreground">
+            <Link to="/privacy" className="underline hover:text-primary transition-colors">Privacy Policy</Link>
+            {' '}·{' '}
+            <Link to="/terms" className="underline hover:text-primary transition-colors">Terms of Use</Link>
+          </div>
           <div className="text-center text-xs font-medium text-secondary-foreground/80">
             Made by{' '}
             <a

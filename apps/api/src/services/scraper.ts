@@ -6,8 +6,33 @@ import { ScraperFactory, type ScraperType } from '../scrapers/factory.js';
 import { ScraperConfigSchema } from '../scrapers/strategies/base.js';
 import type { ScraperResult } from '../scrapers/uts/types.js';
 import { createLogger } from '../lib/logger.js';
+import { config } from '../config.js';
 
 const logger = createLogger('scraper');
+const MAX_SCRAPE_UNITS_CONCURRENCY = 20;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const randomJitter = (maxMs: number) => {
+  if (maxMs <= 0) return 0;
+  return Math.floor(Math.random() * (maxMs + 1));
+};
+
+const isRetryableScrapeError = (error?: string) => {
+  if (!error) return false;
+  const lower = error.toLowerCase();
+  return (
+    lower.includes('blocking error') ||
+    lower.includes('429') ||
+    lower.includes('403') ||
+    lower.includes('timeout') ||
+    lower.includes('navigation failed') ||
+    lower.includes('net::err') ||
+    lower.includes('econnreset')
+  );
+};
+
+const normalizeUnitCode = (code: string) => code.trim().toUpperCase();
 
 export class ScraperService {
   
@@ -166,32 +191,113 @@ export class ScraperService {
     unitCodes: string[],
     options?: {
       delayMs?: number;
+      jitterMs?: number;
+      maxRetries?: number;
+      maxConcurrency?: number;
       continueOnError?: boolean;
       universityId?: string;
     }
   ): Promise<ScraperResult[]> {
-    const { delayMs = 2000, universityId } = options || {};
+    const {
+      delayMs = config.SCRAPER_REQUEST_DELAY_MS,
+      jitterMs = config.SCRAPER_REQUEST_JITTER_MS,
+      maxRetries = config.SCRAPER_MAX_RETRIES,
+      maxConcurrency = config.SCRAPER_CONCURRENCY,
+      continueOnError = true,
+      universityId
+    } = options || {};
+
+    const sanitizedCodes = Array.from(
+      new Set(unitCodes.map(normalizeUnitCode).filter(Boolean))
+    );
+
+    if (sanitizedCodes.length === 0) {
+      return [];
+    }
+
+    const boundedConcurrency = Math.min(
+      sanitizedCodes.length,
+      Math.max(1, maxConcurrency),
+      MAX_SCRAPE_UNITS_CONCURRENCY
+    );
+
+    const boundedRetries = Math.max(0, maxRetries);
+    const baseDelayMs = Math.max(0, delayMs);
+    const maxBackoffMs = Math.max(baseDelayMs, config.SCRAPER_RETRY_MAX_DELAY_MS);
+
     const { uni, scraper } = await this.getUniversityScraper(universityId);
     
     const browser = await chromium.launch({ headless: true });
 
     try {
-      const results: ScraperResult[] = [];
+      const results: ScraperResult[] = new Array(sanitizedCodes.length);
+      let nextIndex = 0;
+      let stopRequested = false;
 
-      for (let i = 0; i < unitCodes.length; i++) {
-        if (i > 0) await new Promise(r => setTimeout(r, delayMs));
+      const scrapeWithRetries = async (code: string): Promise<ScraperResult> => {
+        for (let attempt = 0; attempt <= boundedRetries; attempt++) {
+          const staggerDelay =
+            attempt === 0
+              ? baseDelayMs + randomJitter(jitterMs)
+              : Math.min(
+                  config.SCRAPER_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1) + randomJitter(jitterMs),
+                  maxBackoffMs
+                );
 
-        const code = unitCodes[i];
-        const res = await scraper.scrapeSubject(browser, code);
+          if (staggerDelay > 0) {
+            await sleep(staggerDelay);
+          }
 
-        if (res.success && res.data) {
-           await this.upsertUnit(uni.id, res.data);
+          const res = await scraper.scrapeSubject(browser, code);
+
+          if (res.success && res.data) {
+            await this.upsertUnit(uni.id, res.data);
+            return res;
+          }
+
+          if (!isRetryableScrapeError(res.error) || attempt === boundedRetries) {
+            return res;
+          }
+
+          logger.warn(
+            { code, attempt: attempt + 1, maxAttempts: boundedRetries + 1, error: res.error },
+            'Retrying scrape due to transient/rate-limit-like failure'
+          );
         }
 
-        results.push(res);
-      }
+        return {
+          success: false,
+          subjectCode: code,
+          error: 'Retry loop exhausted unexpectedly',
+          scrapedAt: new Date(),
+        };
+      };
 
-      return results;
+      const worker = async () => {
+        while (!stopRequested) {
+          const currentIndex = nextIndex;
+          nextIndex += 1;
+
+          if (currentIndex >= sanitizedCodes.length) {
+            return;
+          }
+
+          const code = sanitizedCodes[currentIndex];
+          const result = await scrapeWithRetries(code);
+          results[currentIndex] = result;
+
+          if (!result.success && !continueOnError) {
+            stopRequested = true;
+            return;
+          }
+        }
+      };
+
+      await Promise.all(
+        Array.from({ length: boundedConcurrency }, () => worker())
+      );
+
+      return results.filter((result): result is ScraperResult => !!result);
     } finally {
       await browser.close();
     }

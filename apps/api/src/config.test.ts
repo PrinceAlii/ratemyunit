@@ -9,6 +9,15 @@ describe('config', () => {
     JWT_SECRET: 'a'.repeat(32),
     FRONTEND_URL: 'http://localhost:5173',
     SCRAPER_CONCURRENCY: '2',
+    SCRAPER_RATE_LIMIT_MAX_JOBS: '8',
+    SCRAPER_RATE_LIMIT_WINDOW_MS: '10000',
+    SCRAPER_REQUEST_DELAY_MS: '250',
+    SCRAPER_REQUEST_JITTER_MS: '750',
+    SCRAPER_BLOCKING_THRESHOLD: '3',
+    SCRAPER_BLOCK_COOLDOWN_MS: '20000',
+    SCRAPER_MAX_RETRIES: '3',
+    SCRAPER_RETRY_BASE_DELAY_MS: '2000',
+    SCRAPER_RETRY_MAX_DELAY_MS: '45000',
   };
 
   let originalEnv: NodeJS.ProcessEnv;
@@ -37,7 +46,9 @@ describe('config', () => {
     const { config } = await import('./config');
     expect(config.PORT).toBe('3000');
     expect(config.NODE_ENV).toBe('development');
-    expect(config.SCRAPER_CONCURRENCY).toBe(1);
+    expect(config.SCRAPER_CONCURRENCY).toBe(3);
+    expect(config.SCRAPER_RATE_LIMIT_MAX_JOBS).toBe(8);
+    expect(config.SCRAPER_REQUEST_DELAY_MS).toBe(250);
   });
 
   it('throws on missing DATABASE_URL', async () => {

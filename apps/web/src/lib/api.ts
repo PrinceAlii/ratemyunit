@@ -87,7 +87,7 @@ class ApiClient {
           continue;
         }
 
-        // Handle expired CSRF token — only refresh when the 403 is actually a CSRF failure,
+        // Handle expired CSRF token, only refresh when the 403 is actually a CSRF failure,
         // not for legitimate "Forbidden" responses (e.g. "not authorized to edit this review").
         if (response.status === 403 && needsCsrf && attempt < MAX_RETRIES) {
           try {
@@ -132,7 +132,7 @@ class ApiClient {
         lastError = error instanceof Error ? error : new Error(String(error));
         if (attempt === MAX_RETRIES) break;
 
-        // Client errors (4xx) are not retryable — fail fast to avoid unnecessary latency.
+        // Client errors (4xx) are not retryable, fail fast to avoid unnecessary latency.
         if (lastError instanceof HttpError && lastError.status >= 400 && lastError.status < 500) {
           break;
         }

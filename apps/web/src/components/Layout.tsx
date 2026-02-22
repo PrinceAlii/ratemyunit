@@ -78,7 +78,7 @@ export function Layout() {
             &copy; {new Date().getFullYear()} RateMyUnit. All rights reserved.
           </div>
           <div className="text-center text-xs font-medium text-secondary-foreground/80">
-            Made with ⚡ by{' '}
+            Made by{' '}
             <a
               href="https://www.alibo.dev"
               target="_blank"

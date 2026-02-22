@@ -33,7 +33,7 @@ export function HomePage() {
             </h1>
             <div className="border-l-4 border-primary pl-4 mt-6">
               <p className="text-xl font-medium">
-                Find easy electives, avoid nightmare subjects, and help your fellow students at UTS.
+                Find easy electives, avoid nightmare subjects, and help your fellow students at Australian universities.
               </p>
             </div>
           </div>

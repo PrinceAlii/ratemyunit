@@ -30,7 +30,6 @@ export async function buildApp() {
 
   await app.register(cookie);
 
-  // CSRF Protection
   await app.register(csrf, {
     sessionPlugin: '@fastify/cookie',
     getToken: (req) => req.headers['x-csrf-token'] as string,
@@ -42,11 +41,10 @@ export async function buildApp() {
     },
   });
 
-  // Rate Limiting
   await app.register(rateLimit, {
     max: 100, // 100 requests per window
-    timeWindow: '1 minute', // 1 minute window
-    allowList: ['127.0.0.1', 'localhost'], // Allow local development
+    timeWindow: '1 minute',
+    allowList: ['127.0.0.1', 'localhost'],
   });
 
   await app.register(helmet, {
@@ -111,7 +109,6 @@ export async function buildApp() {
     let status = 200;
 
     try {
-      // Check database
       await db.execute(sql`SELECT 1`);
       checks.database = 'ok';
     } catch (err) {
@@ -121,7 +118,6 @@ export async function buildApp() {
     }
 
     try {
-      // Check Redis via Queue connection
       const client = await scraperQueue.client;
       await client.ping();
       checks.redis = 'ok';
@@ -141,7 +137,6 @@ export async function buildApp() {
   await app.register(publicDataRoutes, { prefix: '/api/public' });
   await app.register(templateRoutes, { prefix: '/api/admin/templates' });
 
-  // Serve frontend static files (built from apps/web)
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   const frontendPath = path.resolve(__dirname, '../../web/dist');
@@ -151,7 +146,7 @@ export async function buildApp() {
     prefix: '/',
   });
 
-  // Serve index.html for all non-API routes (SPA fallback)
+  // SPA fallback
   app.setNotFoundHandler((request, reply) => {
     if (request.url.startsWith('/api/')) {
       return reply.status(404).send({ success: false, error: 'Not found' });
@@ -160,7 +155,6 @@ export async function buildApp() {
   });
 
   app.setErrorHandler((error: Error | { statusCode?: number; code?: string; validation?: unknown; issues?: unknown }, request, reply) => {
-    // Add request context to all errors
     const context = {
       requestId: request.id,
       method: request.method,
@@ -168,7 +162,6 @@ export async function buildApp() {
       userId: request.user?.id || 'anonymous',
     };
 
-    // Handle custom app errors
     if ('statusCode' in error && 'code' in error && error.statusCode && error.code) {
       const appError = error as { statusCode: number; code: string; message: string };
       request.log.info({ ...context, error: appError.message }, 'Application error');
@@ -179,7 +172,6 @@ export async function buildApp() {
       });
     }
 
-    // Handle Zod validation errors
     if ('validation' in error || 'issues' in error) {
       const zodError = error as { issues?: unknown; validation?: unknown };
       request.log.info({ ...context, issues: zodError.issues || zodError.validation }, 'Validation error');
@@ -191,7 +183,6 @@ export async function buildApp() {
       });
     }
 
-    // Unexpected errors - log full stack
     const errorObj = error as Error;
     request.log.error({ ...context, error: errorObj.message, stack: errorObj.stack }, 'Unexpected error');
 

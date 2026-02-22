@@ -38,7 +38,6 @@ export async function authRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const body = registerSchema.parse(request.body);
 
-    // Validate email ends with .edu.au
     const emailDomain = body.email.split('@')[1];
     if (!emailDomain.endsWith('.edu.au')) {
       return reply.status(400).send({
@@ -47,14 +46,12 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    // Check if email domain matches a known university
     const [matchedUniversity] = await db
       .select()
       .from(universities)
       .where(eq(universities.emailDomain, emailDomain))
       .limit(1);
 
-    // Validate selected university exists and is active
     const [selectedUniversity] = await db
       .select()
       .from(universities)
@@ -68,7 +65,7 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    // Check if user already exists before doing the expensive Argon2 hash.
+    // Check existence before hashing (expensive)
     const [existingUser] = await db
       .select()
       .from(users)
@@ -89,7 +86,6 @@ export async function authRoutes(app: FastifyInstance) {
       parallelism: 1,
     });
 
-    // Determine if domain is verified (email matches selected university)
     const domainVerified = matchedUniversity && matchedUniversity.id === selectedUniversity.id;
 
     const [newUser] = await db
@@ -109,7 +105,6 @@ export async function authRoutes(app: FastifyInstance) {
     const verificationToken = await createEmailVerificationToken(newUser.id);
     const verificationLink = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
-    // Record initial telemetry
     await recordTelemetry(newUser.id, request);
 
     await sendEmail({
@@ -176,7 +171,6 @@ export async function authRoutes(app: FastifyInstance) {
     const session = await lucia.createSession(user.id, {});
     const sessionCookie = lucia.createSessionCookie(session.id);
 
-    // Record login telemetry
     await recordTelemetry(user.id, request);
 
     reply.setCookie(sessionCookie.name, sessionCookie.value, sessionCookie.attributes);
@@ -311,7 +305,6 @@ export async function authRoutes(app: FastifyInstance) {
     // Invalidate all sessions for this user BEFORE changing password
     await lucia.invalidateUserSessions(userId);
 
-    // Hash new password with improved parameters.
     const passwordHash = await hash(body.password, {
       memoryCost: 47104,
       timeCost: 3,
@@ -319,10 +312,7 @@ export async function authRoutes(app: FastifyInstance) {
       parallelism: 1,
     });
 
-    // Update password.
     await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
-
-    // Delete the reset token.
     await deletePasswordResetToken(body.token);
 
     return reply.send({

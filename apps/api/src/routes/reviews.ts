@@ -12,7 +12,6 @@ import {
 import { requireAuth } from '../middleware/auth.js';
 
 export async function reviewsRoutes(app: FastifyInstance) {
-  // Apply auth middleware to all routes in this plugin
   app.addHook('preHandler', requireAuth);
 
   /**
@@ -153,7 +152,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
     const { id } = paramsSchema.parse(request.params);
     const { voteType } = voteReviewSchema.parse(request.body);
 
-    // Check review exists
     const [review] = await db
       .select()
       .from(reviews)
@@ -167,7 +165,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
       });
     }
 
-    // Prevent self-voting
     if (request.user!.id === review.userId) {
       return reply.status(400).send({
         success: false,
@@ -175,7 +172,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
       });
     }
 
-    // Upsert vote
     await db
       .insert(reviewVotes)
       .values({
@@ -210,7 +206,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
     const { id } = paramsSchema.parse(request.params);
     const body = flagReviewSchema.parse(request.body);
 
-    // Check review exists
     const [review] = await db
       .select()
       .from(reviews)
@@ -224,7 +219,6 @@ export async function reviewsRoutes(app: FastifyInstance) {
       });
     }
 
-    // Check if user already flagged this review
     const [existingFlag] = await db
       .select()
       .from(reviewFlags)
@@ -241,14 +235,13 @@ export async function reviewsRoutes(app: FastifyInstance) {
       });
     }
 
-    // Record flag
     await db.insert(reviewFlags).values({
       reviewId: id,
       userId: request.user!.id,
       ...body,
     });
 
-    // Auto-flag: require at least 3 flags before hiding a review to prevent single-user censorship.
+    // Auto-flag: require at least 3 flags before hiding a review.
     const [flagCount] = await db
       .select({ value: count() })
       .from(reviewFlags)

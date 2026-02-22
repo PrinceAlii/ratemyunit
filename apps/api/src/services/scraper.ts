@@ -102,7 +102,7 @@ export class ScraperService {
   }
 
   async discoverUnits(universityId: string, existingBrowser?: Browser): Promise<string[]> {
-    logger.info(`🔧 ScraperService.discoverUnits called for uni: ${universityId}`);
+    logger.info(`ScraperService.discoverUnits called for uni: ${universityId}`);
     const { scraper } = await this.getUniversityScraper(universityId);
     
     let browser = existingBrowser;

@@ -499,75 +499,8 @@ jobs:
       # This handles migrations that can only run after the new code is deployed
       - name: Run Post-Deployment Migrations
         run: |
-          echo "Running database migrations in the new container..."
-          INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters \
-              "Name=tag:Name,Values=ratemyunit-api" \
-              "Name=instance-state-name,Values=running" \
-            --query 'Reservations[0].Instances[0].InstanceId' \
-            --output text)
-          if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; then
-            echo "✗ Cannot resolve EC2 instance for migrations" && exit 1
-          fi
-
-          echo "Running migrations on instance: $INSTANCE_ID"
-
-          COMMAND_ID=$(aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --instance-ids "$INSTANCE_ID" \
-            --parameters 'commands=["export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export FRONTEND_URL=$(aws ssm get-parameter --name /ratemyunit/production/frontend/url --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export RESEND_API_KEY=$(aws ssm get-parameter --name /ratemyunit/production/resend/api_key --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }} 2>/dev/null || echo \"\")", "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "echo \"Skipping post-deployment migrations - main container handles this automatically\"", "echo \"✓ Migrations will run in main container on startup\""]' \
-            --comment "Post-deployment migrations (handled by container entrypoint)" \
-            --query 'Command.CommandId' \
-            --output text)
-
-          echo "Migration command ID: $COMMAND_ID"
-
-          # Wait for migrations to complete
-          STATUS="Pending"
-          for i in {1..60}; do
-            STATUS_RESULT=$(aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE_ID" \
-              --query 'Status' \
-              --output text 2>/tmp/ssm-status-error || true)
-
-            if [[ -n "$STATUS_RESULT" ]]; then
-              STATUS="$STATUS_RESULT"
-            elif grep -qi 'InvocationDoesNotExist\|InvalidCommandId' /tmp/ssm-status-error; then
-              STATUS="Pending"
-            else
-              echo "✗ Failed to fetch post-deployment migration status from SSM"
-              cat /tmp/ssm-status-error
-              exit 1
-            fi
-
-            if [[ "$STATUS" == "Success" ]]; then
-              echo "✓ Migrations completed successfully"
-              aws ssm get-command-invocation \
-                --command-id "$COMMAND_ID" \
-                --instance-id "$INSTANCE_ID" \
-                --query 'StandardOutputContent' \
-                --output text
-              break
-            elif [[ "$STATUS" == "Failed" ]]; then
-              echo "✗ Migrations failed"
-              aws ssm get-command-invocation \
-                --command-id "$COMMAND_ID" \
-                --instance-id "$INSTANCE_ID" \
-                --query 'StandardOutputContent' \
-                --output text
-              exit 1
-            fi
-
-            echo "Waiting for migrations... ($i/60)"
-            sleep 2
-          done
-
-          # Check if we actually got a result or timed out
-          if [[ "$STATUS" != "Success" && "$STATUS" != "Failed" ]]; then
-            echo "✗ Post-deployment migrations timed out"
-            exit 1
-          fi
+          echo "Post-deployment migrations are handled by the application startup flow."
+          echo "Skipping explicit SSM post-deployment migration command."
 
       # Database seeding: Handled automatically by container entrypoint if FIRST_DEPLOY=true or AUTO_SEED=true
       # Set FIRST_DEPLOY=true in the docker run command for initial deployments

@@ -15,7 +15,7 @@ export const templateTypeEnum = pgEnum('template_type', ['range', 'list', 'patte
 export const universities = pgTable('universities', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 255 }).notNull(),
-  abbreviation: varchar('abbreviation', { length: 50 }).notNull(),
+  abbreviation: varchar('abbreviation', { length: 50 }).notNull().unique(),
   emailDomain: varchar('email_domain', { length: 255 }).notNull().unique(),
   websiteUrl: varchar('website_url', { length: 500 }),
   handbookUrl: varchar('handbook_url', { length: 500 }),

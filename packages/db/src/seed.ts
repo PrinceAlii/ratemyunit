@@ -314,7 +314,14 @@ async function seed() {
       let [existing] = await db
         .select()
         .from(universities)
-        .where(eq(universities.emailDomain, uniData.emailDomain));
+        .where(eq(universities.abbreviation, uniData.abbreviation));
+
+      if (!existing) {
+        [existing] = await db
+          .select()
+          .from(universities)
+          .where(eq(universities.emailDomain, uniData.emailDomain));
+      }
 
       if (!existing) {
         [existing] = await db

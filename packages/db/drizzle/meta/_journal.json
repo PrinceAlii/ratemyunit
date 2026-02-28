@@ -99,6 +99,13 @@
       "when": 1772246400000,
       "tag": "0014_site_banner_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1772328600000,
+      "tag": "0015_university_abbreviation_unique",
+      "breakpoints": true
     }
   ]
 }

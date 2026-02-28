@@ -46,7 +46,7 @@ describe('config', () => {
     const { config } = await import('./config');
     expect(config.PORT).toBe('3000');
     expect(config.NODE_ENV).toBe('development');
-    expect(config.SCRAPER_CONCURRENCY).toBe(3);
+    expect(config.SCRAPER_CONCURRENCY).toBe(5);
     expect(config.SCRAPER_RATE_LIMIT_MAX_JOBS).toBe(8);
     expect(config.SCRAPER_REQUEST_DELAY_MS).toBe(250);
   });

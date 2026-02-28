@@ -90,7 +90,7 @@ DATABASE_URL=postgresql://ratemyunit:devpassword@localhost:5432/ratemyunit
 REDIS_URL=redis://localhost:6379
 JWT_SECRET=min-32-chars
 FRONTEND_URL=http://localhost:5173
-SCRAPER_CONCURRENCY=1
+SCRAPER_CONCURRENCY=5
 RESEND_API_KEY=re_your_resend_api_key
 ```
 

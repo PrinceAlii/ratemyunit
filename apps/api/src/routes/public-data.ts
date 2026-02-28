@@ -44,16 +44,36 @@ export async function publicDataRoutes(app: FastifyInstance) {
    * Publicly accessible, cached for 1 hour ideally (client-side).
    */
   app.get('/universities', async (_request, reply) => {
-    const activeUnis = await db
+    const activeUniRows = await db
       .select({
         id: universities.id,
         name: universities.name,
         abbreviation: universities.abbreviation,
         websiteUrl: universities.websiteUrl,
+        createdAt: universities.createdAt,
       })
       .from(universities)
       .where(eq(universities.active, true))
-      .orderBy(asc(universities.name));
+      .orderBy(asc(universities.name), asc(universities.createdAt), asc(universities.id));
+
+    const uniqueByAbbreviation = new Map<
+      string,
+      { id: string; name: string; abbreviation: string; websiteUrl: string | null }
+    >();
+
+    for (const uni of activeUniRows) {
+      const key = uni.abbreviation.trim().toUpperCase();
+      if (!uniqueByAbbreviation.has(key)) {
+        uniqueByAbbreviation.set(key, {
+          id: uni.id,
+          name: uni.name,
+          abbreviation: uni.abbreviation,
+          websiteUrl: uni.websiteUrl,
+        });
+      }
+    }
+
+    const activeUnis = Array.from(uniqueByAbbreviation.values());
 
     return reply.send({
       success: true,

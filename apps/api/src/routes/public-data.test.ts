@@ -24,6 +24,7 @@ vi.mock('@ratemyunit/db/schema', () => ({
     name: 'name',
     abbreviation: 'abbreviation',
     websiteUrl: 'websiteUrl',
+    createdAt: 'createdAt',
     active: 'active',
   },
   units: { faculty: 'faculty', universityId: 'universityId' },
@@ -93,6 +94,41 @@ describe('publicDataRoutes', () => {
       await handlers['GET /universities']({}, reply);
 
       expect(reply.send).toHaveBeenCalledWith({ success: true, data: [] });
+    });
+
+    it('deduplicates universities by abbreviation', async () => {
+      const uniRows = [
+        {
+          id: 'uni-1',
+          name: 'Monash University',
+          abbreviation: 'Monash',
+          websiteUrl: 'https://www.monash.edu',
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+        {
+          id: 'uni-2',
+          name: 'Monash University',
+          abbreviation: 'Monash',
+          websiteUrl: 'https://www.monash.edu',
+          createdAt: new Date('2026-02-01T00:00:00.000Z'),
+        },
+      ];
+      mockSelect.mockReturnValue(createMockQueryBuilder(uniRows));
+
+      const reply = createMockReply();
+      await handlers['GET /universities']({}, reply);
+
+      expect(reply.send).toHaveBeenCalledWith({
+        success: true,
+        data: [
+          {
+            id: 'uni-1',
+            name: 'Monash University',
+            abbreviation: 'Monash',
+            websiteUrl: 'https://www.monash.edu',
+          },
+        ],
+      });
     });
   });
 

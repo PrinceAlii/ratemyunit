@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '@ratemyunit/db/client';
-import { units, reviews, users, universities, userTelemetry } from '@ratemyunit/db/schema';
+import { units, reviews, users, universities, userTelemetry, siteBannerSettings } from '@ratemyunit/db/schema';
 import { eq, desc, sql, and, inArray } from 'drizzle-orm';
 import { requireAdmin } from '../middleware/auth.js';
 import { scraperQueue } from '../lib/queue.js';
-import { moderateReviewSchema, banUserSchema } from '@ratemyunit/validators';
+import { moderateReviewSchema, banUserSchema, updateSiteBannerSchema } from '@ratemyunit/validators';
 import { lucia } from '../lib/auth.js';
 import { subjectTemplateService } from '../services/template.js';
 
@@ -31,9 +31,42 @@ const queueLookupSchema = z.object({
   universityId: z.string().uuid().optional(),
 });
 
+const SITE_BANNER_PALETTE_VALUES = ['primary', 'secondary', 'accent', 'success', 'ink'] as const;
+type SiteBannerPalette = (typeof SITE_BANNER_PALETTE_VALUES)[number];
+
+interface SiteBannerSettingsResponse {
+  enabled: boolean;
+  message: string;
+  palette: SiteBannerPalette;
+}
+
+const SITE_BANNER_ROW_ID = 1;
+const DEFAULT_SITE_BANNER_SETTINGS: SiteBannerSettingsResponse = {
+  enabled: false,
+  message: '',
+  palette: 'primary',
+};
+
 const normalizeUnitCode = (code: string) => code.trim().toUpperCase();
 const buildJobId = (universityId: string, unitCode: string) =>
   `scrape-${universityId}-${normalizeUnitCode(unitCode)}`;
+
+const normalizeSiteBannerSettings = (
+  row?: { enabled: boolean; message: string; palette: string }
+): SiteBannerSettingsResponse => {
+  const palette = row?.palette;
+  const isValidPalette = SITE_BANNER_PALETTE_VALUES.includes(
+    palette as SiteBannerPalette
+  );
+
+  return {
+    enabled: row?.enabled ?? DEFAULT_SITE_BANNER_SETTINGS.enabled,
+    message: row?.message ?? DEFAULT_SITE_BANNER_SETTINGS.message,
+    palette: isValidPalette
+      ? (palette as SiteBannerPalette)
+      : DEFAULT_SITE_BANNER_SETTINGS.palette,
+  };
+};
 
 const resolveUniversityId = async (universityId?: string) => {
   if (universityId) return universityId;
@@ -98,6 +131,68 @@ export async function adminRoutes(app: FastifyInstance) {
     };
 
     return { success: true, data: stats };
+  });
+
+  /**
+   * GET /api/admin/site-banner
+   * Get the current site-wide banner settings.
+   */
+  app.get('/site-banner', async () => {
+    const [bannerSettings] = await db
+      .select({
+        enabled: siteBannerSettings.enabled,
+        message: siteBannerSettings.message,
+        palette: siteBannerSettings.palette,
+      })
+      .from(siteBannerSettings)
+      .where(eq(siteBannerSettings.id, SITE_BANNER_ROW_ID))
+      .limit(1);
+
+    return {
+      success: true,
+      data: normalizeSiteBannerSettings(bannerSettings),
+    };
+  });
+
+  /**
+   * PUT /api/admin/site-banner
+   * Update the current site-wide banner settings.
+   */
+  app.put('/site-banner', async (request, reply) => {
+    const payload = updateSiteBannerSchema.parse(request.body);
+    const message = payload.message.trim();
+    const updatedAt = new Date();
+
+    await db
+      .insert(siteBannerSettings)
+      .values({
+        id: SITE_BANNER_ROW_ID,
+        enabled: payload.enabled,
+        message,
+        palette: payload.palette,
+        updatedBy: request.user!.id,
+        updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: siteBannerSettings.id,
+        set: {
+          enabled: payload.enabled,
+          message,
+          palette: payload.palette,
+          updatedBy: request.user!.id,
+          updatedAt,
+        },
+      });
+
+    return reply.send({
+      success: true,
+      message: payload.enabled ? 'Site banner enabled.' : 'Site banner disabled.',
+      data: {
+        enabled: payload.enabled,
+        message,
+        palette: payload.palette,
+      },
+    });
   });
 
   /**

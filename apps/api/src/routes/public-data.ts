@@ -1,8 +1,41 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '@ratemyunit/db/client';
-import { universities, units } from '@ratemyunit/db/schema';
+import { universities, units, siteBannerSettings } from '@ratemyunit/db/schema';
 import { and, eq, asc, isNotNull } from 'drizzle-orm';
+
+const SITE_BANNER_PALETTE_VALUES = ['primary', 'secondary', 'accent', 'success', 'ink'] as const;
+type SiteBannerPalette = (typeof SITE_BANNER_PALETTE_VALUES)[number];
+
+interface SiteBannerSettingsResponse {
+  enabled: boolean;
+  message: string;
+  palette: SiteBannerPalette;
+}
+
+const SITE_BANNER_ROW_ID = 1;
+const DEFAULT_SITE_BANNER_SETTINGS: SiteBannerSettingsResponse = {
+  enabled: false,
+  message: '',
+  palette: 'primary',
+};
+
+const normalizeSiteBannerSettings = (
+  row?: { enabled: boolean; message: string; palette: string }
+): SiteBannerSettingsResponse => {
+  const palette = row?.palette;
+  const isValidPalette = SITE_BANNER_PALETTE_VALUES.includes(
+    palette as SiteBannerPalette
+  );
+
+  return {
+    enabled: row?.enabled ?? DEFAULT_SITE_BANNER_SETTINGS.enabled,
+    message: row?.message ?? DEFAULT_SITE_BANNER_SETTINGS.message,
+    palette: isValidPalette
+      ? (palette as SiteBannerPalette)
+      : DEFAULT_SITE_BANNER_SETTINGS.palette,
+  };
+};
 
 export async function publicDataRoutes(app: FastifyInstance) {
   /**
@@ -25,6 +58,27 @@ export async function publicDataRoutes(app: FastifyInstance) {
     return reply.send({
       success: true,
       data: activeUnis,
+    });
+  });
+
+  /**
+   * GET /api/public/site-banner
+   * Get current site-wide banner settings.
+   */
+  app.get('/site-banner', async (_request, reply) => {
+    const [bannerSettings] = await db
+      .select({
+        enabled: siteBannerSettings.enabled,
+        message: siteBannerSettings.message,
+        palette: siteBannerSettings.palette,
+      })
+      .from(siteBannerSettings)
+      .where(eq(siteBannerSettings.id, SITE_BANNER_ROW_ID))
+      .limit(1);
+
+    return reply.send({
+      success: true,
+      data: normalizeSiteBannerSettings(bannerSettings),
     });
   });
 

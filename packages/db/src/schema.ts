@@ -198,6 +198,17 @@ export const subjectCodeTemplates = pgTable('subject_code_templates', {
   priorityIdx: index('subject_code_templates_priority_idx').on(t.priority),
 }));
 
+// Site Banner Settings Table
+export const siteBannerSettings = pgTable('site_banner_settings', {
+  id: integer('id').primaryKey(),
+  enabled: boolean('enabled').default(false).notNull(),
+  message: text('message').default('').notNull(),
+  palette: varchar('palette', { length: 32 }).default('primary').notNull(),
+  updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Relations
 export const universitiesRelations = relations(universities, ({ many }) => ({
   users: many(users),

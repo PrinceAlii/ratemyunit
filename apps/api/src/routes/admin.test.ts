@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { createMockRequest, createMockReply } from '../__tests__/helpers/auth-mock';
 import {
   createMockQueryBuilder,
+  createMockInsertBuilder,
   createMockUpdateBuilder,
   createMockDeleteBuilder,
 } from '../__tests__/helpers/db-mock';
@@ -72,6 +73,14 @@ vi.mock('@ratemyunit/db/schema', () => ({
   },
   universities: { id: 'id', abbreviation: 'abbreviation' },
   userTelemetry: { id: 'id', userId: 'userId', createdAt: 'createdAt' },
+  siteBannerSettings: {
+    id: 'id',
+    enabled: 'enabled',
+    message: 'message',
+    palette: 'palette',
+    updatedBy: 'updatedBy',
+    updatedAt: 'updatedAt',
+  },
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -85,6 +94,7 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('@ratemyunit/validators', () => ({
   moderateReviewSchema: { parse: vi.fn((b: unknown) => b) },
   banUserSchema: { parse: vi.fn((b: unknown) => b) },
+  updateSiteBannerSchema: { parse: vi.fn((b: unknown) => b) },
 }));
 
 vi.mock('../middleware/auth.js', () => ({
@@ -157,6 +167,74 @@ describe('adminRoutes', () => {
           totalReviews: 25,
           totalUnits: 50,
           flaggedReviews: 3,
+        },
+      });
+    });
+  });
+
+  // ---- GET /site-banner -----------------------------------------------------
+
+  describe('GET /site-banner', () => {
+    it('returns site banner settings', async () => {
+      mockSelect.mockReturnValueOnce(createChainBuilder([{
+        enabled: true,
+        message: 'Scheduled maintenance tonight at 11pm.',
+        palette: 'secondary',
+      }]));
+
+      const result = await handlers['GET /site-banner']({}, {});
+
+      expect(result).toEqual({
+        success: true,
+        data: {
+          enabled: true,
+          message: 'Scheduled maintenance tonight at 11pm.',
+          palette: 'secondary',
+        },
+      });
+    });
+
+    it('returns defaults when no banner settings exist', async () => {
+      mockSelect.mockReturnValueOnce(createChainBuilder([]));
+
+      const result = await handlers['GET /site-banner']({}, {});
+
+      expect(result).toEqual({
+        success: true,
+        data: {
+          enabled: false,
+          message: '',
+          palette: 'primary',
+        },
+      });
+    });
+  });
+
+  // ---- PUT /site-banner -----------------------------------------------------
+
+  describe('PUT /site-banner', () => {
+    it('updates site banner settings', async () => {
+      mockInsert.mockReturnValueOnce(createMockInsertBuilder());
+
+      const request = createMockRequest({
+        user: mockAdmin,
+        body: {
+          enabled: true,
+          message: 'New semester starts Monday.',
+          palette: 'accent',
+        },
+      });
+      const reply = createMockReply();
+      await handlers['PUT /site-banner'](request, reply);
+
+      expect(mockInsert).toHaveBeenCalled();
+      expect(reply.send).toHaveBeenCalledWith({
+        success: true,
+        message: 'Site banner enabled.',
+        data: {
+          enabled: true,
+          message: 'New semester starts Monday.',
+          palette: 'accent',
         },
       });
     });

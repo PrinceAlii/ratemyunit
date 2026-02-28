@@ -199,6 +199,23 @@ export interface TemplatePreviewResponse {
   truncated: boolean;
 }
 
+// Site banner types
+export const siteBannerPaletteValues = [
+  'primary',
+  'secondary',
+  'accent',
+  'success',
+  'ink',
+] as const;
+
+export type SiteBannerPalette = (typeof siteBannerPaletteValues)[number];
+
+export interface SiteBannerSettings {
+  enabled: boolean;
+  message: string;
+  palette: SiteBannerPalette;
+}
+
 // API Response types
 export interface ApiResponse<T = unknown> {
   success: boolean;

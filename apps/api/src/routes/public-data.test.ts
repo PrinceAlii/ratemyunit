@@ -27,6 +27,12 @@ vi.mock('@ratemyunit/db/schema', () => ({
     active: 'active',
   },
   units: { faculty: 'faculty', universityId: 'universityId' },
+  siteBannerSettings: {
+    id: 'id',
+    enabled: 'enabled',
+    message: 'message',
+    palette: 'palette',
+  },
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -146,6 +152,44 @@ describe('publicDataRoutes', () => {
       expect(reply.send).toHaveBeenCalledWith({
         success: true,
         data: ['FEIT', 'Business'],
+      });
+    });
+  });
+
+  describe('GET /site-banner', () => {
+    it('returns site banner settings', async () => {
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{
+        enabled: true,
+        message: 'Welcome back to campus week.',
+        palette: 'primary',
+      }]));
+
+      const reply = createMockReply();
+      await handlers['GET /site-banner']({}, reply);
+
+      expect(reply.send).toHaveBeenCalledWith({
+        success: true,
+        data: {
+          enabled: true,
+          message: 'Welcome back to campus week.',
+          palette: 'primary',
+        },
+      });
+    });
+
+    it('returns defaults when site banner is not configured', async () => {
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
+
+      const reply = createMockReply();
+      await handlers['GET /site-banner']({}, reply);
+
+      expect(reply.send).toHaveBeenCalledWith({
+        success: true,
+        data: {
+          enabled: false,
+          message: '',
+          palette: 'primary',
+        },
       });
     });
   });

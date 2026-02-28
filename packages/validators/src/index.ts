@@ -127,6 +127,20 @@ export const banUserSchema = z.object({
   banned: z.boolean(),
 });
 
+export const updateSiteBannerSchema = z.object({
+  enabled: z.boolean(),
+  message: z.string().trim().max(280, 'Banner message must be 280 characters or less'),
+  palette: z.enum(['primary', 'secondary', 'accent', 'success', 'ink'] as const),
+}).superRefine((value, ctx) => {
+  if (value.enabled && value.message.length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Banner message is required when the banner is enabled',
+      path: ['message'],
+    });
+  }
+});
+
 // Type exports from validators
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -141,3 +155,4 @@ export type SearchUnitsInput = z.infer<typeof searchUnitsSchema>;
 export type UpdateUnitInput = z.infer<typeof updateUnitSchema>;
 export type ModerateReviewInput = z.infer<typeof moderateReviewSchema>;
 export type BanUserInput = z.infer<typeof banUserSchema>;
+export type UpdateSiteBannerInput = z.infer<typeof updateSiteBannerSchema>;

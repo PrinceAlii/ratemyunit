@@ -16,11 +16,21 @@ echo ""
 # Run migrations (skip if SKIP_MIGRATIONS=true for one-off commands)
 if [ "$SKIP_MIGRATIONS" != "true" ]; then
   echo "📦 Running database migrations..."
-  cd /app/packages/db
-  if npx drizzle-kit push --force; then
-    echo "   ✅ Migrations applied successfully"
+  if [ -f /app/packages/db/dist/migrate.js ]; then
+    if node /app/packages/db/dist/migrate.js; then
+      echo "   ✅ Migrations applied successfully"
+    else
+      echo "   ⚠️  Warning: Migration issues (may be expected)"
+    fi
+  elif [ -f /app/packages/db/scripts/apply-migrations.mjs ]; then
+    # Fallback for environments where dist assets are unavailable.
+    if node /app/packages/db/scripts/apply-migrations.mjs; then
+      echo "   ✅ Migrations applied successfully"
+    else
+      echo "   ⚠️  Warning: Migration issues (may be expected)"
+    fi
   else
-    echo "   ⚠️  Warning: Migration issues (may be expected)"
+    echo "   ⚠️  Warning: No migration runner found, skipping"
   fi
   echo ""
 fi

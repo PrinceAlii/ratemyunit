@@ -168,8 +168,9 @@ DATABASE_URL=postgresql://ratemyunit:devpassword@localhost:5432/ratemyunit
   - Browser stability counters (`crashLikeErrorsTotal`, recovery attempts/success/failure).
   - Queue enqueue counters by source (`single`, `bulk`, `range`, `discovery`).
   - Input normalization counters (duplicates removed, already indexed skipped, known already queued).
-  - Job ID collision **signals** are approximate and inferred from timestamp comparison (`jobIdCollisionSignalsMethod: timestamp_before_batch_start`).
+- Job ID collision **signals** are approximate and inferred from timestamp comparison (`jobIdCollisionSignalsMethod: timestamp_before_batch_start`).
 - Public university lists are deduplicated by abbreviation; database now enforces unique `universities.abbreviation` to prevent duplicate entries.
+- Template source policy: UTS uses one full-list template from `https://www.handbook.uts.edu.au/subjects/alpha`; UNSW uses one full-list template from course-outlines API union of years 2025 and 2026 (deduped by subject code). Use `npm run rebuild-uts-unsw-templates -w @ratemyunit/db` to refresh both.
 
 ## Infrastructure & Deployment
 

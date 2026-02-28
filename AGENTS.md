@@ -162,12 +162,14 @@ DATABASE_URL=postgresql://ratemyunit:devpassword@localhost:5432/ratemyunit
 
 - Modes: single subject, bulk, range, auto-discovery.
 - Queue management via BullMQ.
+- Single-subject scrape retries: if a previous job is in `failed` or `completed`, the API removes that terminal job and re-queues the subject.
 - Runtime diagnostics endpoint: `GET /api/admin/scrape/diagnostics`.
 - Diagnostics include:
   - Browser stability counters (`crashLikeErrorsTotal`, recovery attempts/success/failure).
   - Queue enqueue counters by source (`single`, `bulk`, `range`, `discovery`).
   - Input normalization counters (duplicates removed, already indexed skipped, known already queued).
   - Job ID collision **signals** are approximate and inferred from timestamp comparison (`jobIdCollisionSignalsMethod: timestamp_before_batch_start`).
+- Public university lists are deduplicated by abbreviation; database now enforces unique `universities.abbreviation` to prevent duplicate entries.
 
 ## Infrastructure & Deployment
 

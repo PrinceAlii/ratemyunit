@@ -8,6 +8,15 @@ import { scraperQueue } from '../lib/queue.js';
 import { moderateReviewSchema, banUserSchema, updateSiteBannerSchema } from '@ratemyunit/validators';
 import { lucia } from '../lib/auth.js';
 import { subjectTemplateService } from '../services/template.js';
+import {
+  getScraperDiagnosticsSnapshot,
+  recordDiscoveryScanEnqueue,
+  recordEnqueueBatchError,
+  recordEnqueueBatchResult,
+  recordKnownAlreadyQueuedSkip,
+  recordQueueInputNormalization,
+  recordSingleEnqueue,
+} from '../lib/scraper-diagnostics.js';
 
 const scrapeSchema = z.object({
   unitCode: z.string().min(1),
@@ -382,6 +391,7 @@ export async function adminRoutes(app: FastifyInstance) {
       .limit(1);
 
     if (existingUnit) {
+      recordQueueInputNormalization('single', 1, 1, 1);
       return reply.send({
         success: true,
         message: `Unit ${normalizedCode} already indexed`,
@@ -398,6 +408,8 @@ export async function adminRoutes(app: FastifyInstance) {
 
     if (existingJob) {
       const state = await existingJob.getState();
+      recordQueueInputNormalization('single', 1, 1, 0);
+      recordKnownAlreadyQueuedSkip(1);
       return reply.send({
         success: true,
         message: `Job already ${state} for unit ${normalizedCode}`,
@@ -423,6 +435,8 @@ export async function adminRoutes(app: FastifyInstance) {
         backoff: { type: 'exponential', delay: 5000 },
       }
     );
+    recordQueueInputNormalization('single', 1, 1, 0);
+    recordSingleEnqueue();
 
     return reply.send({
       success: true,
@@ -467,16 +481,14 @@ export async function adminRoutes(app: FastifyInstance) {
         (code) => !existingUnitCodes.has(code)
       );
 
-      const jobLookups = await Promise.all(
-        pendingCodes.map((code) =>
-          scraperQueue.getJob(buildJobId(effectiveUniId, code))
-        )
+      recordQueueInputNormalization(
+        'bulk',
+        unitCodes.length,
+        normalizedCodes.length,
+        existingUnitCodes.size
       );
 
-      const alreadyQueuedCodes = pendingCodes.filter((_, i) => jobLookups[i]);
-      const codesToQueue = pendingCodes.filter((_, i) => !jobLookups[i]);
-
-      const finalJobs = codesToQueue.map(code => ({
+      const finalJobs = pendingCodes.map(code => ({
         name: 'scrape-unit',
         data: {
             type: 'scrape' as const,
@@ -491,7 +503,14 @@ export async function adminRoutes(app: FastifyInstance) {
       }));
 
       if (finalJobs.length > 0) {
-        await scraperQueue.addBulk(finalJobs);
+        const batchStartedAtMs = Date.now();
+        try {
+          const addedJobs = await scraperQueue.addBulk(finalJobs);
+          recordEnqueueBatchResult('bulk', finalJobs.length, addedJobs, batchStartedAtMs);
+        } catch (error) {
+          recordEnqueueBatchError();
+          throw error;
+        }
       }
 
       return reply.send({
@@ -499,9 +518,9 @@ export async function adminRoutes(app: FastifyInstance) {
         data: {
           total: normalizedCodes.length,
           queued: finalJobs.length,
-          alreadyQueued: alreadyQueuedCodes.length,
+          alreadyQueued: 0,
           alreadyIndexed: existingUnitCodes.size,
-          message: `Queued ${finalJobs.length} job${finalJobs.length === 1 ? '' : 's'} for background processing.`,
+          message: `Queued ${finalJobs.length} job${finalJobs.length === 1 ? '' : 's'} for background processing (BullMQ deduplicates existing jobIds).`,
         },
       });
     } catch (error) {
@@ -566,6 +585,13 @@ export async function adminRoutes(app: FastifyInstance) {
       effectiveUniId,
       normalizedCodes
     );
+    recordQueueInputNormalization(
+      'range',
+      codes.length,
+      normalizedCodes.length,
+      existingUnitCodes.size
+    );
+
     const codesToQueue = normalizedCodes.filter(
       (code) => !existingUnitCodes.has(code)
     );
@@ -616,7 +642,15 @@ export async function adminRoutes(app: FastifyInstance) {
         },
       }));
 
-      await scraperQueue.addBulk(jobs);
+      const batchStartedAtMs = Date.now();
+      try {
+        const addedJobs = await scraperQueue.addBulk(jobs);
+        recordEnqueueBatchResult('range', jobs.length, addedJobs, batchStartedAtMs);
+      } catch (error) {
+        recordEnqueueBatchError();
+        throw error;
+      }
+
       queuedCount += jobs.length;
 
       if (i + CHUNK_SIZE < codesToQueue.length) {
@@ -659,6 +693,32 @@ export async function adminRoutes(app: FastifyInstance) {
           ...counts,
           status,
           paused: isPaused
+      },
+    };
+  });
+
+  /**
+   * GET /api/admin/scrape/diagnostics
+   * Get scraper runtime diagnostics counters.
+   */
+  app.get('/scrape/diagnostics', async () => {
+    const counts = await scraperQueue.getJobCounts(
+      'waiting',
+      'active',
+      'completed',
+      'failed',
+      'delayed'
+    );
+    const isPaused = await scraperQueue.isPaused();
+
+    return {
+      success: true,
+      data: {
+        ...getScraperDiagnosticsSnapshot(),
+        queueState: {
+          paused: isPaused,
+          counts,
+        },
       },
     };
   });
@@ -734,6 +794,7 @@ export async function adminRoutes(app: FastifyInstance) {
       attempts: 3,
       backoff: { type: 'exponential', delay: 10000 },
     });
+    recordDiscoveryScanEnqueue();
 
     return { success: true, message: 'Discovery scan queued' };
   });

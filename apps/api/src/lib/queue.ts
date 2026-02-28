@@ -7,6 +7,15 @@ import { createLogger } from './logger.js';
 import { db } from '@ratemyunit/db/client';
 import { units } from '@ratemyunit/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
+import { isBrowserCrashErrorMessage } from '../scrapers/strategies/utils.js';
+import {
+  recordBrowserCrashLikeError,
+  recordBrowserRecoveryAttempt,
+  recordBrowserRecoveryOutcome,
+  recordEnqueueBatchError,
+  recordEnqueueBatchResult,
+  recordQueueInputNormalization,
+} from './scraper-diagnostics.js';
 
 const logger = createLogger('queue');
 
@@ -69,6 +78,9 @@ const isRateLimitedError = (message?: string) => {
     lower.includes('net::err')
   );
 };
+
+const isRetryableScrapeError = (message?: string) =>
+  isRateLimitedError(message) || isBrowserCrashErrorMessage(message);
 
 const getThrottleState = (universityId: string) => {
   const existing = throttleStateByUniversity.get(universityId);
@@ -162,8 +174,6 @@ const browserFactory = {
                 '--disable-dev-shm-usage',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
-                '--no-zygote',
-                '--single-process',
                 '--disable-gpu',
                 '--disable-extensions',
                 '--disable-default-apps',
@@ -253,25 +263,27 @@ export function setupWorker() {
                 });
               }
 
+              recordQueueInputNormalization(
+                'discovery',
+                codes.length,
+                normalizedCodes.length,
+                existingUnitCodes.size
+              );
+
               const pendingCodes = normalizedCodes.filter(
                 (code) => !existingUnitCodes.has(code)
               );
-
-              const jobLookups = await Promise.all(
-                pendingCodes.map((code) =>
-                  scraperQueue.getJob(buildJobId(universityId, code))
-                )
-              );
-
-              const queuedCodes = pendingCodes.filter((_, index) => !jobLookups[index]);
-              const skippedQueued = pendingCodes.filter((_, index) => jobLookups[index]);
-
               logger.info(
-                `📦 Discovery queue summary: ${queuedCodes.length} queued, ${existingUnitCodes.size} already indexed, ${skippedQueued.length} already queued`
+                {
+                  universityId,
+                  pendingCodes: pendingCodes.length,
+                  alreadyIndexed: existingUnitCodes.size,
+                },
+                'Discovery queue summary before enqueue (BullMQ jobId deduplication enabled)'
               );
 
               // Bulk add scrape jobs
-              const jobs = queuedCodes.map(code => ({
+              const jobs = pendingCodes.map(code => ({
                   name: `scrape-${code}`,
                   data: {
                       type: 'scrape' as const,
@@ -292,8 +304,21 @@ export function setupWorker() {
 
               if (jobs.length > 0) {
                   logger.info(`🚀 Adding ${jobs.length} jobs to queue...`);
-                  await scraperQueue.addBulk(jobs);
-                  logger.info(`✅ Successfully queued ${jobs.length} scrape jobs!`);
+                  const batchStartedAtMs = Date.now();
+                  try {
+                    const addedJobs = await scraperQueue.addBulk(jobs);
+                    recordEnqueueBatchResult('discovery', jobs.length, addedJobs, batchStartedAtMs);
+                  } catch (error) {
+                    recordEnqueueBatchError();
+                    throw error;
+                  }
+                  logger.info(
+                    {
+                      universityId,
+                      requested: jobs.length,
+                    },
+                    'Discovery enqueue completed (duplicates resolved by BullMQ jobId)'
+                  );
               } else {
                   logger.warn(`⚠️ No jobs to queue (codes array was empty)`);
               }
@@ -314,22 +339,66 @@ export function setupWorker() {
           logger.info(`Processing Scrape Job ${job.id}: ${unitCode} (Uni: ${universityId})`);
           
           let browser: Browser | null = null;
+          let browserRecycled = false;
+          let recoveryOutcomeRecorded = false;
+          const startedAt = Date.now();
           try {
             browser = await browserPool.acquire();
-            const result = await scraperService.scrapeUnit(unitCode, universityId, browser);
+            let result = await scraperService.scrapeUnit(unitCode, universityId, browser);
+
+            if (!result.success && isBrowserCrashErrorMessage(result.error)) {
+              recordBrowserCrashLikeError();
+              recordBrowserRecoveryAttempt();
+              logger.warn(
+                { unitCode, universityId, error: result.error },
+                'Detected browser crash-like error from scraper result; recycling browser and retrying once'
+              );
+
+              await browserPool.destroy(browser);
+              browser = null;
+              browserRecycled = true;
+
+              browser = await browserPool.acquire();
+              result = await scraperService.scrapeUnit(unitCode, universityId, browser);
+
+              const recoveryWorked = !isBrowserCrashErrorMessage(result.error);
+              recordBrowserRecoveryOutcome(recoveryWorked);
+              recoveryOutcomeRecorded = true;
+            }
             
             if (!result.success) {
-                logger.warn(`⚠️ Scrape failed for ${unitCode}: ${result.error}`);
+                logger.warn(
+                  {
+                    unitCode,
+                    universityId,
+                    error: result.error,
+                    browserRecycled,
+                    durationMs: Date.now() - startedAt,
+                  },
+                  'Scrape failed'
+                );
                 
                 // Check if we should retry (Blocking errors or Timeouts)
                 const errorMessage = result.error || 'Unknown scraping error';
-                const isRetryable = isRateLimitedError(result.error);
+                const isRetryable = isRetryableScrapeError(result.error);
 
                 if (isRetryable) {
-                    registerBlockingError(universityId, result.error);
+                    if (isRateLimitedError(result.error)) {
+                      registerBlockingError(universityId, result.error);
+                    }
+
                     const state = getThrottleState(universityId);
                     logger.warn(
-                      `🔄 Retrying job ${job.id} due to transient error: ${result.error}. Consecutive errors: ${state.consecutiveBlockingErrors}`
+                      {
+                        jobId: job.id,
+                        unitCode,
+                        universityId,
+                        error: result.error,
+                        browserRecycled,
+                        consecutiveBlockingErrors: state.consecutiveBlockingErrors,
+                        durationMs: Date.now() - startedAt,
+                      },
+                      'Retrying job due to retryable scraper failure'
                     );
                     throw new Error(result.error); // Throwing triggers BullMQ retry with backoff
                 }
@@ -343,20 +412,32 @@ export function setupWorker() {
                   status: 'indexed',
                   unitCode,
                   universityId,
+                  durationMs: Date.now() - startedAt,
+                  browserRecycled,
                 });
             }
           } catch (e) {
-              logger.error({ err: e }, `Scrape failed for ${unitCode}`);
+              logger.error(
+                {
+                  err: e,
+                  unitCode,
+                  universityId,
+                  browserRecycled,
+                  durationMs: Date.now() - startedAt,
+                },
+                `Scrape failed for ${unitCode}`
+              );
 
               // Check if this is a browser crash and destroy the resource if so
               if (browser && e instanceof Error) {
-                const isBrowserCrash =
-                  e.message.includes('Target closed') ||
-                  e.message.includes('Browser closed') ||
-                  e.message.includes('Protocol error') ||
-                  e.message.includes('Target page, context or browser has been closed');
+                if (isBrowserCrashErrorMessage(e.message)) {
+                  recordBrowserCrashLikeError();
 
-                if (isBrowserCrash) {
+                  if (browserRecycled && !recoveryOutcomeRecorded) {
+                    recordBrowserRecoveryOutcome(false);
+                    recoveryOutcomeRecorded = true;
+                  }
+
                   logger.warn('🔥 Browser crash detected - destroying browser instance');
                   await browserPool.destroy(browser);
                   browser = null; // Prevent release in finally block

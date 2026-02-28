@@ -23,7 +23,14 @@ function createChainBuilder(resolveValue: unknown = []) {
 
 // --- Mocks ------------------------------------------------------------------
 
-const { mockSelect, mockInsert, mockUpdate, mockDelete, mockQueue } = vi.hoisted(() => ({
+const {
+  mockSelect,
+  mockInsert,
+  mockUpdate,
+  mockDelete,
+  mockQueue,
+  mockDiagnostics,
+} = vi.hoisted(() => ({
   mockSelect: vi.fn(),
   mockInsert: vi.fn(),
   mockUpdate: vi.fn(),
@@ -39,6 +46,15 @@ const { mockSelect, mockInsert, mockUpdate, mockDelete, mockQueue } = vi.hoisted
     getJob: vi.fn(),
     getJobs: vi.fn(),
     obliterate: vi.fn(),
+  },
+  mockDiagnostics: {
+    getScraperDiagnosticsSnapshot: vi.fn(),
+    recordDiscoveryScanEnqueue: vi.fn(),
+    recordEnqueueBatchError: vi.fn(),
+    recordEnqueueBatchResult: vi.fn(),
+    recordKnownAlreadyQueuedSkip: vi.fn(),
+    recordQueueInputNormalization: vi.fn(),
+    recordSingleEnqueue: vi.fn(),
   },
 }));
 
@@ -109,6 +125,16 @@ vi.mock('../lib/auth.js', () => ({
   lucia: { invalidateUserSessions: vi.fn() },
 }));
 
+vi.mock('../lib/scraper-diagnostics.js', () => ({
+  getScraperDiagnosticsSnapshot: mockDiagnostics.getScraperDiagnosticsSnapshot,
+  recordDiscoveryScanEnqueue: mockDiagnostics.recordDiscoveryScanEnqueue,
+  recordEnqueueBatchError: mockDiagnostics.recordEnqueueBatchError,
+  recordEnqueueBatchResult: mockDiagnostics.recordEnqueueBatchResult,
+  recordKnownAlreadyQueuedSkip: mockDiagnostics.recordKnownAlreadyQueuedSkip,
+  recordQueueInputNormalization: mockDiagnostics.recordQueueInputNormalization,
+  recordSingleEnqueue: mockDiagnostics.recordSingleEnqueue,
+}));
+
 import { adminRoutes } from './admin';
 import { lucia } from '../lib/auth.js';
 
@@ -145,6 +171,32 @@ describe('adminRoutes', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     for (const key of Object.keys(handlers)) delete handlers[key];
+    mockDiagnostics.getScraperDiagnosticsSnapshot.mockReturnValue({
+      startedAt: '2026-01-01T00:00:00.000Z',
+      generatedAt: '2026-01-01T00:00:10.000Z',
+      uptimeMs: 10000,
+      browser: {
+        crashLikeErrorsTotal: 0,
+        recoveryAttemptsTotal: 0,
+        recoverySuccessTotal: 0,
+        recoveryFailureTotal: 0,
+      },
+      queue: {
+        enqueueRequestedTotal: 0,
+        addCallsTotal: 0,
+        addBulkCallsTotal: 0,
+        addBulkErrorsTotal: 0,
+        inputTotalBySource: { single: 0, bulk: 0, range: 0, discovery: 0 },
+        normalizedInputTotalBySource: { single: 0, bulk: 0, range: 0, discovery: 0 },
+        requestedBySource: { single: 0, bulk: 0, range: 0, discovery: 0 },
+        inputDuplicatesRemovedTotal: 0,
+        skippedAlreadyIndexedTotal: 0,
+        knownAlreadyQueuedTotal: 0,
+        estimatedJobIdCollisionSignalsTotal: 0,
+        jobIdCollisionSignalsAreApproximate: true,
+        jobIdCollisionSignalsMethod: 'timestamp_before_batch_start',
+      },
+    });
     await adminRoutes(captureApp());
   });
 
@@ -537,7 +589,6 @@ describe('adminRoutes', () => {
       mockSelect
         .mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.university }]))
         .mockReturnValueOnce(createChainBuilder([]));
-      mockQueue.getJob.mockResolvedValue(null);
       mockQueue.addBulk.mockResolvedValue(undefined);
 
       const request = createMockRequest({
@@ -547,6 +598,7 @@ describe('adminRoutes', () => {
       await handlers['POST /scrape/bulk'](request, reply);
 
       expect(mockQueue.addBulk).toHaveBeenCalled();
+      expect(mockQueue.getJob).not.toHaveBeenCalled();
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
@@ -615,6 +667,71 @@ describe('adminRoutes', () => {
           status: 'busy',
           paused: false,
         },
+      });
+    });
+  });
+
+  // ---- GET /scrape/diagnostics ---------------------------------------------
+
+  describe('GET /scrape/diagnostics', () => {
+    it('returns scraper diagnostics with queue state', async () => {
+      mockQueue.getJobCounts.mockResolvedValue({
+        waiting: 2,
+        active: 1,
+        completed: 10,
+        failed: 0,
+        delayed: 0,
+      });
+      mockQueue.isPaused.mockResolvedValue(false);
+
+      const result = await handlers['GET /scrape/diagnostics']({}, {});
+
+      expect(mockDiagnostics.getScraperDiagnosticsSnapshot).toHaveBeenCalled();
+      expect(result).toEqual({
+        success: true,
+        data: expect.objectContaining({
+          startedAt: '2026-01-01T00:00:00.000Z',
+          queueState: {
+            paused: false,
+            counts: {
+              waiting: 2,
+              active: 1,
+              completed: 10,
+              failed: 0,
+              delayed: 0,
+            },
+          },
+        }),
+      });
+    });
+  });
+
+  // ---- POST /university/:id/scan -------------------------------------------
+
+  describe('POST /university/:id/scan', () => {
+    it('queues discovery scan and records diagnostics counter', async () => {
+      mockQueue.add.mockResolvedValue(undefined);
+
+      const request = createMockRequest({
+        params: { id: TEST_IDS.university },
+      });
+      const result = await handlers['POST /university/:id/scan'](request, {});
+
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'discovery',
+        {
+          type: 'discovery',
+          universityId: TEST_IDS.university,
+        },
+        expect.objectContaining({
+          jobId: `discovery-${TEST_IDS.university}`,
+          attempts: 3,
+        })
+      );
+      expect(mockDiagnostics.recordDiscoveryScanEnqueue).toHaveBeenCalled();
+      expect(result).toEqual({
+        success: true,
+        message: 'Discovery scan queued',
       });
     });
   });

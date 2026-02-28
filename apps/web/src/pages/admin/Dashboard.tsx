@@ -2,18 +2,19 @@ import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ShieldCheck, Users, MessageSquare, AlertTriangle, BarChart3, Check, Trash2, Database, FileText } from 'lucide-react';
+import { ShieldCheck, Users, MessageSquare, AlertTriangle, BarChart3, Check, Trash2, Database, FileText, Megaphone } from 'lucide-react';
 import { useAuth } from '../../lib/auth-context';
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/button';
 import { DataScraper } from './DataScraper';
 import { SubjectTemplates } from './SubjectTemplates';
 import { UserManagement } from './UserManagement';
+import { SiteBannerSettingsPanel } from './SiteBannerSettings';
 
 export function AdminDashboard() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'users' | 'templates' | 'scraper'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'moderation' | 'users' | 'templates' | 'banner' | 'scraper'>('overview');
 
   const { data: stats } = useQuery({
     queryKey: ['admin', 'stats'],
@@ -86,6 +87,15 @@ export function AdminDashboard() {
         >
           <FileText className="mr-2 h-5 w-5" />
           Templates
+        </Button>
+        <Button
+          variant={activeTab === 'banner' ? 'default' : 'ghost'}
+          onClick={() => setActiveTab('banner')}
+          className="border-3 border-transparent data-[active=true]:border-foreground font-bold whitespace-nowrap"
+          data-active={activeTab === 'banner'}
+        >
+          <Megaphone className="mr-2 h-5 w-5" />
+          Site Banner
         </Button>
         <Button
           variant={activeTab === 'scraper' ? 'default' : 'ghost'}
@@ -173,6 +183,8 @@ export function AdminDashboard() {
       {activeTab === 'users' && <UserManagement />}
 
       {activeTab === 'templates' && <SubjectTemplates />}
+
+      {activeTab === 'banner' && <SiteBannerSettingsPanel />}
 
       {activeTab === 'scraper' && <DataScraper />}
     </div>

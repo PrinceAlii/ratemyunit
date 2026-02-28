@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 vi.mock('../lib/auth-context', () => ({
@@ -13,25 +14,46 @@ vi.mock('sonner', () => ({
   },
 }));
 
+vi.mock('../lib/api', () => ({
+  api: {
+    get: vi.fn(),
+  },
+}));
+
 import { useAuth } from '../lib/auth-context';
+import { api } from '../lib/api';
 import { Layout } from './Layout';
 
 const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
+const mockApiGet = api.get as ReturnType<typeof vi.fn>;
 
-function renderLayout(user: Record<string, unknown> | null = null) {
+function renderLayout(
+  user: Record<string, unknown> | null = null,
+  banner = { enabled: false, message: '', palette: 'primary' }
+) {
   const logout = vi.fn().mockResolvedValue(undefined);
   mockUseAuth.mockReturnValue({ user, logout });
+  mockApiGet.mockResolvedValue(banner);
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  });
 
   return {
     ...render(
-      <MemoryRouter>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<div>Home Content</div>} />
-          </Route>
-          <Route path="/login" element={<div>Login</div>} />
-        </Routes>
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route index element={<div>Home Content</div>} />
+            </Route>
+            <Route path="/login" element={<div>Login</div>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
     ),
     logout,
   };
@@ -93,5 +115,17 @@ describe('Layout', () => {
   it('renders outlet content', () => {
     renderLayout();
     expect(screen.getByText('Home Content')).toBeInTheDocument();
+  });
+
+  it('renders site-wide banner when enabled', async () => {
+    renderLayout(null, {
+      enabled: true,
+      message: 'Campus systems maintenance tonight from 11PM.',
+      palette: 'secondary',
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Campus systems maintenance tonight from 11PM.')).toBeInTheDocument();
+    });
   });
 });

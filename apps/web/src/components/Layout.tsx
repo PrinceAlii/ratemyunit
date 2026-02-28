@@ -1,11 +1,20 @@
 import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import type { SiteBannerSettings } from '@ratemyunit/types';
 import { useAuth } from '../lib/auth-context';
+import { api } from '../lib/api';
+import { siteBannerPalettePresets } from '../lib/site-banner';
 import { Button } from './ui/button';
 
 export function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { data: siteBanner } = useQuery({
+    queryKey: ['public', 'site-banner'],
+    queryFn: () => api.get<SiteBannerSettings>('/api/public/site-banner'),
+    staleTime: 60_000,
+  });
 
   const handleLogout = async () => {
     try {
@@ -17,6 +26,8 @@ export function Layout() {
       toast.error('Failed to logout. Please try again.');
     }
   };
+
+  const bannerPreset = siteBanner ? siteBannerPalettePresets[siteBanner.palette] : null;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -58,6 +69,14 @@ export function Layout() {
           </div>
         </div>
       </header>
+
+      {siteBanner?.enabled && siteBanner.message.trim() && bannerPreset && (
+        <section className={`border-b-4 border-black shadow-neo-sm ${bannerPreset.bannerClassName}`}>
+          <div className="container mx-auto px-4 py-3">
+            <p className="font-black">{siteBanner.message}</p>
+          </div>
+        </section>
+      )}
       
       <main className="flex-1">
         <Outlet />

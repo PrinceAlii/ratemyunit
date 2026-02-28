@@ -4,7 +4,7 @@ import { ScraperResult } from '../uts/types.js';
 import { safeValidateScrapedSubject } from '../uts/validator.js';
 import he from 'he';
 import { createLogger } from '../../lib/logger.js';
-import { configurePage } from './utils.js';
+import { configurePage, waitForDiscoveryReady } from './utils.js';
 
 const logger = createLogger('generic-scraper');
 
@@ -60,8 +60,7 @@ export class GenericDomScraper extends BaseScraper {
     try {
         logger.info(`🔎 Discovering from: ${startUrl}`);
         await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        
-        await page.waitForTimeout(2000);
+        await waitForDiscoveryReady(page);
 
         const hrefs = await page.evaluate(() => {
             return Array.from(document.querySelectorAll('a'))

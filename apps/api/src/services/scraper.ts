@@ -10,6 +10,7 @@ import { config } from '../config.js';
 
 const logger = createLogger('scraper');
 const MAX_SCRAPE_UNITS_CONCURRENCY = 20;
+const SCRAPER_CONFIG_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -34,9 +35,25 @@ const isRetryableScrapeError = (error?: string) => {
 
 const normalizeUnitCode = (code: string) => code.trim().toUpperCase();
 
+interface CachedUniversityScraper {
+  expiresAt: number;
+  value: {
+    uni: typeof universities.$inferSelect;
+    scraper: ReturnType<typeof ScraperFactory.createScraper>;
+  };
+}
+
 export class ScraperService {
+  private readonly universityScraperCache = new Map<string, CachedUniversityScraper>();
   
   private async getUniversityScraper(uniId?: string) {
+    const cacheKey = uniId ?? '__default__';
+    const existing = this.universityScraperCache.get(cacheKey);
+
+    if (existing && existing.expiresAt > Date.now()) {
+      return existing.value;
+    }
+
     let uni;
     if (!uniId) {
       const [uts] = await db.select().from(universities).where(eq(universities.abbreviation, 'UTS')).limit(1);
@@ -95,7 +112,17 @@ export class ScraperService {
       throw new Error(`Invalid scraper configuration for ${uni.name}: ${parseResult.error.message}`);
     }
 
-    return { uni, scraper: ScraperFactory.createScraper(uni.scraperType as ScraperType, uni.name, parseResult.data) };
+    const resolved = {
+      uni,
+      scraper: ScraperFactory.createScraper(uni.scraperType as ScraperType, uni.name, parseResult.data),
+    };
+
+    this.universityScraperCache.set(cacheKey, {
+      expiresAt: Date.now() + SCRAPER_CONFIG_CACHE_TTL_MS,
+      value: resolved,
+    });
+
+    return resolved;
   }
 
   private async upsertUnit(uniId: string, data: NonNullable<ScraperResult['data']>) {

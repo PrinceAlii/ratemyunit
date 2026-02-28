@@ -8,7 +8,7 @@ import { universities, subjectCodeTemplates } from '@ratemyunit/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { subjectTemplateService } from '../../services/template.js';
 import { createLogger } from '../../lib/logger.js';
-import { configurePage } from './utils.js';
+import { coerceToOptionalString, configurePage, waitForDiscoveryReady } from './utils.js';
 import { XMLParser } from 'fast-xml-parser';
 
 const logger = createLogger('courseloop-scraper');
@@ -124,7 +124,7 @@ export class CourseLoopScraper extends BaseScraper {
       }
 
       await page.goto(discoveryUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await page.waitForTimeout(2000);
+      await waitForDiscoveryReady(page);
 
       // Strategy 1: Try extracting from __NEXT_DATA__
       await this.discoverFromNextData(page, discoveredCodes);
@@ -161,7 +161,7 @@ export class CourseLoopScraper extends BaseScraper {
         return [];
       }
 
-      const xmlContent = await page.content();
+      const xmlContent = await response.text();
       
       // Extract codes from this sitemap
       const codes = new Set(this.extractCodesFromSitemap(xmlContent, routePattern));
@@ -373,7 +373,7 @@ export class CourseLoopScraper extends BaseScraper {
       name: (content.title as string) || 'Unknown Subject',
       creditPoints: parseInt(content.credit_points as string, 10) || 6,
       description: this.stripHtml(content.description as string) || 'No description available.',
-      faculty: content.parent_academic_org as string,
+      faculty: coerceToOptionalString(content.parent_academic_org),
       prerequisites: this.extractPrereqsFromAssociations(content.associations as unknown[]),
       sessions: this.parseOfferings(content.offering as unknown[]),
     };

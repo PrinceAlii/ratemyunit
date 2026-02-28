@@ -12,7 +12,7 @@ const configSchema = z.object({
   REDIS_URL: z.string().url().default('redis://localhost:6379'),
   JWT_SECRET: z.string().min(32),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
-  SCRAPER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(5),
+  SCRAPER_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(3),
   SCRAPER_RATE_LIMIT_MAX_JOBS: z.coerce.number().int().min(1).max(500).default(8),
   SCRAPER_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(250).max(600000).default(10000),
   SCRAPER_REQUEST_DELAY_MS: z.coerce.number().int().min(0).max(30000).default(250),

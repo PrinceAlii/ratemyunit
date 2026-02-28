@@ -565,6 +565,47 @@ describe('adminRoutes', () => {
       );
     });
 
+    it('requeues when existing job is terminal (failed)', async () => {
+      const failedJob = {
+        getState: vi.fn().mockResolvedValue('failed'),
+        remove: vi.fn().mockResolvedValue(undefined),
+      };
+
+      mockSelect
+        .mockReturnValueOnce(createChainBuilder([{ id: TEST_IDS.university }]))
+        .mockReturnValueOnce(createChainBuilder([]));
+      mockQueue.getJob.mockResolvedValue(failedJob);
+      mockQueue.add.mockResolvedValue(undefined);
+
+      const request = createMockRequest({
+        body: { unitCode: '52695' },
+      });
+      const reply = createMockReply();
+      await handlers['POST /scrape'](request, reply);
+
+      expect(failedJob.getState).toHaveBeenCalled();
+      expect(failedJob.remove).toHaveBeenCalled();
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'scrape-unit',
+        {
+          type: 'scrape',
+          unitCode: '52695',
+          universityId: TEST_IDS.university,
+        },
+        expect.objectContaining({
+          jobId: `scrape-${TEST_IDS.university}-52695`,
+        })
+      );
+      expect(reply.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.objectContaining({
+            status: 'queued',
+          }),
+        })
+      );
+    });
+
     it('rejects invalid body', async () => {
       const request = createMockRequest({
         body: { unitCode: '' },

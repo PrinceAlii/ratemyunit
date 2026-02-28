@@ -408,17 +408,23 @@ export async function adminRoutes(app: FastifyInstance) {
 
     if (existingJob) {
       const state = await existingJob.getState();
-      recordQueueInputNormalization('single', 1, 1, 0);
-      recordKnownAlreadyQueuedSkip(1);
-      return reply.send({
-        success: true,
-        message: `Job already ${state} for unit ${normalizedCode}`,
-        data: {
-          status: 'already_queued',
-          jobId,
-          state,
-        },
-      });
+
+      // Terminal jobs should not block manual retries from admin.
+      if (state === 'failed' || state === 'completed') {
+        await existingJob.remove();
+      } else {
+        recordQueueInputNormalization('single', 1, 1, 0);
+        recordKnownAlreadyQueuedSkip(1);
+        return reply.send({
+          success: true,
+          message: `Job already ${state} for unit ${normalizedCode}`,
+          data: {
+            status: 'already_queued',
+            jobId,
+            state,
+          },
+        });
+      }
     }
 
     // Add to queue with university ID

@@ -53,6 +53,7 @@ const mockReviews = [
       emailVerified: true,
       domainVerified: true,
       emailDomain: 'student.uts.edu.au',
+      authorStatus: 'verified_student',
     },
   },
 ];
@@ -110,6 +111,7 @@ describe('UnitDetails', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/great unit overall/i)).toBeInTheDocument();
+      expect(screen.getByText(/\(Verified Student\)/i)).toBeInTheDocument();
     });
   });
 

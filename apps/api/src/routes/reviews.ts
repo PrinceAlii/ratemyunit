@@ -1,47 +1,115 @@
 import type { FastifyInstance } from 'fastify';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { db } from '@ratemyunit/db/client';
-import { reviews, reviewVotes, reviewFlags } from '@ratemyunit/db/schema';
-import { eq, and, count } from 'drizzle-orm';
+import { reviews, reviewVotes, reviewFlags, siteBannerSettings, units } from '@ratemyunit/db/schema';
+import { eq, and, count, gte } from 'drizzle-orm';
 import { 
   createReviewSchema, 
   updateReviewSchema, 
   voteReviewSchema, 
   flagReviewSchema 
 } from '@ratemyunit/validators';
-import { requireAuth } from '../middleware/auth.js';
+import { authenticateUser, requireAuth } from '../middleware/auth.js';
+import { config } from '../config.js';
+import { generateFlaggedReviewAlertEmail, sendEmail } from '../lib/email.js';
+
+const SITE_BANNER_ROW_ID = 1;
+const GUEST_REVIEW_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function hashGuestIp(ip: string): string {
+  const salt = config.GUEST_REVIEW_IP_HASH_SALT;
+  return createHash('sha256').update(`${salt}:${ip}`).digest('hex');
+}
 
 export async function reviewsRoutes(app: FastifyInstance) {
-  app.addHook('preHandler', requireAuth);
-
   /**
    * POST /api/reviews
    * Create a new review.
    */
-  app.post('/', async (request, reply) => {
+  app.post('/', { preHandler: authenticateUser }, async (request, reply) => {
     const body = createReviewSchema.parse(request.body);
+    const user = request.user;
 
-    const [existingReview] = await db
-      .select()
-      .from(reviews)
-      .where(and(
-        eq(reviews.userId, request.user!.id),
-        eq(reviews.unitId, body.unitId)
-      ))
+    const [siteSettings] = await db
+      .select({
+        allowGuestReviews: siteBannerSettings.allowGuestReviews,
+      })
+      .from(siteBannerSettings)
+      .where(eq(siteBannerSettings.id, SITE_BANNER_ROW_ID))
       .limit(1);
 
-    if (existingReview) {
-      return reply.status(400).send({
+    const allowGuestReviews = siteSettings?.allowGuestReviews ?? false;
+
+    if (!user && !allowGuestReviews) {
+      return reply.status(401).send({
         success: false,
-        error: 'You have already reviewed this unit.',
+        error: 'Authentication required',
       });
+    }
+
+    if (user?.banned) {
+      return reply.status(403).send({
+        success: false,
+        error: 'Your account has been banned',
+      });
+    }
+
+    if (user && !user.emailVerified) {
+      return reply.status(403).send({
+        success: false,
+        error: 'Please verify your email address',
+      });
+    }
+
+    let guestIpHash: string | null = null;
+
+    if (user) {
+      const [existingReview] = await db
+        .select()
+        .from(reviews)
+        .where(and(
+          eq(reviews.userId, user.id),
+          eq(reviews.unitId, body.unitId)
+        ))
+        .limit(1);
+
+      if (existingReview) {
+        return reply.status(400).send({
+          success: false,
+          error: 'You have already reviewed this unit.',
+        });
+      }
+    } else {
+      guestIpHash = hashGuestIp(request.ip || 'unknown');
+      const cutoff = new Date(Date.now() - GUEST_REVIEW_WINDOW_MS);
+
+      const [recentGuestReview] = await db
+        .select({ id: reviews.id })
+        .from(reviews)
+        .where(and(
+          eq(reviews.unitId, body.unitId),
+          eq(reviews.guestIpHash, guestIpHash),
+          gte(reviews.createdAt, cutoff)
+        ))
+        .limit(1);
+
+      if (recentGuestReview) {
+        return reply.status(429).send({
+          success: false,
+          error: 'Guest reviews are limited to one review per unit every 24 hours.',
+        });
+      }
     }
 
     const [newReview] = await db
       .insert(reviews)
       .values({
         ...body,
-        userId: request.user!.id,
+        userId: user?.id ?? null,
+        guestIpHash,
+        displayNameType: user ? body.displayNameType : 'anonymous',
+        customNickname: user ? body.customNickname : null,
         status: 'auto-approved',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -59,7 +127,7 @@ export async function reviewsRoutes(app: FastifyInstance) {
    * PUT /api/reviews/:id
    * Update an existing review.
    */
-  app.put('/:id', async (request, reply) => {
+  app.put('/:id', { preHandler: requireAuth }, async (request, reply) => {
     const paramsSchema = z.object({ id: z.string().uuid('Invalid review ID') });
     const { id } = paramsSchema.parse(request.params);
     const body = updateReviewSchema.parse(request.body);
@@ -104,7 +172,7 @@ export async function reviewsRoutes(app: FastifyInstance) {
    * DELETE /api/reviews/:id
    * Delete a review.
    */
-  app.delete('/:id', async (request, reply) => {
+  app.delete('/:id', { preHandler: requireAuth }, async (request, reply) => {
     const paramsSchema = z.object({ id: z.string().uuid('Invalid review ID') });
     const { id } = paramsSchema.parse(request.params);
 
@@ -141,6 +209,7 @@ export async function reviewsRoutes(app: FastifyInstance) {
    * Vote on a review (helpful/not helpful).
    */
   app.post('/:id/vote', {
+    preHandler: requireAuth,
     config: {
       rateLimit: {
         max: 30,
@@ -195,6 +264,7 @@ export async function reviewsRoutes(app: FastifyInstance) {
    * Flag a review for moderation.
    */
   app.post('/:id/flag', {
+    preHandler: requireAuth,
     config: {
       rateLimit: {
         max: 10,
@@ -207,8 +277,13 @@ export async function reviewsRoutes(app: FastifyInstance) {
     const body = flagReviewSchema.parse(request.body);
 
     const [review] = await db
-      .select()
+      .select({
+        id: reviews.id,
+        unitId: reviews.unitId,
+        unitCode: units.unitCode,
+      })
       .from(reviews)
+      .innerJoin(units, eq(reviews.unitId, units.id))
       .where(eq(reviews.id, id))
       .limit(1);
 
@@ -241,17 +316,50 @@ export async function reviewsRoutes(app: FastifyInstance) {
       ...body,
     });
 
-    // Auto-flag: require at least 3 flags before hiding a review.
     const [flagCount] = await db
       .select({ value: count() })
       .from(reviewFlags)
-      .where(eq(reviewFlags.reviewId, id));
+      .where(and(
+        eq(reviewFlags.reviewId, id),
+        eq(reviewFlags.status, 'pending')
+      ));
 
-    if (flagCount.value >= 3) {
-      await db
-        .update(reviews)
-        .set({ status: 'flagged' })
-        .where(eq(reviews.id, id));
+    const [moderationSettings] = await db
+      .select({
+        adminAlertEmail: siteBannerSettings.adminAlertEmail,
+      })
+      .from(siteBannerSettings)
+      .where(eq(siteBannerSettings.id, SITE_BANNER_ROW_ID))
+      .limit(1);
+
+    if (!moderationSettings?.adminAlertEmail) {
+      request.log.warn({ reviewId: id }, 'Review flagged but adminAlertEmail is not configured');
+    } else {
+      try {
+        await sendEmail({
+          to: moderationSettings.adminAlertEmail,
+          subject: `[RateMyUnit] Review Flagged (${review.unitCode})`,
+          html: generateFlaggedReviewAlertEmail({
+            reviewId: id,
+            unitCode: review.unitCode,
+            reason: body.reason,
+            description: body.description ?? null,
+            flagCount: Number(flagCount.value),
+            moderationUrl: `${config.FRONTEND_URL}/admin`,
+          }),
+        });
+      } catch (error) {
+        request.log.error(
+          {
+            error,
+            reviewId: id,
+            unitCode: review.unitCode,
+            flagCount: Number(flagCount.value),
+            reporterUserId: request.user!.id,
+          },
+          'Failed to send flagged review alert email'
+        );
+      }
     }
 
     return reply.send({

@@ -18,6 +18,7 @@ describe('config', () => {
     SCRAPER_MAX_RETRIES: '3',
     SCRAPER_RETRY_BASE_DELAY_MS: '2000',
     SCRAPER_RETRY_MAX_DELAY_MS: '45000',
+    GUEST_REVIEW_IP_HASH_SALT: '1234567890123456',
   };
 
   let originalEnv: NodeJS.ProcessEnv;
@@ -42,6 +43,7 @@ describe('config', () => {
     process.env = {
       DATABASE_URL: validEnv.DATABASE_URL,
       JWT_SECRET: validEnv.JWT_SECRET,
+      GUEST_REVIEW_IP_HASH_SALT: validEnv.GUEST_REVIEW_IP_HASH_SALT,
     };
     const { config } = await import('./config');
     expect(config.PORT).toBe('3000');
@@ -92,7 +94,13 @@ describe('config', () => {
   });
 
   it('accepts RESEND_API_KEY in production', async () => {
-    process.env = { ...process.env, ...validEnv, NODE_ENV: 'production', RESEND_API_KEY: 're_abc123' };
+    process.env = {
+      ...process.env,
+      ...validEnv,
+      NODE_ENV: 'production',
+      RESEND_API_KEY: 're_abc123',
+      TRUSTED_PROXY_CIDRS: '173.245.48.0/20',
+    };
     const { config } = await import('./config');
     expect(config.RESEND_API_KEY).toBe('re_abc123');
   });
@@ -100,5 +108,16 @@ describe('config', () => {
   it('rejects RESEND_API_KEY not starting with re_', async () => {
     process.env = { ...process.env, ...validEnv, RESEND_API_KEY: 'invalid_key' };
     await expect(import('./config')).rejects.toThrow('Invalid environment variables');
+  });
+
+  it('requires TRUSTED_PROXY_CIDRS in production', async () => {
+    process.env = {
+      ...process.env,
+      ...validEnv,
+      NODE_ENV: 'production',
+      RESEND_API_KEY: 're_abc123',
+      TRUSTED_PROXY_CIDRS: '',
+    };
+    await expect(import('./config')).rejects.toThrow('Missing TRUSTED_PROXY_CIDRS in production');
   });
 });

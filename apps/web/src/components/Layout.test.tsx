@@ -29,7 +29,13 @@ const mockApiGet = api.get as ReturnType<typeof vi.fn>;
 
 function renderLayout(
   user: Record<string, unknown> | null = null,
-  banner = { enabled: false, enforceEduAuEmail: false, message: '', palette: 'primary' }
+  banner = {
+    enabled: false,
+    enforceEduAuEmail: false,
+    allowGuestReviews: false,
+    message: '',
+    palette: 'primary',
+  }
 ) {
   const logout = vi.fn().mockResolvedValue(undefined);
   mockUseAuth.mockReturnValue({ user, logout });
@@ -121,6 +127,7 @@ describe('Layout', () => {
     renderLayout(null, {
       enabled: true,
       enforceEduAuEmail: false,
+      allowGuestReviews: false,
       message: 'Campus systems maintenance tonight from 11PM.',
       palette: 'secondary',
     });

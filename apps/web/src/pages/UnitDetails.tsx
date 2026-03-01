@@ -10,7 +10,6 @@ import { useMemo, useState } from 'react';
 import { useAuth } from '../lib/auth-context';
 import { ThumbsUp, ThumbsDown, Flag } from 'lucide-react';
 import type { Unit, ReviewWithUser, UnitWithStats } from '@ratemyunit/types';
-import { VerificationBadge } from '../components/VerificationBadge';
 import { calculateAverages, formatRating } from '../lib/calculations';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -24,6 +23,18 @@ interface PaginatedResponse<T> {
     page: number;
     totalPages: number;
   };
+}
+
+function renderAuthorStatus(review: ReviewWithUser) {
+  if (review.user.authorStatus === 'guest') {
+    return <span> (Not logged in)</span>;
+  }
+
+  if (review.user.authorStatus === 'verified_student') {
+    return <span className="text-blue-700 font-bold"> (Verified Student)</span>;
+  }
+
+  return <span> (Logged in)</span>;
 }
 
 export function UnitDetails() {
@@ -286,14 +297,7 @@ export function UnitDetails() {
                                 </div>
                                 <div className="text-sm font-medium">
                                     Taken in {review.sessionTaken} • Posted by {review.user.displayName}
-                                    {review.displayNameType === 'verified' &&
-                                     review.user.emailVerified &&
-                                     review.user.emailDomain?.endsWith('.edu.au') && (
-                                      <VerificationBadge
-                                        domainVerified={review.user.domainVerified}
-                                        className="ml-1"
-                                      />
-                                    )}
+                                    {renderAuthorStatus(review)}
                                 </div>
                             </div>
                             <div className="text-xs font-bold text-muted-foreground">

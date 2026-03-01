@@ -133,7 +133,8 @@ export const units = pgTable('units', {
 export const reviews = pgTable('reviews', {
   id: uuid('id').primaryKey().defaultRandom(),
   unitId: uuid('unit_id').references(() => units.id, { onDelete: 'cascade' }).notNull(),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  guestIpHash: varchar('guest_ip_hash', { length: 64 }),
   sessionTaken: varchar('session_taken', { length: 50 }).notNull(),
   displayNameType: displayNameTypeEnum('display_name_type').default('anonymous').notNull(),
   customNickname: varchar('custom_nickname', { length: 50 }),
@@ -151,6 +152,7 @@ export const reviews = pgTable('reviews', {
   unq: unique().on(t.unitId, t.userId),
   unitIdIdx: index('reviews_unit_id_idx').on(t.unitId),
   statusIdx: index('reviews_status_idx').on(t.status),
+  guestLimitIdx: index('reviews_guest_limit_idx').on(t.unitId, t.guestIpHash, t.createdAt),
 }));
 
 // Review Votes Table
@@ -173,7 +175,13 @@ export const reviewFlags = pgTable('review_flags', {
   description: text('description'),
   status: flagStatusEnum('status').default('pending').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (t) => ({
+  reviewStatusCreatedIdx: index('review_flags_status_review_id_created_at_idx').on(
+    t.status,
+    t.reviewId,
+    t.createdAt
+  ),
+}));
 
 // Subject Code Templates Table
 export const subjectCodeTemplates = pgTable('subject_code_templates', {
@@ -203,6 +211,8 @@ export const siteBannerSettings = pgTable('site_banner_settings', {
   id: integer('id').primaryKey(),
   enabled: boolean('enabled').default(false).notNull(),
   enforceEduAuEmail: boolean('enforce_edu_au_email').default(false).notNull(),
+  allowGuestReviews: boolean('allow_guest_reviews').default(false).notNull(),
+  adminAlertEmail: varchar('admin_alert_email', { length: 320 }),
   message: text('message').default('').notNull(),
   palette: varchar('palette', { length: 32 }).default('primary').notNull(),
   updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),

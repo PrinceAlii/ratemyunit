@@ -94,6 +94,8 @@ SCRAPER_CONCURRENCY=1
 RESEND_API_KEY=re_your_resend_api_key
 RESEND_FROM_NAME=RateMyUnit
 RESEND_FROM_EMAIL=verify@send.ratemyunit.dev
+GUEST_REVIEW_IP_HASH_SALT=replace-with-16+-char-secret
+TRUSTED_PROXY_CIDRS=173.245.48.0/20,103.21.244.0/22
 ```
 
 **packages/db/.env**
@@ -153,6 +155,7 @@ Auth notes:
 - CSRF protection via `@fastify/csrf-protection`.
 - Rate limiting: 100 req/min per IP.
 - CSP via Helmet.
+- Production proxy trust is strict and configured via `TRUSTED_PROXY_CIDRS`; guest IP rate-limits rely on Fastify-resolved `request.ip`.
 - Registration email policy (`.edu.au` enforcement) is runtime-configurable from Admin Site Banner settings and defaults to disabled.
 
 ## Scraper Architecture
@@ -169,6 +172,10 @@ Auth notes:
 
 - Modes: single subject, bulk, range, auto-discovery.
 - Queue management via BullMQ.
+- Site Banner settings also manage policy toggles:
+  - `Require .edu.au emails for signup` (`enforce_edu_au_email`).
+  - `Allow guest reviews` (`allow_guest_reviews`).
+  - `Admin moderation alert email` (`admin_alert_email`), used for per-flag alert notifications.
 - Single-subject scrape retries: if a previous job is in `failed` or `completed`, the API removes that terminal job and re-queues the subject.
 - Runtime diagnostics endpoint: `GET /api/admin/scrape/diagnostics`.
 - Diagnostics include:
@@ -178,6 +185,15 @@ Auth notes:
 - Job ID collision **signals** are approximate and inferred from timestamp comparison (`jobIdCollisionSignalsMethod: timestamp_before_batch_start`).
 - Public university lists are deduplicated by abbreviation; database now enforces unique `universities.abbreviation` to prevent duplicate entries.
 - Template source policy: UTS uses one full-list template from `https://www.handbook.uts.edu.au/subjects/alpha`; UNSW uses one full-list template from course-outlines API union of years 2025 and 2026 (deduped by subject code). Use `npm run rebuild-uts-unsw-templates -w @ratemyunit/db` to refresh both.
+- Guest reviews:
+  - When enabled, non-authenticated users can post reviews.
+  - Guest reviews are rate-limited in-app to one review per unit per IP hash every 24 hours.
+  - Guest reviews are displayed as `Guest User (Not logged in)`.
+  - Logged-in reviews display `(... Logged in)` unless the account has verified `.edu.au` email, in which case `(... Verified Student)` is shown.
+- Review moderation queue:
+  - Reviews enter queue from the first user flag (`review_flags.status = pending`), with aggregated `flagCount`.
+  - Reviews are not auto-hidden by flag threshold.
+  - Admin moderation actions resolve pending flags for that review.
 
 ## Infrastructure & Deployment
 

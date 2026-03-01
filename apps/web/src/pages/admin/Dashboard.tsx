@@ -24,7 +24,7 @@ export function AdminDashboard() {
 
   const { data: flaggedReviews } = useQuery({
     queryKey: ['admin', 'flagged'],
-    queryFn: () => api.get<Array<{ id: string; unitCode: string; userEmail: string; reviewText: string }>>('/api/admin/reviews/flagged'),
+    queryFn: () => api.get<Array<{ id: string; unitCode: string; userEmail: string; reviewText: string; flagCount: number }>>('/api/admin/reviews/flagged'),
     enabled: activeTab === 'moderation',
   });
 
@@ -152,6 +152,9 @@ export function AdminDashboard() {
                       <div>
                         <span className="font-mono font-black text-lg mr-2">{review.unitCode}</span>
                         <span className="text-sm font-bold">by {review.userEmail}</span>
+                        <span className="ml-2 inline-flex items-center border-3 border-foreground bg-destructive px-2 py-0.5 text-xs font-black uppercase text-destructive-foreground">
+                          {review.flagCount} flag{review.flagCount === 1 ? '' : 's'}
+                        </span>
                       </div>
                       <div className="flex gap-2">
                         <Button

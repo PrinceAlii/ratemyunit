@@ -276,6 +276,7 @@ export async function unitsRoutes(app: FastifyInstance) {
     const unitReviews = await db
       .select({
         id: reviews.id,
+        authorUserId: reviews.userId,
         sessionTaken: reviews.sessionTaken,
         overallRating: reviews.overallRating,
         teachingQualityRating: reviews.teachingQualityRating,
@@ -311,22 +312,35 @@ export async function unitsRoutes(app: FastifyInstance) {
       .orderBy(desc(reviews.createdAt));
 
     const processedReviews = unitReviews.map(review => {
-      let displayName = 'Anonymous Student';
+      const { authorUserId, ...reviewData } = review;
+      const emailDomain = review.user?.email?.split('@')[1] || '';
+      const isGuest = !authorUserId;
+      const isVerifiedStudent =
+        !isGuest && Boolean(review.user?.emailVerified) && emailDomain.endsWith('.edu.au');
 
-      if (review.displayNameType === 'verified') {
-        displayName = review.user?.displayName || 'Verified Student';
-      } else if (review.displayNameType === 'nickname') {
-        displayName = review.customNickname || 'Student';
+      let displayName = isGuest ? 'Guest User' : 'Anonymous Student';
+
+      if (!isGuest) {
+        if (review.displayNameType === 'verified') {
+          displayName = review.user?.displayName || 'Verified Student';
+        } else if (review.displayNameType === 'nickname') {
+          displayName = review.customNickname || 'Student';
+        }
       }
 
       return {
-        ...review,
+        ...reviewData,
         user: {
           displayName: displayName,
-          role: review.user?.role,
-          emailVerified: review.user?.emailVerified,
-          domainVerified: review.user?.domainVerified,
-          emailDomain: review.user?.email?.split('@')[1] || '',
+          role: review.user?.role ?? null,
+          emailVerified: review.user?.emailVerified ?? false,
+          domainVerified: review.user?.domainVerified ?? false,
+          emailDomain,
+          authorStatus: isGuest
+            ? 'guest'
+            : isVerifiedStudent
+              ? 'verified_student'
+              : 'logged_in',
         }
       };
     });

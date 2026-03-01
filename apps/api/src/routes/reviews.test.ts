@@ -31,6 +31,7 @@ vi.mock('@ratemyunit/db/schema', () => ({
   reviews: {
     id: 'id',
     userId: 'userId',
+    guestIpHash: 'guestIpHash',
     unitId: 'unitId',
     status: 'status',
     createdAt: 'createdAt',
@@ -41,8 +42,20 @@ vi.mock('@ratemyunit/db/schema', () => ({
     voteType: 'voteType',
   },
   reviewFlags: {
+    id: 'id',
     reviewId: 'reviewId',
     userId: 'userId',
+    status: 'status',
+    createdAt: 'createdAt',
+  },
+  units: {
+    id: 'id',
+    unitCode: 'unitCode',
+  },
+  siteBannerSettings: {
+    id: 'id',
+    allowGuestReviews: 'allowGuestReviews',
+    adminAlertEmail: 'adminAlertEmail',
   },
 }));
 
@@ -50,6 +63,7 @@ vi.mock('drizzle-orm', () => ({
   eq: vi.fn(),
   and: vi.fn(),
   count: vi.fn(),
+  gte: vi.fn(),
 }));
 
 vi.mock('@ratemyunit/validators', () => ({
@@ -61,6 +75,25 @@ vi.mock('@ratemyunit/validators', () => ({
 
 vi.mock('../middleware/auth.js', () => ({
   requireAuth: vi.fn(),
+  authenticateUser: vi.fn(),
+}));
+
+vi.mock('../config.js', () => ({
+  config: {
+    JWT_SECRET: '12345678901234567890123456789012',
+    GUEST_REVIEW_IP_HASH_SALT: '1234567890123456',
+    FRONTEND_URL: 'https://ratemyunit.dev',
+  },
+}));
+
+const { mockSendEmail, mockGenerateFlaggedReviewAlertEmail } = vi.hoisted(() => ({
+  mockSendEmail: vi.fn(),
+  mockGenerateFlaggedReviewAlertEmail: vi.fn(() => '<html>flag alert</html>'),
+}));
+
+vi.mock('../lib/email.js', () => ({
+  sendEmail: mockSendEmail,
+  generateFlaggedReviewAlertEmail: mockGenerateFlaggedReviewAlertEmail,
 }));
 
 import { reviewsRoutes } from './reviews';
@@ -102,7 +135,9 @@ describe('reviewsRoutes', () => {
   describe('POST / (create review)', () => {
     it('creates a review successfully', async () => {
       const newReview = { ...mockReview, id: TEST_IDS.review };
-      mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
+      mockSelect
+        .mockReturnValueOnce(createMockQueryBuilder([{ allowGuestReviews: false }]))
+        .mockReturnValueOnce(createMockQueryBuilder([]));
       mockInsert.mockReturnValue(createMockInsertBuilder([newReview]));
 
       const request = createMockRequest({
@@ -130,7 +165,9 @@ describe('reviewsRoutes', () => {
     });
 
     it('rejects duplicate review for same unit', async () => {
-      mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockReview]));
+      mockSelect
+        .mockReturnValueOnce(createMockQueryBuilder([{ allowGuestReviews: false }]))
+        .mockReturnValueOnce(createMockQueryBuilder([mockReview]));
 
       const request = createMockRequest({
         user: mockUser,
@@ -143,6 +180,93 @@ describe('reviewsRoutes', () => {
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({
           error: 'You have already reviewed this unit.',
+        }),
+      );
+    });
+
+    it('rejects guest review when disabled', async () => {
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{ allowGuestReviews: false }]));
+
+      const request = createMockRequest({
+        user: null,
+        body: {
+          unitId: TEST_IDS.unit,
+          sessionTaken: 'Autumn 2025',
+          overallRating: 4,
+          reviewText: 'Great content with well-structured assignments.',
+          wouldRecommend: true,
+          displayNameType: 'anonymous',
+          customNickname: null,
+        },
+      });
+      const reply = createMockReply();
+      await handlers['POST /'](request, reply);
+
+      expect(reply.status).toHaveBeenCalledWith(401);
+      expect(reply.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Authentication required',
+        }),
+      );
+    });
+
+    it('allows guest review when enabled', async () => {
+      const newReview = { ...mockReview, id: TEST_IDS.review, userId: null };
+      mockSelect
+        .mockReturnValueOnce(createMockQueryBuilder([{ allowGuestReviews: true }]))
+        .mockReturnValueOnce(createMockQueryBuilder([]));
+      mockInsert.mockReturnValue(createMockInsertBuilder([newReview]));
+
+      const request = createMockRequest({
+        user: null,
+        ip: '203.0.113.10',
+        body: {
+          unitId: TEST_IDS.unit,
+          sessionTaken: 'Autumn 2025',
+          overallRating: 4,
+          reviewText: 'Great content with well-structured assignments.',
+          wouldRecommend: true,
+          displayNameType: 'nickname',
+          customNickname: 'GuestNick',
+        },
+      });
+      const reply = createMockReply();
+      await handlers['POST /'](request, reply);
+
+      expect(reply.status).toHaveBeenCalledWith(201);
+      expect(reply.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          message: 'Review submitted successfully.',
+        }),
+      );
+    });
+
+    it('rate-limits guest review by unit and IP over 24h', async () => {
+      mockSelect
+        .mockReturnValueOnce(createMockQueryBuilder([{ allowGuestReviews: true }]))
+        .mockReturnValueOnce(createMockQueryBuilder([{ id: TEST_IDS.review }]));
+
+      const request = createMockRequest({
+        user: null,
+        ip: '203.0.113.10',
+        body: {
+          unitId: TEST_IDS.unit,
+          sessionTaken: 'Autumn 2025',
+          overallRating: 4,
+          reviewText: 'Great content with well-structured assignments.',
+          wouldRecommend: true,
+          displayNameType: 'anonymous',
+          customNickname: null,
+        },
+      });
+      const reply = createMockReply();
+      await handlers['POST /'](request, reply);
+
+      expect(reply.status).toHaveBeenCalledWith(429);
+      expect(reply.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Guest reviews are limited to one review per unit every 24 hours.',
         }),
       );
     });
@@ -348,10 +472,17 @@ describe('reviewsRoutes', () => {
   describe('POST /:id/flag', () => {
     it('flags a review successfully', async () => {
       mockSelect
-        .mockReturnValueOnce(createMockQueryBuilder([mockReview]))
+        .mockReturnValueOnce(createMockQueryBuilder([{
+          id: TEST_IDS.review,
+          unitId: TEST_IDS.unit,
+          reviewText: 'Bad review',
+          unitCode: '31251',
+        }]))
         .mockReturnValueOnce(createMockQueryBuilder([]))
-        .mockReturnValueOnce(createMockQueryBuilder([{ value: 1 }]));
+        .mockReturnValueOnce(createMockQueryBuilder([{ value: 1 }]))
+        .mockReturnValueOnce(createMockQueryBuilder([{ adminAlertEmail: 'moderation@ratemyunit.dev' }]));
       mockInsert.mockReturnValue(createMockInsertBuilder());
+      mockSendEmail.mockResolvedValue({ messageId: 'msg-1' });
 
       const request = createMockRequest({
         user: { ...mockUser, id: TEST_IDS.user2 },
@@ -364,11 +495,25 @@ describe('reviewsRoutes', () => {
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({ success: true }),
       );
+      expect(mockGenerateFlaggedReviewAlertEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reviewId: TEST_IDS.review,
+          unitCode: '31251',
+          reason: 'inappropriate',
+          flagCount: 1,
+        }),
+      );
+      expect(mockSendEmail).toHaveBeenCalled();
     });
 
     it('prevents duplicate flag', async () => {
       mockSelect
-        .mockReturnValueOnce(createMockQueryBuilder([mockReview]))
+        .mockReturnValueOnce(createMockQueryBuilder([{
+          id: TEST_IDS.review,
+          unitId: TEST_IDS.unit,
+          reviewText: 'Bad review',
+          unitCode: '31251',
+        }]))
         .mockReturnValueOnce(
           createMockQueryBuilder([{ id: 'existing-flag' }]),
         );
@@ -389,13 +534,19 @@ describe('reviewsRoutes', () => {
       );
     });
 
-    it('auto-flags review when flag count reaches 3', async () => {
+    it('does not auto-hide review when flag count reaches 3', async () => {
       mockSelect
-        .mockReturnValueOnce(createMockQueryBuilder([mockReview]))
+        .mockReturnValueOnce(createMockQueryBuilder([{
+          id: TEST_IDS.review,
+          unitId: TEST_IDS.unit,
+          reviewText: 'Needs moderation',
+          unitCode: '52695',
+        }]))
         .mockReturnValueOnce(createMockQueryBuilder([]))
-        .mockReturnValueOnce(createMockQueryBuilder([{ value: 3 }]));
+        .mockReturnValueOnce(createMockQueryBuilder([{ value: 3 }]))
+        .mockReturnValueOnce(createMockQueryBuilder([{ adminAlertEmail: 'moderation@ratemyunit.dev' }]));
       mockInsert.mockReturnValue(createMockInsertBuilder());
-      mockUpdate.mockReturnValue(createMockUpdateBuilder());
+      mockSendEmail.mockResolvedValue({ messageId: 'msg-2' });
 
       const request = createMockRequest({
         user: { ...mockUser, id: TEST_IDS.user2 },
@@ -405,7 +556,35 @@ describe('reviewsRoutes', () => {
       const reply = createMockReply();
       await handlers['POST /:id/flag'](request, reply);
 
-      expect(mockUpdate).toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(reply.send).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true }),
+      );
+    });
+
+    it('logs warning and succeeds when admin alert email is not configured', async () => {
+      mockSelect
+        .mockReturnValueOnce(createMockQueryBuilder([{
+          id: TEST_IDS.review,
+          unitId: TEST_IDS.unit,
+          reviewText: 'Needs moderation',
+          unitCode: '52695',
+        }]))
+        .mockReturnValueOnce(createMockQueryBuilder([]))
+        .mockReturnValueOnce(createMockQueryBuilder([{ value: 2 }]))
+        .mockReturnValueOnce(createMockQueryBuilder([{ adminAlertEmail: null }]));
+      mockInsert.mockReturnValue(createMockInsertBuilder());
+
+      const request = createMockRequest({
+        user: { ...mockUser, id: TEST_IDS.user2 },
+        params: { id: TEST_IDS.review },
+        body: { reason: 'other', description: 'Suspicious content' },
+      });
+      const reply = createMockReply();
+      await handlers['POST /:id/flag'](request, reply);
+
+      expect(request.log.warn).toHaveBeenCalled();
+      expect(mockSendEmail).not.toHaveBeenCalled();
       expect(reply.send).toHaveBeenCalledWith(
         expect.objectContaining({ success: true }),
       );

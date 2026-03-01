@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -8,6 +8,7 @@ import { Label } from './ui/label';
 import { StarRating } from './StarRating';
 import { useAuth } from '../lib/auth-context';
 import { VerificationBadge } from './VerificationBadge';
+import type { SiteBannerSettings } from '@ratemyunit/types';
 
 interface ReviewFormProps {
   unitId: string;
@@ -27,6 +28,14 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
   const queryClient = useQueryClient();
   const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const { data: siteBannerSettings, isLoading: siteBannerLoading } = useQuery({
+    queryKey: ['public', 'site-banner'],
+    queryFn: () => api.get<SiteBannerSettings>('/api/public/site-banner'),
+    staleTime: 60_000,
+  });
+
+  const allowGuestReviews = siteBannerSettings?.allowGuestReviews ?? false;
+  const isGuestMode = !user && allowGuestReviews;
 
   const [formData, setFormData] = useState({
     sessionTaken: '',
@@ -58,7 +67,7 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
       errors.reviewText = 'Review must not exceed 2000 characters';
     }
 
-    if (formData.displayNameType === 'nickname' && !formData.customNickname.trim()) {
+    if (!isGuestMode && formData.displayNameType === 'nickname' && !formData.customNickname.trim()) {
       errors.customNickname = 'Nickname is required';
     }
 
@@ -68,9 +77,17 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
 
   const mutation = useMutation({
     mutationFn: async (data: typeof formData) => {
+      const payload = isGuestMode
+        ? {
+            ...data,
+            displayNameType: 'anonymous' as const,
+            customNickname: null,
+          }
+        : data;
+
       return api.post('/api/reviews', {
         unitId,
-        ...data,
+        ...payload,
       });
     },
     onSuccess: () => {
@@ -96,7 +113,15 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
     mutation.mutate(formData);
   };
 
-  if (!user) {
+  if (!user && siteBannerLoading) {
+    return (
+      <div className="p-6 text-center border-4 border-black rounded-none bg-card shadow-neo-lg">
+        <p className="mb-4 font-bold text-foreground">Loading review settings...</p>
+      </div>
+    );
+  }
+
+  if (!user && !allowGuestReviews) {
     return (
       <div className="p-6 text-center border-4 border-black rounded-none bg-card shadow-neo-lg">
         <p className="mb-4 font-bold text-foreground">Please login to write a review.</p>
@@ -112,6 +137,11 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
         <p className="text-sm font-medium text-muted-foreground">
           Share your experience with this unit to help other students.
         </p>
+        {isGuestMode && (
+          <p className="text-xs font-medium text-muted-foreground">
+            You are posting as Guest User (Not logged in).
+          </p>
+        )}
       </div>
 
       {error && (
@@ -234,32 +264,34 @@ export function ReviewForm({ unitId, onSuccess, onCancel }: ReviewFormProps) {
             )}
           </div>
           
-          <div className="space-y-2">
-             <Label htmlFor="display-type">Post as</Label>
-             <select
-                id="display-type"
-                 className="flex h-10 w-full rounded-none border-3 border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-medium"
-                 value={formData.displayNameType}
-                 onChange={(e) => setFormData({ ...formData, displayNameType: e.target.value as 'nickname' | 'anonymous' | 'verified' })}
-                 disabled={mutation.isPending}
-             >
-                 <option value="nickname">Nickname</option>
-                 <option value="anonymous">Anonymous</option>
-                 <option value="verified">
-                   Verified Name{user?.emailVerified && user?.email?.endsWith('.edu.au') ? ' ✓' : ''}
-                 </option>
-             </select>
-             {formData.displayNameType === 'verified' && user?.emailVerified && user?.email?.endsWith('.edu.au') && (
-               <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1 font-medium">
-                 <span>Your review will show</span>
-                 <VerificationBadge domainVerified={user.domainVerified} />
-                 <span>next to your name</span>
-               </div>
-             )}
-          </div>
+          {!isGuestMode && (
+            <div className="space-y-2">
+               <Label htmlFor="display-type">Post as</Label>
+               <select
+                  id="display-type"
+                   className="flex h-10 w-full rounded-none border-3 border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-medium"
+                   value={formData.displayNameType}
+                   onChange={(e) => setFormData({ ...formData, displayNameType: e.target.value as 'nickname' | 'anonymous' | 'verified' })}
+                   disabled={mutation.isPending}
+               >
+                   <option value="nickname">Nickname</option>
+                   <option value="anonymous">Anonymous</option>
+                   <option value="verified">
+                     Verified Name{user?.emailVerified && user?.email?.endsWith('.edu.au') ? ' ✓' : ''}
+                   </option>
+               </select>
+               {formData.displayNameType === 'verified' && user?.emailVerified && user?.email?.endsWith('.edu.au') && (
+                 <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1 font-medium">
+                   <span>Your review will show</span>
+                   <VerificationBadge domainVerified={user.domainVerified} />
+                   <span>next to your name</span>
+                 </div>
+               )}
+            </div>
+          )}
         </div>
 
-        {formData.displayNameType === 'nickname' && (
+        {!isGuestMode && formData.displayNameType === 'nickname' && (
           <div className="space-y-2">
             <Label htmlFor="nickname" className="flex items-center gap-1">
               Nickname <span className="text-red-500">*</span>

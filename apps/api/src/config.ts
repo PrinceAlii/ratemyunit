@@ -25,12 +25,21 @@ const configSchema = z.object({
   RESEND_API_KEY: z.string().startsWith('re_').or(z.literal('')).optional(),
   RESEND_FROM_NAME: z.string().trim().min(1).max(100).default('RateMyUnit'),
   RESEND_FROM_EMAIL: z.string().email().default('verify@send.ratemyunit.dev'),
+  GUEST_REVIEW_IP_HASH_SALT: z.string().trim().min(16),
+  TRUSTED_PROXY_CIDRS: z.string().trim().optional().default(''),
 });
 
 export type Config = z.infer<typeof configSchema>;
 
 function loadConfig(): Config {
-  const result = configSchema.safeParse(process.env);
+  const env = { ...process.env };
+  const isTestEnv = env.VITEST === 'true' || env.NODE_ENV === 'test';
+
+  if (isTestEnv && !env.GUEST_REVIEW_IP_HASH_SALT) {
+    env.GUEST_REVIEW_IP_HASH_SALT = 'test-guest-review-ip-hash-salt';
+  }
+
+  const result = configSchema.safeParse(env);
 
   if (!result.success) {
     if (process.env.NODE_ENV !== 'test') {
@@ -44,13 +53,18 @@ function loadConfig(): Config {
   }
 
   const data = result.data;
-  const isTestEnv = process.env.VITEST === 'true' || process.env.NODE_ENV === 'test';
-
   if (data.NODE_ENV === 'production' && !data.RESEND_API_KEY) {
     if (!isTestEnv) {
       logger.error('❌ RESEND_API_KEY is required in production to send transactional emails.');
     }
     throw new Error('Missing RESEND_API_KEY in production');
+  }
+
+  if (data.NODE_ENV === 'production' && data.TRUSTED_PROXY_CIDRS.length === 0) {
+    if (!isTestEnv) {
+      logger.error('❌ TRUSTED_PROXY_CIDRS is required in production for strict proxy trust.');
+    }
+    throw new Error('Missing TRUSTED_PROXY_CIDRS in production');
   }
 
   return data;

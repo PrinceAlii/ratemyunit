@@ -26,6 +26,17 @@ import { recordTelemetry } from '../lib/telemetry.js';
 const SITE_BANNER_ROW_ID = 1;
 
 export async function authRoutes(app: FastifyInstance) {
+  const registrationSuccessMessage =
+    'Account created. Please check your email to verify your account.';
+
+  const buildRegistrationSuccessResponse = (email: string) => ({
+    success: true,
+    message: registrationSuccessMessage,
+    data: {
+      email,
+    },
+  });
+
   /**
    * POST /api/auth/register
    * Register a new user account.
@@ -84,10 +95,8 @@ export async function authRoutes(app: FastifyInstance) {
       .limit(1);
 
     if (existingUser) {
-      return reply.status(400).send({
-        success: false,
-        error: 'An account with this email already exists.',
-      });
+      // Return a generic success response to prevent registration email enumeration.
+      return reply.status(201).send(buildRegistrationSuccessResponse(body.email));
     }
 
     const passwordHash = await hash(body.password, {
@@ -142,13 +151,7 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
-    return reply.status(201).send({
-      success: true,
-      message: 'Account created. Please check your email to verify your account.',
-      data: {
-        email: newUser.email,
-      },
-    });
+    return reply.status(201).send(buildRegistrationSuccessResponse(newUser.email));
   });
 
   /**
@@ -184,6 +187,14 @@ export async function authRoutes(app: FastifyInstance) {
         }).then(() => false);
 
     if (!user || !validPassword) {
+      request.log.warn(
+        {
+          event: 'security.failed_login',
+          email: body.email,
+          ip: request.ip,
+        },
+        'Failed login attempt'
+      );
       return reply.status(401).send({
         success: false,
         error: 'Invalid email or password.',
@@ -191,6 +202,15 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     if (user.banned) {
+      request.log.warn(
+        {
+          event: 'security.banned_login_attempt',
+          userId: user.id,
+          email: user.email,
+          ip: request.ip,
+        },
+        'Blocked login attempt for banned user'
+      );
       return reply.status(403).send({
         success: false,
         error: 'Your account has been banned.',

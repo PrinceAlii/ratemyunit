@@ -299,6 +299,7 @@ describe('unitsRoutes', () => {
       const reviewData = [
         {
           ...mockReview,
+          authorUserId: TEST_IDS.user,
           displayNameType: 'nickname',
           customNickname: 'CoolStudent',
           user: {
@@ -337,6 +338,7 @@ describe('unitsRoutes', () => {
               user: expect.objectContaining({
                 displayName: 'CoolStudent',
                 emailDomain: 'student.uts.edu.au',
+                authorStatus: 'verified_student',
               }),
             }),
           ]),
@@ -361,6 +363,7 @@ describe('unitsRoutes', () => {
       const reviewData = [
         {
           ...mockReview,
+          authorUserId: TEST_IDS.user,
           displayNameType: 'verified',
           customNickname: null,
           user: {
@@ -395,7 +398,10 @@ describe('unitsRoutes', () => {
           success: true,
           data: expect.arrayContaining([
             expect.objectContaining({
-              user: expect.objectContaining({ displayName: 'Real Name' }),
+              user: expect.objectContaining({
+                displayName: 'Real Name',
+                authorStatus: 'verified_student',
+              }),
             }),
           ]),
         }),
@@ -406,6 +412,7 @@ describe('unitsRoutes', () => {
       const reviewData = [
         {
           ...mockReview,
+          authorUserId: TEST_IDS.user,
           displayNameType: 'anonymous',
           customNickname: null,
           user: {
@@ -442,6 +449,49 @@ describe('unitsRoutes', () => {
             expect.objectContaining({
               user: expect.objectContaining({
                 displayName: 'Anonymous Student',
+                authorStatus: 'verified_student',
+              }),
+            }),
+          ]),
+        }),
+      );
+    });
+
+    it('processes guest reviews with guest author status', async () => {
+      const reviewData = [
+        {
+          ...mockReview,
+          authorUserId: null,
+          displayNameType: 'anonymous',
+          customNickname: null,
+          user: null,
+          voteCount: 0,
+        },
+      ];
+
+      mockSelect
+        .mockReturnValueOnce(createChainBuilder([{
+          id: TEST_IDS.unit,
+          unitCode: '31251',
+          unitName: 'Data Structures',
+          universityId: TEST_IDS.university,
+          uniName: 'UTS',
+          uniAbbr: 'UTS',
+        }]))
+        .mockReturnValueOnce(createChainBuilder(reviewData));
+
+      const request = createMockRequest({ params: { identifier: '31251' } });
+      const reply = createMockReply();
+      await handlers['GET /:identifier/reviews'](request, reply);
+
+      expect(reply.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          data: expect.arrayContaining([
+            expect.objectContaining({
+              user: expect.objectContaining({
+                displayName: 'Guest User',
+                authorStatus: 'guest',
               }),
             }),
           ]),

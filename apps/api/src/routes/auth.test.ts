@@ -340,7 +340,7 @@ describe('authRoutes', () => {
       );
     });
 
-    it('rejects duplicate email', async () => {
+    it('returns generic success for duplicate email without side-effects', async () => {
       // 1st select: registration policy
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([{ enforceEduAuEmail: false }]));
       // 2nd select: matchedUniversity
@@ -361,13 +361,21 @@ describe('authRoutes', () => {
       const reply = createMockReply();
       await handlers['POST /register'](request, reply);
 
-      expect(reply.status).toHaveBeenCalledWith(400);
+      expect(reply.status).toHaveBeenCalledWith(201);
       expect(reply.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: false,
-          error: 'An account with this email already exists.',
-        }),
+        {
+          success: true,
+          message: 'Account created. Please check your email to verify your account.',
+          data: {
+            email: 'student@student.uts.edu.au',
+          },
+        },
       );
+      expect(mockHash).not.toHaveBeenCalled();
+      expect(mockInsert).not.toHaveBeenCalled();
+      expect(mockCreateEmailVerificationToken).not.toHaveBeenCalled();
+      expect(mockSendEmail).not.toHaveBeenCalled();
+      expect(mockRecordTelemetry).not.toHaveBeenCalled();
     });
 
     it('sets domainVerified when email matches university', async () => {

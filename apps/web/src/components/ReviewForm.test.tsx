@@ -7,7 +7,7 @@ vi.mock('../lib/auth-context', () => ({
 }));
 
 vi.mock('../lib/api', () => ({
-  api: { post: vi.fn() },
+  api: { get: vi.fn(), post: vi.fn() },
 }));
 
 vi.mock('sonner', () => ({
@@ -15,9 +15,11 @@ vi.mock('sonner', () => ({
 }));
 
 import { useAuth } from '../lib/auth-context';
+import { api } from '../lib/api';
 import { ReviewForm } from './ReviewForm';
 
 const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
+const mockApiGet = api.get as ReturnType<typeof vi.fn>;
 
 function renderForm(props = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -40,13 +42,35 @@ function renderForm(props = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockApiGet.mockResolvedValue({
+    enabled: false,
+    enforceEduAuEmail: false,
+    allowGuestReviews: false,
+    message: '',
+    palette: 'primary',
+  });
 });
 
 describe('ReviewForm', () => {
-  it('shows "login required" message when not authenticated', () => {
+  it('shows "login required" message when not authenticated', async () => {
     mockUseAuth.mockReturnValue({ user: null });
     renderForm();
-    expect(screen.getByText(/please login to write a review/i)).toBeInTheDocument();
+    expect(await screen.findByText(/please login to write a review/i)).toBeInTheDocument();
+  });
+
+  it('allows guest review when guest reviews are enabled', async () => {
+    mockApiGet.mockResolvedValue({
+      enabled: false,
+      enforceEduAuEmail: false,
+      allowGuestReviews: true,
+      message: '',
+      palette: 'primary',
+    });
+    mockUseAuth.mockReturnValue({ user: null });
+    renderForm();
+
+    expect(await screen.findByText(/write a review/i)).toBeInTheDocument();
+    expect(screen.getByText(/guest user/i)).toBeInTheDocument();
   });
 
   it('renders form fields when authenticated', () => {

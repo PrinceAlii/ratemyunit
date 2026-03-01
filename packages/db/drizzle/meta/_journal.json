@@ -113,6 +113,20 @@
       "when": 1772388900000,
       "tag": "0016_registration_policy_toggle",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1772395200000,
+      "tag": "0017_guest_reviews_toggle",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1772402400000,
+      "tag": "0018_admin_alert_email_and_flag_queue_index",
+      "breakpoints": true
     }
   ]
 }

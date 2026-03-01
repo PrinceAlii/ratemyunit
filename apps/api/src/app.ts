@@ -20,12 +20,29 @@ import { db } from '@ratemyunit/db/client';
 import { sql } from 'drizzle-orm';
 import { scraperQueue } from './lib/queue.js';
 
+const DEVELOPMENT_TRUSTED_PROXIES = ['127.0.0.1', '::1', 'localhost'];
+
+function buildTrustedProxyConfig() {
+  const configuredProxyCidrs = config.TRUSTED_PROXY_CIDRS.split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  if (config.NODE_ENV === 'production') {
+    return configuredProxyCidrs;
+  }
+
+  return Array.from(new Set([...DEVELOPMENT_TRUSTED_PROXIES, ...configuredProxyCidrs]));
+}
+
 export async function buildApp() {
+  const trustedProxies = buildTrustedProxyConfig();
+
   const app = Fastify({
     logger: {
       level: config.NODE_ENV === 'development' ? 'info' : 'warn',
     },
     bodyLimit: 1024 * 1024,
+    trustProxy: trustedProxies.length > 0 ? trustedProxies : false,
   });
 
   await app.register(cookie);

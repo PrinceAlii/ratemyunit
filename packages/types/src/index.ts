@@ -93,7 +93,7 @@ export type ReviewStatus = 'approved' | 'flagged' | 'removed';
 export interface Review {
   id: string;
   unitId: string;
-  userId: string;
+  userId: string | null;
   sessionTaken: string;
   displayNameType: DisplayNameType;
   customNickname: string | null;
@@ -124,13 +124,14 @@ export interface PublicReview extends Omit<Review, 'userId'> {
   userVote?: 'helpful' | 'not_helpful' | null;
 }
 
-export interface ReviewWithUser extends Review {
+export interface ReviewWithUser extends Omit<Review, 'userId'> {
   user: {
     displayName: string;
-    role: UserRole;
+    role: UserRole | null;
     emailVerified: boolean;
     domainVerified: boolean;
     emailDomain: string;
+    authorStatus: 'guest' | 'logged_in' | 'verified_student';
   };
   voteCount: number;
 }
@@ -213,8 +214,13 @@ export type SiteBannerPalette = (typeof siteBannerPaletteValues)[number];
 export interface SiteBannerSettings {
   enabled: boolean;
   enforceEduAuEmail: boolean;
+  allowGuestReviews: boolean;
   message: string;
   palette: SiteBannerPalette;
+}
+
+export interface AdminSiteBannerSettings extends SiteBannerSettings {
+  adminAlertEmail: string | null;
 }
 
 // API Response types

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '@ratemyunit/db/client';
-import { units, reviews, users, universities, userTelemetry, siteBannerSettings } from '@ratemyunit/db/schema';
+import { units, reviews, users, universities, userTelemetry, siteBannerSettings, reviewFlags } from '@ratemyunit/db/schema';
 import { eq, desc, sql, and, inArray } from 'drizzle-orm';
 import { requireAdmin } from '../middleware/auth.js';
 import { scraperQueue } from '../lib/queue.js';
@@ -46,6 +46,8 @@ type SiteBannerPalette = (typeof SITE_BANNER_PALETTE_VALUES)[number];
 interface SiteBannerSettingsResponse {
   enabled: boolean;
   enforceEduAuEmail: boolean;
+  allowGuestReviews: boolean;
+  adminAlertEmail: string | null;
   message: string;
   palette: SiteBannerPalette;
 }
@@ -54,6 +56,8 @@ const SITE_BANNER_ROW_ID = 1;
 const DEFAULT_SITE_BANNER_SETTINGS: SiteBannerSettingsResponse = {
   enabled: false,
   enforceEduAuEmail: false,
+  allowGuestReviews: false,
+  adminAlertEmail: null,
   message: '',
   palette: 'primary',
 };
@@ -66,6 +70,8 @@ const normalizeSiteBannerSettings = (
   row?: {
     enabled: boolean;
     enforceEduAuEmail: boolean;
+    allowGuestReviews: boolean;
+    adminAlertEmail: string | null;
     message: string;
     palette: string;
   }
@@ -79,6 +85,10 @@ const normalizeSiteBannerSettings = (
     enabled: row?.enabled ?? DEFAULT_SITE_BANNER_SETTINGS.enabled,
     enforceEduAuEmail:
       row?.enforceEduAuEmail ?? DEFAULT_SITE_BANNER_SETTINGS.enforceEduAuEmail,
+    allowGuestReviews:
+      row?.allowGuestReviews ?? DEFAULT_SITE_BANNER_SETTINGS.allowGuestReviews,
+    adminAlertEmail:
+      row?.adminAlertEmail ?? DEFAULT_SITE_BANNER_SETTINGS.adminAlertEmail,
     message: row?.message ?? DEFAULT_SITE_BANNER_SETTINGS.message,
     palette: isValidPalette
       ? (palette as SiteBannerPalette)
@@ -137,9 +147,9 @@ export async function adminRoutes(app: FastifyInstance) {
     const [reviewCount] = await db.select({ count: sql<number>`count(*)` }).from(reviews);
     const [unitCount] = await db.select({ count: sql<number>`count(*)` }).from(units);
     const [flaggedCount] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(reviews)
-      .where(eq(reviews.status, 'flagged'));
+      .select({ count: sql<number>`cast(count(distinct ${reviewFlags.reviewId}) as integer)` })
+      .from(reviewFlags)
+      .where(eq(reviewFlags.status, 'pending'));
 
     const stats = {
       totalUsers: userCount.count,
@@ -160,6 +170,8 @@ export async function adminRoutes(app: FastifyInstance) {
       .select({
         enabled: siteBannerSettings.enabled,
         enforceEduAuEmail: siteBannerSettings.enforceEduAuEmail,
+        allowGuestReviews: siteBannerSettings.allowGuestReviews,
+        adminAlertEmail: siteBannerSettings.adminAlertEmail,
         message: siteBannerSettings.message,
         palette: siteBannerSettings.palette,
       })
@@ -180,6 +192,10 @@ export async function adminRoutes(app: FastifyInstance) {
   app.put('/site-banner', async (request, reply) => {
     const payload = updateSiteBannerSchema.parse(request.body);
     const message = payload.message.trim();
+    const adminAlertEmailInput = payload.adminAlertEmail ?? '';
+    const adminAlertEmail = adminAlertEmailInput.trim().length > 0
+      ? adminAlertEmailInput.trim().toLowerCase()
+      : null;
     const updatedAt = new Date();
 
     await db
@@ -188,6 +204,8 @@ export async function adminRoutes(app: FastifyInstance) {
         id: SITE_BANNER_ROW_ID,
         enabled: payload.enabled,
         enforceEduAuEmail: payload.enforceEduAuEmail,
+        allowGuestReviews: payload.allowGuestReviews,
+        adminAlertEmail,
         message,
         palette: payload.palette,
         updatedBy: request.user!.id,
@@ -198,6 +216,8 @@ export async function adminRoutes(app: FastifyInstance) {
         set: {
           enabled: payload.enabled,
           enforceEduAuEmail: payload.enforceEduAuEmail,
+          allowGuestReviews: payload.allowGuestReviews,
+          adminAlertEmail,
           message,
           palette: payload.palette,
           updatedBy: request.user!.id,
@@ -211,6 +231,8 @@ export async function adminRoutes(app: FastifyInstance) {
       data: {
         enabled: payload.enabled,
         enforceEduAuEmail: payload.enforceEduAuEmail,
+        allowGuestReviews: payload.allowGuestReviews,
+        adminAlertEmail,
         message,
         palette: payload.palette,
       },
@@ -228,14 +250,24 @@ export async function adminRoutes(app: FastifyInstance) {
         reviewText: reviews.reviewText,
         status: reviews.status,
         createdAt: reviews.createdAt,
-        userEmail: users.email,
+        userEmail: sql<string>`COALESCE(${users.email}, 'Guest User (Not logged in)')`,
         unitCode: units.unitCode,
+        flagCount: sql<number>`cast(count(${reviewFlags.id}) as integer)`,
       })
-      .from(reviews)
-      .innerJoin(users, eq(reviews.userId, users.id))
+      .from(reviewFlags)
+      .innerJoin(reviews, eq(reviewFlags.reviewId, reviews.id))
+      .leftJoin(users, eq(reviews.userId, users.id))
       .innerJoin(units, eq(reviews.unitId, units.id))
-      .where(eq(reviews.status, 'flagged'))
-      .orderBy(desc(reviews.createdAt));
+      .where(eq(reviewFlags.status, 'pending'))
+      .groupBy(
+        reviews.id,
+        reviews.reviewText,
+        reviews.status,
+        reviews.createdAt,
+        users.email,
+        units.unitCode
+      )
+      .orderBy(desc(sql`max(${reviewFlags.createdAt})`));
 
     return { success: true, data: flaggedReviews };
   });
@@ -250,9 +282,26 @@ export async function adminRoutes(app: FastifyInstance) {
 
     const status = action === 'restore' ? 'approved' : 'removed';
 
+    request.log.info(
+      {
+        event: 'security.review_moderation_action',
+        moderatorUserId: request.user?.id,
+        reviewId: id,
+        action,
+      },
+      'Review moderation action requested'
+    );
+
     await db.update(reviews)
       .set({ status, updatedAt: new Date() })
       .where(eq(reviews.id, id));
+
+    await db.update(reviewFlags)
+      .set({ status: 'reviewed' })
+      .where(and(
+        eq(reviewFlags.reviewId, id),
+        eq(reviewFlags.status, 'pending')
+      ));
 
     return reply.send({ success: true, message: `Review ${action}d.` });
   });

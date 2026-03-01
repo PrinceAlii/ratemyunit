@@ -54,6 +54,14 @@ export async function requireAuth(
   await authenticateUser(request, reply);
 
   if (!request.user) {
+    request.log?.warn?.(
+      {
+        event: 'security.auth_required_denied',
+        path: request.url,
+        ip: request.ip,
+      },
+      'Rejected request without authenticated user'
+    );
     return reply.status(401).send({
       success: false,
       error: 'Authentication required',
@@ -61,6 +69,15 @@ export async function requireAuth(
   }
 
   if (request.user.banned) {
+    request.log?.warn?.(
+      {
+        event: 'security.banned_user_denied',
+        userId: request.user.id,
+        path: request.url,
+        ip: request.ip,
+      },
+      'Rejected request from banned user'
+    );
     return reply.status(403).send({
       success: false,
       error: 'Your account has been banned',
@@ -68,6 +85,15 @@ export async function requireAuth(
   }
 
   if (!request.user.emailVerified) {
+    request.log?.warn?.(
+      {
+        event: 'security.unverified_user_denied',
+        userId: request.user.id,
+        path: request.url,
+        ip: request.ip,
+      },
+      'Rejected request from unverified user'
+    );
     return reply.status(403).send({
       success: false,
       error: 'Please verify your email address',
@@ -88,6 +114,16 @@ export async function requireAdmin(
   if (reply.sent) return;
 
   if (request.user?.role !== 'admin') {
+    request.log?.warn?.(
+      {
+        event: 'security.admin_access_denied',
+        userId: request.user?.id ?? null,
+        role: request.user?.role ?? null,
+        path: request.url,
+        ip: request.ip,
+      },
+      'Rejected admin-only request'
+    );
     return reply.status(403).send({
       success: false,
       error: 'Admin access required',

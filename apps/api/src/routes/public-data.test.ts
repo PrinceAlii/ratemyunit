@@ -32,6 +32,7 @@ vi.mock('@ratemyunit/db/schema', () => ({
     id: 'id',
     enabled: 'enabled',
     enforceEduAuEmail: 'enforceEduAuEmail',
+    allowGuestReviews: 'allowGuestReviews',
     message: 'message',
     palette: 'palette',
   },
@@ -198,6 +199,7 @@ describe('publicDataRoutes', () => {
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([{
         enabled: true,
         enforceEduAuEmail: true,
+        allowGuestReviews: true,
         message: 'Welcome back to campus week.',
         palette: 'primary',
       }]));
@@ -210,6 +212,7 @@ describe('publicDataRoutes', () => {
         data: {
           enabled: true,
           enforceEduAuEmail: true,
+          allowGuestReviews: true,
           message: 'Welcome back to campus week.',
           palette: 'primary',
         },
@@ -227,6 +230,7 @@ describe('publicDataRoutes', () => {
         data: {
           enabled: false,
           enforceEduAuEmail: false,
+          allowGuestReviews: false,
           message: '',
           palette: 'primary',
         },

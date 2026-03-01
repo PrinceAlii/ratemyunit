@@ -12,6 +12,7 @@ import {
   searchUnitsSchema,
   moderateReviewSchema,
   banUserSchema,
+  updateSiteBannerSchema,
 } from './index';
 
 describe('registerSchema', () => {
@@ -368,6 +369,38 @@ describe('banUserSchema', () => {
 
   it('rejects missing banned field', () => {
     const result = banUserSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('updateSiteBannerSchema', () => {
+  const basePayload = {
+    enabled: false,
+    enforceEduAuEmail: false,
+    allowGuestReviews: false,
+    adminAlertEmail: '',
+    message: '',
+    palette: 'primary',
+  } as const;
+
+  it('accepts valid admin alert email', () => {
+    const result = updateSiteBannerSchema.safeParse({
+      ...basePayload,
+      adminAlertEmail: 'admin@ratemyunit.dev',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts empty admin alert email', () => {
+    const result = updateSiteBannerSchema.safeParse(basePayload);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid admin alert email', () => {
+    const result = updateSiteBannerSchema.safeParse({
+      ...basePayload,
+      adminAlertEmail: 'not-an-email',
+    });
     expect(result.success).toBe(false);
   });
 });

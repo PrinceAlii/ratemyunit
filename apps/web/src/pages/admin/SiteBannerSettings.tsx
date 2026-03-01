@@ -2,16 +2,19 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Megaphone, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { SiteBannerSettings } from '@ratemyunit/types';
+import type { AdminSiteBannerSettings, SiteBannerSettings } from '@ratemyunit/types';
 import { api } from '../../lib/api';
 import { siteBannerPalettePresets } from '../../lib/site-banner';
 import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 
-const DEFAULT_SETTINGS: SiteBannerSettings = {
+const DEFAULT_SETTINGS: AdminSiteBannerSettings = {
   enabled: false,
   enforceEduAuEmail: false,
+  allowGuestReviews: false,
+  adminAlertEmail: null,
   message: '',
   palette: 'primary',
 };
@@ -19,16 +22,16 @@ const DEFAULT_SETTINGS: SiteBannerSettings = {
 
 export function SiteBannerSettingsPanel() {
   const queryClient = useQueryClient();
-  const [draftSettings, setDraftSettings] = useState<SiteBannerSettings | null>(null);
+  const [draftSettings, setDraftSettings] = useState<AdminSiteBannerSettings | null>(null);
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ['admin', 'site-banner'],
-    queryFn: () => api.get<SiteBannerSettings>('/api/admin/site-banner'),
+    queryFn: () => api.get<AdminSiteBannerSettings>('/api/admin/site-banner'),
   });
 
   const currentSettings = draftSettings ?? settings ?? DEFAULT_SETTINGS;
 
-  const updateCurrentSettings = (changes: Partial<SiteBannerSettings>) => {
+  const updateCurrentSettings = (changes: Partial<AdminSiteBannerSettings>) => {
     setDraftSettings({
       ...currentSettings,
       ...changes,
@@ -36,8 +39,8 @@ export function SiteBannerSettingsPanel() {
   };
 
   const saveMutation = useMutation({
-    mutationFn: (payload: SiteBannerSettings) =>
-      api.put<SiteBannerSettings>('/api/admin/site-banner', payload),
+    mutationFn: (payload: AdminSiteBannerSettings) =>
+      api.put<AdminSiteBannerSettings>('/api/admin/site-banner', payload),
     onSuccess: (updatedSettings) => {
       queryClient.setQueryData(['admin', 'site-banner'], updatedSettings);
       queryClient.invalidateQueries({ queryKey: ['public', 'site-banner'] });
@@ -51,14 +54,21 @@ export function SiteBannerSettingsPanel() {
 
   const handleSave = () => {
     const message = currentSettings.message.trim();
+    const adminAlertEmail = (currentSettings.adminAlertEmail ?? '').trim();
 
     if (currentSettings.enabled && message.length === 0) {
       toast.error('Banner message is required when enabled.');
       return;
     }
 
+    if (adminAlertEmail.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminAlertEmail)) {
+      toast.error('Admin alert email must be a valid email address.');
+      return;
+    }
+
     saveMutation.mutate({
       ...currentSettings,
+      adminAlertEmail,
       message,
     });
   };
@@ -105,6 +115,39 @@ export function SiteBannerSettingsPanel() {
         <p className="text-xs font-medium text-muted-foreground -mt-4">
           Disable this to allow any valid email address during registration.
         </p>
+
+        <div className="flex items-center gap-3">
+          <input
+            id="guest-reviews-enabled"
+            type="checkbox"
+            checked={currentSettings.allowGuestReviews}
+            onChange={(e) => updateCurrentSettings({ allowGuestReviews: e.target.checked })}
+            className="h-5 w-5 border-3 border-foreground"
+          />
+          <Label htmlFor="guest-reviews-enabled" className="font-bold uppercase text-sm cursor-pointer">
+            Allow guest reviews
+          </Label>
+        </div>
+        <p className="text-xs font-medium text-muted-foreground -mt-4">
+          If enabled, non-logged-in users can submit anonymous reviews.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="admin-alert-email" className="font-bold uppercase text-sm">
+            Admin moderation alert email
+          </Label>
+          <Input
+            id="admin-alert-email"
+            type="email"
+            value={currentSettings.adminAlertEmail ?? ''}
+            onChange={(e) => updateCurrentSettings({ adminAlertEmail: e.target.value })}
+            placeholder="admin@ratemyunit.dev"
+            className="border-3"
+          />
+          <p className="text-xs font-medium text-muted-foreground">
+            Flag events email this address. Leave empty to disable notifications.
+          </p>
+        </div>
 
         <div className="space-y-2">
           <Label htmlFor="site-banner-message" className="font-bold uppercase text-sm">

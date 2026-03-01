@@ -18,6 +18,15 @@ interface SendEmailResult {
   messageId?: string;
 }
 
+interface FlaggedReviewAlertParams {
+  reviewId: string;
+  unitCode: string;
+  reason: string;
+  description: string | null;
+  flagCount: number;
+  moderationUrl: string;
+}
+
 
 /**
  * Send an email using Resend.
@@ -155,6 +164,54 @@ export function generatePasswordResetEmail(resetLink: string): string {
         <p style="font-size: 12px; color: #999; text-align: center; margin-top: 20px;">
           © 2026 RateMyUnit. All rights reserved.
         </p>
+      </body>
+    </html>
+  `;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+export function generateFlaggedReviewAlertEmail({
+  reviewId,
+  unitCode,
+  reason,
+  description,
+  flagCount,
+  moderationUrl,
+}: FlaggedReviewAlertParams): string {
+  const safeDescription = description?.trim().length
+    ? escapeHtml(description.trim())
+    : 'No additional details provided.';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Review Flag Alert</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #111; max-width: 640px; margin: 0 auto; padding: 24px;">
+        <div style="background: #ffe37a; border: 4px solid #000; padding: 16px 20px; margin-bottom: 18px;">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 900; text-transform: uppercase;">Review Flagged</h1>
+        </div>
+        <div style="border: 3px solid #000; padding: 18px; background: #fff;">
+          <p style="margin: 0 0 10px 0;"><strong>Unit:</strong> ${escapeHtml(unitCode)}</p>
+          <p style="margin: 0 0 10px 0;"><strong>Review ID:</strong> ${escapeHtml(reviewId)}</p>
+          <p style="margin: 0 0 10px 0;"><strong>Reason:</strong> ${escapeHtml(reason)}</p>
+          <p style="margin: 0 0 10px 0;"><strong>Pending Flags:</strong> ${flagCount}</p>
+          <p style="margin: 0 0 10px 0;"><strong>Description:</strong> ${safeDescription}</p>
+          <a href="${moderationUrl}" style="display: inline-block; margin-top: 12px; background: #000; color: #fff; border: 3px solid #000; padding: 10px 18px; text-decoration: none; font-weight: 700;">
+            Open Moderation Queue
+          </a>
+        </div>
       </body>
     </html>
   `;

@@ -10,6 +10,7 @@ type SiteBannerPalette = (typeof SITE_BANNER_PALETTE_VALUES)[number];
 interface SiteBannerSettingsResponse {
   enabled: boolean;
   enforceEduAuEmail: boolean;
+  allowGuestReviews: boolean;
   message: string;
   palette: SiteBannerPalette;
 }
@@ -18,6 +19,7 @@ const SITE_BANNER_ROW_ID = 1;
 const DEFAULT_SITE_BANNER_SETTINGS: SiteBannerSettingsResponse = {
   enabled: false,
   enforceEduAuEmail: false,
+  allowGuestReviews: false,
   message: '',
   palette: 'primary',
 };
@@ -26,6 +28,7 @@ const normalizeSiteBannerSettings = (
   row?: {
     enabled: boolean;
     enforceEduAuEmail: boolean;
+    allowGuestReviews: boolean;
     message: string;
     palette: string;
   }
@@ -39,6 +42,8 @@ const normalizeSiteBannerSettings = (
     enabled: row?.enabled ?? DEFAULT_SITE_BANNER_SETTINGS.enabled,
     enforceEduAuEmail:
       row?.enforceEduAuEmail ?? DEFAULT_SITE_BANNER_SETTINGS.enforceEduAuEmail,
+    allowGuestReviews:
+      row?.allowGuestReviews ?? DEFAULT_SITE_BANNER_SETTINGS.allowGuestReviews,
     message: row?.message ?? DEFAULT_SITE_BANNER_SETTINGS.message,
     palette: isValidPalette
       ? (palette as SiteBannerPalette)
@@ -99,6 +104,7 @@ export async function publicDataRoutes(app: FastifyInstance) {
       .select({
         enabled: siteBannerSettings.enabled,
         enforceEduAuEmail: siteBannerSettings.enforceEduAuEmail,
+        allowGuestReviews: siteBannerSettings.allowGuestReviews,
         message: siteBannerSettings.message,
         palette: siteBannerSettings.palette,
       })

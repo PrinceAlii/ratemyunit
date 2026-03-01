@@ -77,6 +77,12 @@ vi.mock('@ratemyunit/db/schema', () => ({
     reviewText: 'reviewText',
     createdAt: 'createdAt',
   },
+  reviewFlags: {
+    id: 'id',
+    reviewId: 'reviewId',
+    status: 'status',
+    createdAt: 'createdAt',
+  },
   users: {
     id: 'id',
     email: 'email',
@@ -93,6 +99,8 @@ vi.mock('@ratemyunit/db/schema', () => ({
     id: 'id',
     enabled: 'enabled',
     enforceEduAuEmail: 'enforceEduAuEmail',
+    allowGuestReviews: 'allowGuestReviews',
+    adminAlertEmail: 'adminAlertEmail',
     message: 'message',
     palette: 'palette',
     updatedBy: 'updatedBy',
@@ -232,6 +240,8 @@ describe('adminRoutes', () => {
       mockSelect.mockReturnValueOnce(createChainBuilder([{
         enabled: true,
         enforceEduAuEmail: true,
+        allowGuestReviews: true,
+        adminAlertEmail: 'moderation@ratemyunit.dev',
         message: 'Scheduled maintenance tonight at 11pm.',
         palette: 'secondary',
       }]));
@@ -243,6 +253,8 @@ describe('adminRoutes', () => {
         data: {
           enabled: true,
           enforceEduAuEmail: true,
+          allowGuestReviews: true,
+          adminAlertEmail: 'moderation@ratemyunit.dev',
           message: 'Scheduled maintenance tonight at 11pm.',
           palette: 'secondary',
         },
@@ -259,6 +271,8 @@ describe('adminRoutes', () => {
         data: {
           enabled: false,
           enforceEduAuEmail: false,
+          allowGuestReviews: false,
+          adminAlertEmail: null,
           message: '',
           palette: 'primary',
         },
@@ -277,6 +291,8 @@ describe('adminRoutes', () => {
         body: {
           enabled: true,
           enforceEduAuEmail: true,
+          allowGuestReviews: true,
+          adminAlertEmail: 'moderation@ratemyunit.dev',
           message: 'New semester starts Monday.',
           palette: 'accent',
         },
@@ -291,6 +307,8 @@ describe('adminRoutes', () => {
         data: {
           enabled: true,
           enforceEduAuEmail: true,
+          allowGuestReviews: true,
+          adminAlertEmail: 'moderation@ratemyunit.dev',
           message: 'New semester starts Monday.',
           palette: 'accent',
         },
@@ -306,10 +324,33 @@ describe('adminRoutes', () => {
         {
           id: TEST_IDS.review,
           reviewText: 'Bad review',
-          status: 'flagged',
+          status: 'auto-approved',
           createdAt: new Date(),
           userEmail: 'user@test.com',
           unitCode: '31251',
+          flagCount: 1,
+        },
+      ];
+      mockSelect.mockReturnValueOnce(createChainBuilder(flaggedReviews));
+
+      const result = await handlers['GET /reviews/flagged']({}, {});
+
+      expect(result).toEqual({
+        success: true,
+        data: flaggedReviews,
+      });
+    });
+
+    it('includes guest flagged reviews for moderation', async () => {
+      const flaggedReviews = [
+        {
+          id: TEST_IDS.review,
+          reviewText: 'Guest review text',
+          status: 'auto-approved',
+          createdAt: new Date(),
+          userEmail: 'Guest User (Not logged in)',
+          unitCode: '52695',
+          flagCount: 2,
         },
       ];
       mockSelect.mockReturnValueOnce(createChainBuilder(flaggedReviews));

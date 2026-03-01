@@ -36,7 +36,9 @@ resource "aws_db_instance" "postgres" {
   skip_final_snapshot       = false
   final_snapshot_identifier = "ratemyunit-prod-db-final-${random_id.rds_final_snapshot_suffix.hex}"
 
-  backup_retention_period = 7
+  # Current AWS free-tier plan rejects retention > 0 for this account.
+  # Keep at 0 until account plan is upgraded, then raise (e.g. to 7).
+  backup_retention_period = 0
   backup_window           = "03:00-04:00"
   maintenance_window      = "sun:04:00-sun:05:00"
 

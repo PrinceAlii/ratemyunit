@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS: SiteBannerSettings = {
   palette: 'primary',
 };
 
+
 export function SiteBannerSettingsPanel() {
   const queryClient = useQueryClient();
   const [draftSettings, setDraftSettings] = useState<SiteBannerSettings | null>(null);

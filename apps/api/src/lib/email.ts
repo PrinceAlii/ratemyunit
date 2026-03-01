@@ -18,6 +18,7 @@ interface SendEmailResult {
   messageId?: string;
 }
 
+
 /**
  * Send an email using Resend.
  * In development without API key, logs to console instead.

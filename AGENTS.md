@@ -187,6 +187,7 @@ DATABASE_URL=postgresql://ratemyunit:devpassword@localhost:5432/ratemyunit
 2. **Push**: ECR repository `ratemyunit-api`.
 3. **Deploy**: SSM Run Command updates EC2.
 4. **Migrate**: Database migrations run automatically.
+5. **Safety**: Pre-deploy migration is time-boxed and cancelled if it lingers, to avoid blocking subsequent SSM deployment commands.
    - Container startup uses `node /app/packages/db/dist/migrate.js` (non-interactive); avoid `drizzle-kit push` in production startup paths.
 
 ### CI/CD Workflows

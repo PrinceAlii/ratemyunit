@@ -5,7 +5,7 @@ import { api } from '../../lib/api';
 import { Button } from '../../components/ui/button';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { Users, Ban, Trash2, History, Monitor, Smartphone, Tablet, Globe } from 'lucide-react';
-import { format } from 'date-fns';
+import { format } from 'date-fns/format';
 import {
   Dialog,
   DialogContent,

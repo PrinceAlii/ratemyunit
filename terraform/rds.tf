@@ -8,6 +8,10 @@ resource "aws_db_subnet_group" "main" {
   }
 }
 
+resource "random_id" "rds_final_snapshot_suffix" {
+  byte_length = 4
+}
+
 # RDS Instance
 resource "aws_db_instance" "postgres" {
   identifier        = "ratemyunit-prod-db"
@@ -16,6 +20,7 @@ resource "aws_db_instance" "postgres" {
   instance_class    = "db.t3.micro" # Free Tier
   allocated_storage = 20
   storage_type      = "gp2"
+  storage_encrypted = true
   db_name           = "ratemyunit"
   username          = "ratemyunit"
 
@@ -27,10 +32,11 @@ resource "aws_db_instance" "postgres" {
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [aws_security_group.db.id]
 
-  publicly_accessible = false
-  skip_final_snapshot = true
+  publicly_accessible       = false
+  skip_final_snapshot       = false
+  final_snapshot_identifier = "ratemyunit-prod-db-final-${random_id.rds_final_snapshot_suffix.hex}"
 
-  backup_retention_period = 0 # No backups needed
+  backup_retention_period = 7
   backup_window           = "03:00-04:00"
   maintenance_window      = "sun:04:00-sun:05:00"
 

@@ -56,7 +56,7 @@ resource "aws_iam_role_policy" "ssm_params" {
         Action = [
           "kms:Decrypt"
         ]
-        Resource = "*"
+        Resource = aws_kms_key.ssm_parameters.arn
       }
     ]
   })

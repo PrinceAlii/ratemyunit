@@ -67,6 +67,8 @@ export DATABASE_URL=$(aws ssm get-parameter --name "/ratemyunit/production/datab
 export JWT_SECRET=$(aws ssm get-parameter --name "/ratemyunit/production/jwt/secret" --with-decryption --query "Parameter.Value" --output text --region $REGION)
 export REDIS_URL=$(aws ssm get-parameter --name "/ratemyunit/production/redis/url" --with-decryption --query "Parameter.Value" --output text --region $REGION)
 export FRONTEND_URL=$(aws ssm get-parameter --name "/ratemyunit/production/frontend/url" --query "Parameter.Value" --output text --region $REGION)
+export GUEST_REVIEW_IP_HASH_SALT=$(aws ssm get-parameter --name "/ratemyunit/production/security/guest_review_ip_hash_salt" --with-decryption --query "Parameter.Value" --output text --region $REGION)
+export TRUSTED_PROXY_CIDRS=$(aws ssm get-parameter --name "/ratemyunit/production/network/trusted_proxy_cidrs" --query "Parameter.Value" --output text --region $REGION)
 
 # Create Docker Network
 docker network create ratemyunit-net || true
@@ -101,6 +103,8 @@ docker run -d \
   -e REDIS_URL="$REDIS_URL" \
   -e JWT_SECRET="$JWT_SECRET" \
   -e FRONTEND_URL="$FRONTEND_URL" \
+  -e GUEST_REVIEW_IP_HASH_SALT="$GUEST_REVIEW_IP_HASH_SALT" \
+  -e TRUSTED_PROXY_CIDRS="$TRUSTED_PROXY_CIDRS" \
   ${api_image}
 
 echo "UserData Setup Complete"

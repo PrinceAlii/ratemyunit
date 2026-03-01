@@ -21,8 +21,8 @@
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@types/node": "^25.2.2",
-    "@typescript-eslint/eslint-plugin": "^8.55.0",
-    "@typescript-eslint/parser": "^8.55.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
     "esbuild": "0.27.3",
     "eslint": "^9.39.2",
     "eslint-plugin-react": "^7.33.2",
@@ -31,17 +31,19 @@
     "prettier": "^3.8.1",
     "turbo": "^2.8.10",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.55.0"
+    "typescript-eslint": "^8.56.1"
   },
   "optionalDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.58.0"
+    "@rollup/rollup-win32-x64-msvc": "^4.59.0"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "packageManager": "npm@10.8.2",
   "overrides": {
-    "minimatch": "10.2.1",
+    "minimatch": "10.2.3",
+    "rollup": "4.59.0",
+    "fast-xml-parser": "5.3.8",
     "esbuild": "0.27.3",
     "drizzle-kit": {
       "esbuild": "0.27.3"

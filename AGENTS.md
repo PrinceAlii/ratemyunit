@@ -92,6 +92,8 @@ JWT_SECRET=min-32-chars
 FRONTEND_URL=http://localhost:5173
 SCRAPER_CONCURRENCY=1
 RESEND_API_KEY=re_your_resend_api_key
+RESEND_FROM_NAME=RateMyUnit
+RESEND_FROM_EMAIL=verify@send.ratemyunit.dev
 ```
 
 **packages/db/.env**
@@ -142,11 +144,16 @@ DATABASE_URL=postgresql://ratemyunit:devpassword@localhost:5432/ratemyunit
 | `/api/reviews` | CRUD reviews, votes, flags   | Authenticated |
 | `/api/admin`   | Moderation, user management  | Admin only    |
 
+Auth notes:
+
+- `POST /api/auth/resend-verification` re-sends verification links for unverified accounts (generic success response to avoid user enumeration).
+
 ### Security
 
 - CSRF protection via `@fastify/csrf-protection`.
 - Rate limiting: 100 req/min per IP.
 - CSP via Helmet.
+- Registration email policy (`.edu.au` enforcement) is runtime-configurable from Admin Site Banner settings and defaults to disabled.
 
 ## Scraper Architecture
 

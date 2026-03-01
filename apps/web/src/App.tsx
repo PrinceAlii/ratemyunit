@@ -70,7 +70,32 @@ function App() {
               </Routes>
             </Suspense>
           </BrowserRouter>
-          <Toaster richColors position="top-right" />
+          <Toaster
+            richColors
+            closeButton
+            position="top-center"
+            duration={4500}
+            gap={12}
+            offset={20}
+            mobileOffset={12}
+            className="neo-toaster"
+            toastOptions={{
+              classNames: {
+                toast: 'neo-toast',
+                title: 'neo-toast-title',
+                description: 'neo-toast-description',
+                actionButton: 'neo-toast-action',
+                cancelButton: 'neo-toast-cancel',
+                closeButton: 'neo-toast-close',
+                success: 'neo-toast-success',
+                error: 'neo-toast-error',
+                warning: 'neo-toast-warning',
+                info: 'neo-toast-info',
+                loading: 'neo-toast-loading',
+                default: 'neo-toast-default',
+              },
+            }}
+          />
         </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>

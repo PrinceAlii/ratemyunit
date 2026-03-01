@@ -31,7 +31,7 @@ beforeEach(() => {
 describe('Login', () => {
   it('renders email and password fields', () => {
     renderLogin();
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/email/i)).toHaveAttribute('placeholder', 'student@university.edu.au');
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
   });
 

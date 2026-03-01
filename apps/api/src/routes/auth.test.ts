@@ -594,6 +594,30 @@ describe('authRoutes', () => {
       );
     });
 
+    it('rejects login when stored password hash is malformed', async () => {
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUser]));
+      mockVerify
+        .mockRejectedValueOnce(new Error('Invalid hashed password: invalid Base64 encoding'))
+        .mockResolvedValueOnce(false);
+
+      const request = createMockRequest({
+        body: {
+          email: 'student@student.uts.edu.au',
+          password: 'SecureP@ss123',
+        },
+      });
+      const reply = createMockReply();
+      await handlers['POST /login'](request, reply);
+
+      expect(reply.status).toHaveBeenCalledWith(401);
+      expect(reply.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: 'Invalid email or password.',
+        }),
+      );
+    });
+
     it('rejects banned user', async () => {
       const bannedUser = { ...mockUser, banned: true };
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([bannedUser]));

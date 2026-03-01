@@ -171,20 +171,40 @@ export async function authRoutes(app: FastifyInstance) {
     const [user] = await db.select().from(users).where(eq(users.email, body.email)).limit(1);
 
     const dummyHash = "$argon2id$v=19$m=47104,t=3,p=1$c29tZXNhbHQ$Rdesc85X6AnBl09v/No0ksW3XOn9uWpZ9HOn9uWpZ9H"; // Dummy hash for timing
+    const argonOptions = {
+      memoryCost: 47104,
+      timeCost: 3,
+      outputLen: 32,
+      parallelism: 1,
+    } as const;
 
-    const validPassword = user 
-      ? await verify(user.passwordHash, body.password, {
-          memoryCost: 47104,
-          timeCost: 3,
-          outputLen: 32,
-          parallelism: 1,
-        })
-      : await verify(dummyHash, body.password, {
-          memoryCost: 47104,
-          timeCost: 3,
-          outputLen: 32,
-          parallelism: 1,
-        }).then(() => false);
+    const runDummyVerify = async () => {
+      try {
+        await verify(dummyHash, body.password, argonOptions);
+      } catch {
+        // Ignore dummy verify failures; it is only used to reduce timing differences.
+      }
+    };
+
+    let validPassword = false;
+    if (user) {
+      try {
+        validPassword = await verify(user.passwordHash, body.password, argonOptions);
+      } catch (error) {
+        request.log.error(
+          {
+            event: 'security.invalid_password_hash',
+            userId: user.id,
+            email: user.email,
+            error,
+          },
+          'Stored password hash is invalid; rejecting login'
+        );
+        await runDummyVerify();
+      }
+    } else {
+      await runDummyVerify();
+    }
 
     if (!user || !validPassword) {
       request.log.warn(

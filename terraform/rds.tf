@@ -33,6 +33,7 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids = [aws_security_group.db.id]
 
   publicly_accessible       = false
+  deletion_protection       = true
   skip_final_snapshot       = false
   final_snapshot_identifier = "ratemyunit-prod-db-final-${random_id.rds_final_snapshot_suffix.hex}"
 
@@ -43,6 +44,10 @@ resource "aws_db_instance" "postgres" {
   maintenance_window      = "sun:04:00-sun:05:00"
 
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
+
+  lifecycle {
+    prevent_destroy = true
+  }
 
   tags = {
     Name = "ratemyunit-db"

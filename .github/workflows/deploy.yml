@@ -261,8 +261,9 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --instance-ids "$INSTANCE_ID" \
-            --parameters 'commands=["export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "docker exec -e DATABASE_URL=\"$DATABASE_URL\" ratemyunit-api node /app/packages/db/scripts/apply-migrations.mjs 2>&1 || echo \"Container not running yet, will migrate after deployment\""]' \
+            --parameters 'commands=["export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "timeout 90s docker exec -e DATABASE_URL=\"$DATABASE_URL\" ratemyunit-api node /app/packages/db/scripts/apply-migrations.mjs 2>&1 || echo \"Container not running, migration failed, or migration timed out; will migrate after deployment\""]' \
             --comment "Running database migrations" \
+            --timeout-seconds 180 \
             --query 'Command.CommandId' \
             --output text)
 
@@ -296,6 +297,13 @@ jobs:
 
             sleep 2
           done
+
+          if [[ "$STATUS" == "Pending" || "$STATUS" == "InProgress" || "$STATUS" == "Delayed" || "$STATUS" == "Unknown" ]]; then
+            echo "Cancelling lingering pre-deployment migration command to avoid blocking deployment..."
+            aws ssm cancel-command \
+              --command-id "$COMMAND_ID" \
+              --region ${{ env.AWS_REGION }} || true
+          fi
 
           if [[ "$STATUS" == "Success" ]]; then
             echo "✓ Pre-deployment migrations completed successfully"

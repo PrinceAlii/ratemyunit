@@ -5,13 +5,14 @@ import {
   createMockQueryBuilder,
   createMockInsertBuilder,
   createMockUpdateBuilder,
+  createMockDeleteBuilder,
 } from '../__tests__/helpers/db-mock';
 import { TEST_IDS, mockUser, mockUniversity, mockSession } from '../__tests__/helpers/fixtures';
 
 // --- Mocks ------------------------------------------------------------------
 
 const {
-  mockSelect, mockInsert, mockUpdate,
+  mockSelect, mockInsert, mockUpdate, mockDelete,
   mockHash, mockVerify,
   mockLucia,
   mockCreateEmailVerificationToken, mockVerifyEmailToken,
@@ -38,6 +39,7 @@ const {
     mockSelect: vi.fn(),
     mockInsert: vi.fn(),
     mockUpdate: vi.fn(),
+    mockDelete: vi.fn(),
     mockHash: vi.fn(),
     mockVerify: vi.fn(),
     mockLucia: createMockLuciaFn(),
@@ -58,6 +60,7 @@ vi.mock('@ratemyunit/db/client', () => ({
     select: mockSelect,
     insert: mockInsert,
     update: mockUpdate,
+    delete: mockDelete,
   },
 }));
 
@@ -77,6 +80,13 @@ vi.mock('@ratemyunit/db/schema', () => ({
     id: 'id',
     emailDomain: 'emailDomain',
     active: 'active',
+  },
+  siteBannerSettings: {
+    id: 'id',
+    enforceEduAuEmail: 'enforceEduAuEmail',
+  },
+  emailVerificationTokens: {
+    userId: 'userId',
   },
 }));
 
@@ -175,11 +185,13 @@ describe('authRoutes', () => {
         email: 'student@student.uts.edu.au',
       };
 
-      // 1st select: matchedUniversity by emailDomain
+      // 1st select: registration policy
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{ enforceEduAuEmail: false }]));
+      // 2nd select: matchedUniversity by emailDomain
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUniversity]));
-      // 2nd select: selectedUniversity by id
+      // 3rd select: selectedUniversity by id
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUniversity]));
-      // 3rd select: existingUser check
+      // 4th select: existingUser check
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
 
       mockHash.mockResolvedValue('hashed-password');
@@ -208,7 +220,10 @@ describe('authRoutes', () => {
       expect(mockRecordTelemetry).toHaveBeenCalledWith(TEST_IDS.user, request);
     });
 
-    it('rejects non-.edu.au email', async () => {
+    it('rejects non-.edu.au email when enforcement is enabled', async () => {
+      // 1st select: registration policy
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{ enforceEduAuEmail: true }]));
+
       const request = createMockRequest({
         body: {
           email: 'student@gmail.com',
@@ -229,10 +244,51 @@ describe('authRoutes', () => {
       );
     });
 
-    it('rejects invalid university', async () => {
-      // 1st select: matchedUniversity (none found)
+    it('allows non-.edu.au email when enforcement is disabled', async () => {
+      const newUser = {
+        ...mockUser,
+        id: TEST_IDS.user,
+        email: 'student@gmail.com',
+      };
+
+      // 1st select: registration policy
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{ enforceEduAuEmail: false }]));
+      // 2nd select: matchedUniversity by emailDomain
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
-      // 2nd select: selectedUniversity (not found)
+      // 3rd select: selectedUniversity by id
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUniversity]));
+      // 4th select: existingUser check
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
+
+      mockHash.mockResolvedValue('hashed-password');
+      mockInsert.mockReturnValue(createMockInsertBuilder([newUser]));
+      mockCreateEmailVerificationToken.mockResolvedValue('test-token');
+
+      const request = createMockRequest({
+        body: {
+          email: 'student@gmail.com',
+          password: 'SecureP@ss123',
+          displayName: 'Test Student',
+          universityId: TEST_IDS.university,
+        },
+      });
+      const reply = createMockReply();
+      await handlers['POST /register'](request, reply);
+
+      expect(reply.status).toHaveBeenCalledWith(201);
+      expect(reply.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+        }),
+      );
+    });
+
+    it('rejects invalid university', async () => {
+      // 1st select: registration policy
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{ enforceEduAuEmail: false }]));
+      // 2nd select: matchedUniversity (none found)
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
+      // 3rd select: selectedUniversity (not found)
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
 
       const request = createMockRequest({
@@ -257,9 +313,11 @@ describe('authRoutes', () => {
 
     it('rejects inactive university', async () => {
       const inactiveUni = { ...mockUniversity, active: false };
-      // 1st select: matchedUniversity
+      // 1st select: registration policy
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{ enforceEduAuEmail: false }]));
+      // 2nd select: matchedUniversity
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
-      // 2nd select: selectedUniversity (inactive)
+      // 3rd select: selectedUniversity (inactive)
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([inactiveUni]));
 
       const request = createMockRequest({
@@ -283,11 +341,13 @@ describe('authRoutes', () => {
     });
 
     it('rejects duplicate email', async () => {
-      // 1st select: matchedUniversity
+      // 1st select: registration policy
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{ enforceEduAuEmail: false }]));
+      // 2nd select: matchedUniversity
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUniversity]));
-      // 2nd select: selectedUniversity
+      // 3rd select: selectedUniversity
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUniversity]));
-      // 3rd select: existingUser found
+      // 4th select: existingUser found
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUser]));
 
       const request = createMockRequest({
@@ -317,11 +377,13 @@ describe('authRoutes', () => {
         email: 'student@student.uts.edu.au',
       };
 
-      // 1st select: matchedUniversity (same as selected)
+      // 1st select: registration policy
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{ enforceEduAuEmail: false }]));
+      // 2nd select: matchedUniversity (same as selected)
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUniversity]));
-      // 2nd select: selectedUniversity (same id as matched)
+      // 3rd select: selectedUniversity (same id as matched)
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUniversity]));
-      // 3rd select: no existing user
+      // 4th select: no existing user
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
 
       mockHash.mockResolvedValue('hashed-password');
@@ -361,11 +423,13 @@ describe('authRoutes', () => {
         email: 'student@other.edu.au',
       };
 
-      // 1st select: matchedUniversity (different uni)
+      // 1st select: registration policy
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{ enforceEduAuEmail: false }]));
+      // 2nd select: matchedUniversity (different uni)
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([differentUni]));
-      // 2nd select: selectedUniversity (original uni)
+      // 3rd select: selectedUniversity (original uni)
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUniversity]));
-      // 3rd select: no existing user
+      // 4th select: no existing user
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
 
       mockHash.mockResolvedValue('hashed-password');
@@ -388,6 +452,49 @@ describe('authRoutes', () => {
       expect(insertBuilder.values).toHaveBeenCalledWith(
         expect.objectContaining({
           domainVerified: false,
+        }),
+      );
+    });
+
+    it('rolls back user creation if verification email fails to send', async () => {
+      const newUser = {
+        ...mockUser,
+        id: TEST_IDS.user,
+        email: 'student@student.uts.edu.au',
+      };
+
+      // 1st select: registration policy
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{ enforceEduAuEmail: false }]));
+      // 2nd select: matchedUniversity by emailDomain
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUniversity]));
+      // 3rd select: selectedUniversity by id
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([mockUniversity]));
+      // 4th select: existingUser check
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
+
+      mockHash.mockResolvedValue('hashed-password');
+      mockInsert.mockReturnValue(createMockInsertBuilder([newUser]));
+      mockCreateEmailVerificationToken.mockResolvedValue('test-token');
+      mockSendEmail.mockRejectedValue(new Error('SMTP down'));
+      mockDelete.mockReturnValue(createMockDeleteBuilder());
+
+      const request = createMockRequest({
+        body: {
+          email: 'student@student.uts.edu.au',
+          password: 'SecureP@ss123',
+          displayName: 'Test Student',
+          universityId: TEST_IDS.university,
+        },
+      });
+      const reply = createMockReply();
+      await handlers['POST /register'](request, reply);
+
+      expect(mockDelete).toHaveBeenCalledTimes(2);
+      expect(reply.status).toHaveBeenCalledWith(502);
+      expect(reply.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: 'Could not send verification email. Please try again.',
         }),
       );
     });
@@ -599,6 +706,54 @@ describe('authRoutes', () => {
           error: 'Invalid or expired verification token.',
         }),
       );
+    });
+  });
+
+  // ---- POST /resend-verification ------------------------------------------
+
+  describe('POST /resend-verification', () => {
+    it('resends verification for an unverified user', async () => {
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([{
+        id: TEST_IDS.user,
+        email: mockUser.email,
+        emailVerified: false,
+      }]));
+      mockCreateEmailVerificationToken.mockResolvedValue('new-verify-token');
+
+      const request = createMockRequest({
+        body: { email: mockUser.email },
+      });
+      const reply = createMockReply();
+      await handlers['POST /resend-verification'](request, reply);
+
+      expect(mockCreateEmailVerificationToken).toHaveBeenCalledWith(TEST_IDS.user);
+      expect(mockSendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: mockUser.email,
+          subject: 'Verify Your Email - RateMyUnit',
+        }),
+      );
+      expect(reply.send).toHaveBeenCalledWith({
+        success: true,
+        message: 'If your account exists and is unverified, a new verification link has been sent.',
+      });
+    });
+
+    it('returns generic success when user does not exist', async () => {
+      mockSelect.mockReturnValueOnce(createMockQueryBuilder([]));
+
+      const request = createMockRequest({
+        body: { email: 'missing@example.com' },
+      });
+      const reply = createMockReply();
+      await handlers['POST /resend-verification'](request, reply);
+
+      expect(mockCreateEmailVerificationToken).not.toHaveBeenCalled();
+      expect(mockSendEmail).not.toHaveBeenCalled();
+      expect(reply.send).toHaveBeenCalledWith({
+        success: true,
+        message: 'If your account exists and is unverified, a new verification link has been sent.',
+      });
     });
   });
 

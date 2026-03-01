@@ -92,6 +92,7 @@ vi.mock('@ratemyunit/db/schema', () => ({
   siteBannerSettings: {
     id: 'id',
     enabled: 'enabled',
+    enforceEduAuEmail: 'enforceEduAuEmail',
     message: 'message',
     palette: 'palette',
     updatedBy: 'updatedBy',
@@ -230,6 +231,7 @@ describe('adminRoutes', () => {
     it('returns site banner settings', async () => {
       mockSelect.mockReturnValueOnce(createChainBuilder([{
         enabled: true,
+        enforceEduAuEmail: true,
         message: 'Scheduled maintenance tonight at 11pm.',
         palette: 'secondary',
       }]));
@@ -240,6 +242,7 @@ describe('adminRoutes', () => {
         success: true,
         data: {
           enabled: true,
+          enforceEduAuEmail: true,
           message: 'Scheduled maintenance tonight at 11pm.',
           palette: 'secondary',
         },
@@ -255,6 +258,7 @@ describe('adminRoutes', () => {
         success: true,
         data: {
           enabled: false,
+          enforceEduAuEmail: false,
           message: '',
           palette: 'primary',
         },
@@ -272,6 +276,7 @@ describe('adminRoutes', () => {
         user: mockAdmin,
         body: {
           enabled: true,
+          enforceEduAuEmail: true,
           message: 'New semester starts Monday.',
           palette: 'accent',
         },
@@ -285,6 +290,7 @@ describe('adminRoutes', () => {
         message: 'Site banner enabled.',
         data: {
           enabled: true,
+          enforceEduAuEmail: true,
           message: 'New semester starts Monday.',
           palette: 'accent',
         },

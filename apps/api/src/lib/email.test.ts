@@ -30,12 +30,12 @@ beforeEach(() => {
 });
 
 describe('sendEmail', () => {
-  it('logs in development mode instead of sending', async () => {
+  it('logs when no resend api key is configured', async () => {
     await expect(sendEmail({
       to: 'test@test.com',
       subject: 'Test',
       html: '<p>Test</p>',
-    })).resolves.toBeUndefined();
+    })).resolves.toEqual({});
   });
 });
 

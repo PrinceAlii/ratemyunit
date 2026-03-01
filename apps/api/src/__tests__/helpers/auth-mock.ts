@@ -41,6 +41,12 @@ export function createMockRequest(options: MockRequestOptions = {}) {
     query: options.query ?? {},
     headers: options.headers ?? {},
     ip: options.ip ?? '127.0.0.1',
+    log: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    },
   };
 }
 

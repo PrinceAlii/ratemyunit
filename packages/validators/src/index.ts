@@ -129,6 +129,7 @@ export const banUserSchema = z.object({
 
 export const updateSiteBannerSchema = z.object({
   enabled: z.boolean(),
+  enforceEduAuEmail: z.boolean(),
   message: z.string().trim().max(280, 'Banner message must be 280 characters or less'),
   palette: z.enum(['primary', 'secondary', 'accent', 'success', 'ink'] as const),
 }).superRefine((value, ctx) => {

@@ -212,6 +212,7 @@ export type SiteBannerPalette = (typeof siteBannerPaletteValues)[number];
 
 export interface SiteBannerSettings {
   enabled: boolean;
+  enforceEduAuEmail: boolean;
   message: string;
   palette: SiteBannerPalette;
 }

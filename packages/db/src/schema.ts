@@ -202,6 +202,7 @@ export const subjectCodeTemplates = pgTable('subject_code_templates', {
 export const siteBannerSettings = pgTable('site_banner_settings', {
   id: integer('id').primaryKey(),
   enabled: boolean('enabled').default(false).notNull(),
+  enforceEduAuEmail: boolean('enforce_edu_au_email').default(false).notNull(),
   message: text('message').default('').notNull(),
   palette: varchar('palette', { length: 32 }).default('primary').notNull(),
   updatedBy: uuid('updated_by').references(() => users.id, { onDelete: 'set null' }),

@@ -23,6 +23,8 @@ const configSchema = z.object({
   SCRAPER_RETRY_BASE_DELAY_MS: z.coerce.number().int().min(250).max(120000).default(2000),
   SCRAPER_RETRY_MAX_DELAY_MS: z.coerce.number().int().min(1000).max(600000).default(45000),
   RESEND_API_KEY: z.string().startsWith('re_').or(z.literal('')).optional(),
+  RESEND_FROM_NAME: z.string().trim().min(1).max(100).default('RateMyUnit'),
+  RESEND_FROM_EMAIL: z.string().email().default('verify@send.ratemyunit.dev'),
 });
 
 export type Config = z.infer<typeof configSchema>;

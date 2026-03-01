@@ -31,6 +31,7 @@ vi.mock('@ratemyunit/db/schema', () => ({
   siteBannerSettings: {
     id: 'id',
     enabled: 'enabled',
+    enforceEduAuEmail: 'enforceEduAuEmail',
     message: 'message',
     palette: 'palette',
   },
@@ -196,6 +197,7 @@ describe('publicDataRoutes', () => {
     it('returns site banner settings', async () => {
       mockSelect.mockReturnValueOnce(createMockQueryBuilder([{
         enabled: true,
+        enforceEduAuEmail: true,
         message: 'Welcome back to campus week.',
         palette: 'primary',
       }]));
@@ -207,6 +209,7 @@ describe('publicDataRoutes', () => {
         success: true,
         data: {
           enabled: true,
+          enforceEduAuEmail: true,
           message: 'Welcome back to campus week.',
           palette: 'primary',
         },
@@ -223,6 +226,7 @@ describe('publicDataRoutes', () => {
         success: true,
         data: {
           enabled: false,
+          enforceEduAuEmail: false,
           message: '',
           palette: 'primary',
         },

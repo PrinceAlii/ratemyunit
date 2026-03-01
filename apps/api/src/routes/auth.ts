@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { hash, verify } from '@node-rs/argon2';
 import { db } from '@ratemyunit/db/client';
-import { users, universities } from '@ratemyunit/db/schema';
+import { users, universities, siteBannerSettings, emailVerificationTokens } from '@ratemyunit/db/schema';
 import { eq } from 'drizzle-orm';
 import {
   registerSchema,
@@ -23,6 +23,8 @@ import { config } from '../config.js';
 import { sendEmail, generateVerificationEmail, generatePasswordResetEmail } from '../lib/email.js';
 import { recordTelemetry } from '../lib/telemetry.js';
 
+const SITE_BANNER_ROW_ID = 1;
+
 export async function authRoutes(app: FastifyInstance) {
   /**
    * POST /api/auth/register
@@ -38,8 +40,17 @@ export async function authRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const body = registerSchema.parse(request.body);
 
+    const [registrationPolicy] = await db
+      .select({
+        enforceEduAuEmail: siteBannerSettings.enforceEduAuEmail,
+      })
+      .from(siteBannerSettings)
+      .where(eq(siteBannerSettings.id, SITE_BANNER_ROW_ID))
+      .limit(1);
+
+    const enforceEduAuEmail = registrationPolicy?.enforceEduAuEmail ?? false;
     const emailDomain = body.email.split('@')[1];
-    if (!emailDomain.endsWith('.edu.au')) {
+    if (enforceEduAuEmail && !emailDomain.endsWith('.edu.au')) {
       return reply.status(400).send({
         success: false,
         error: 'Registration requires an Australian educational email (.edu.au)',
@@ -106,12 +117,30 @@ export async function authRoutes(app: FastifyInstance) {
     const verificationLink = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
 
     await recordTelemetry(newUser.id, request);
+    try {
+      const emailResult = await sendEmail({
+        to: newUser.email,
+        subject: 'Verify Your Email - RateMyUnit',
+        html: generateVerificationEmail(verificationLink),
+      });
+      request.log.info(
+        { userId: newUser.id, email: newUser.email, emailMessageId: emailResult?.messageId },
+        'Sent verification email after registration'
+      );
+    } catch (error) {
+      request.log.error(
+        { error, userId: newUser.id, email: newUser.email },
+        'Failed to send verification email after registration. Rolling back account creation.'
+      );
 
-    await sendEmail({
-      to: newUser.email,
-      subject: 'Verify Your Email - RateMyUnit',
-      html: generateVerificationEmail(verificationLink),
-    });
+      await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, newUser.id));
+      await db.delete(users).where(eq(users.id, newUser.id));
+
+      return reply.status(502).send({
+        success: false,
+        error: 'Could not send verification email. Please try again.',
+      });
+    }
 
     return reply.status(201).send({
       success: true,
@@ -244,6 +273,53 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.send({
       success: true,
       message: 'Email verified successfully. You can now log in.',
+    });
+  });
+
+  /**
+   * POST /api/auth/resend-verification
+   * Resend verification email for unverified users.
+   */
+  app.post('/resend-verification', {
+    config: {
+      rateLimit: {
+        max: 3,
+        timeWindow: '1 hour'
+      }
+    }
+  }, async (request, reply) => {
+    const body = forgotPasswordSchema.parse(request.body);
+
+    const [user] = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        emailVerified: users.emailVerified,
+      })
+      .from(users)
+      .where(eq(users.email, body.email))
+      .limit(1);
+
+    // Generic success response prevents email enumeration.
+    if (!user || user.emailVerified) {
+      return reply.send({
+        success: true,
+        message: 'If your account exists and is unverified, a new verification link has been sent.',
+      });
+    }
+
+    const verificationToken = await createEmailVerificationToken(user.id);
+    const verificationLink = `${config.FRONTEND_URL}/verify-email?token=${verificationToken}`;
+
+    await sendEmail({
+      to: user.email,
+      subject: 'Verify Your Email - RateMyUnit',
+      html: generateVerificationEmail(verificationLink),
+    });
+
+    return reply.send({
+      success: true,
+      message: 'If your account exists and is unverified, a new verification link has been sent.',
     });
   });
 

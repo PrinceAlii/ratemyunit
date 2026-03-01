@@ -14,23 +14,28 @@ interface SendEmailParams {
   html: string;
 }
 
+interface SendEmailResult {
+  messageId?: string;
+}
+
 /**
  * Send an email using Resend.
  * In development without API key, logs to console instead.
  */
-export async function sendEmail({ to, subject, html }: SendEmailParams): Promise<void> {
-  if (!resend || config.NODE_ENV === 'development') {
-    logger.info('\n📧 Email (Development Mode):');
+export async function sendEmail({ to, subject, html }: SendEmailParams): Promise<SendEmailResult> {
+  if (!resend) {
+    logger.info('\n📧 Email (No Resend API Key configured):');
     logger.info(`To: ${to}`);
     logger.info(`Subject: ${subject}`);
     logger.info(`HTML Preview: ${html.substring(0, 200)}...`);
     logger.info('');
-    return;
+    return {};
   }
 
   try {
+    const from = `${config.RESEND_FROM_NAME} <${config.RESEND_FROM_EMAIL}>`;
     const { data, error } = await resend.emails.send({
-      from: 'RateMyUnit <verify@send.ratemyunit.dev>',
+      from,
       to,
       subject,
       html,
@@ -41,7 +46,17 @@ export async function sendEmail({ to, subject, html }: SendEmailParams): Promise
       throw new Error(`Email sending failed: ${error.message || 'Unknown error'}`);
     }
 
-    logger.info({ emailId: data?.id }, `Email sent successfully to ${to}`);
+    logger.info(
+      {
+        emailId: data?.id,
+        from,
+        to,
+        subject,
+        environment: config.NODE_ENV,
+      },
+      `Email sent successfully to ${to}`
+    );
+    return { messageId: data?.id };
   } catch (error) {
     logger.error({ error }, 'Exception while sending email');
     throw error;

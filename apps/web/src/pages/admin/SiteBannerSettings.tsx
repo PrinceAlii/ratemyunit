@@ -11,6 +11,7 @@ import { Textarea } from '../../components/ui/textarea';
 
 const DEFAULT_SETTINGS: SiteBannerSettings = {
   enabled: false,
+  enforceEduAuEmail: false,
   message: '',
   palette: 'primary',
 };
@@ -87,6 +88,22 @@ export function SiteBannerSettingsPanel() {
             Enable site-wide banner
           </Label>
         </div>
+
+        <div className="flex items-center gap-3">
+          <input
+            id="registration-edu-enforced"
+            type="checkbox"
+            checked={currentSettings.enforceEduAuEmail}
+            onChange={(e) => updateCurrentSettings({ enforceEduAuEmail: e.target.checked })}
+            className="h-5 w-5 border-3 border-foreground"
+          />
+          <Label htmlFor="registration-edu-enforced" className="font-bold uppercase text-sm cursor-pointer">
+            Require .edu.au emails for signup
+          </Label>
+        </div>
+        <p className="text-xs font-medium text-muted-foreground -mt-4">
+          Disable this to allow any valid email address during registration.
+        </p>
 
         <div className="space-y-2">
           <Label htmlFor="site-banner-message" className="font-bold uppercase text-sm">

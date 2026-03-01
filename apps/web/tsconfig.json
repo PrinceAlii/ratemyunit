@@ -17,7 +17,8 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@ratemyunit/types": ["../../packages/types/src/index.ts"]
     }
   },
   "include": ["src", "vitest.setup.ts"],

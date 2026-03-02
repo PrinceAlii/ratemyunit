@@ -22,6 +22,8 @@ export type UnswSearchSummary = {
 };
 
 const UTS_CODE_LINK_REGEX = /\/subjects\/([A-Za-z0-9]{4,10})\.html/g;
+const USYD_CODE_LINK_REGEX = /\/units\/([A-Za-z]{4}[0-9]{4})(?:[/?#"'<>]|$)/gi;
+const USYD_SEO_PAGE_LINK_REGEX = /href=["']([^"']*\/students\/units\/seo(?:\.\d+)?\.html[^"']*)["']/gi;
 
 const CODE_HAS_DIGIT_REGEX = /\d/;
 
@@ -47,6 +49,33 @@ export function extractUtsCodesFromAlphaHtml(html: string): string[] {
   }
 
   return normalizeAndUniqueCodes(matches);
+}
+
+export function extractUsydCodesFromSeoHtml(html: string): string[] {
+  const matches: string[] = [];
+
+  for (const match of html.matchAll(USYD_CODE_LINK_REGEX)) {
+    matches.push(match[1]);
+  }
+
+  return normalizeAndUniqueCodes(matches);
+}
+
+export function extractUsydSeoPageUrls(html: string, baseUrl: string): string[] {
+  const base = new URL(baseUrl);
+  const urls = new Set<string>([base.toString()]);
+
+  for (const match of html.matchAll(USYD_SEO_PAGE_LINK_REGEX)) {
+    const href = match[1].trim();
+    if (!href) {
+      continue;
+    }
+
+    const normalized = new URL(href, base).toString();
+    urls.add(normalized);
+  }
+
+  return Array.from(urls).sort((a, b) => a.localeCompare(b));
 }
 
 export function extractUnswCodesFromSearchResponse(payload: unknown): string[] {

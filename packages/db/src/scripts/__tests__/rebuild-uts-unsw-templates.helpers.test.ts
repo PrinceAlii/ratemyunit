@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {
   extractUnswCodesFromSearchResponse,
   extractUnswSearchSummary,
+  extractUsydCodesFromSeoHtml,
+  extractUsydSeoPageUrls,
   extractUtsCodesFromAlphaHtml,
   normalizeAndUniqueCodes,
 } from '../rebuild-uts-unsw-templates.helpers.js';
@@ -76,4 +78,31 @@ run('extractUnswSearchSummary throws on invalid payload', () => {
     () => extractUnswSearchSummary({ response: { resultPacket: { resultsSummary: {} } } }),
     /missing pageNumber/
   );
+});
+
+run('extractUsydSeoPageUrls parses and normalizes seo page links', () => {
+  const html = `
+    <a href="/students/units/seo.1.html">1</a>
+    <a href="https://www.sydney.edu.au/students/units/seo.14.html">14</a>
+    <a href="/students/units/seo.html">index</a>
+  `;
+
+  const result = extractUsydSeoPageUrls(html, 'https://www.sydney.edu.au/students/units/seo.html');
+  assert.deepEqual(result, [
+    'https://www.sydney.edu.au/students/units/seo.1.html',
+    'https://www.sydney.edu.au/students/units/seo.14.html',
+    'https://www.sydney.edu.au/students/units/seo.html',
+  ]);
+});
+
+run('extractUsydCodesFromSeoHtml parses valid /units code links', () => {
+  const html = `
+    <a href="/units/comp2017">Lowercase</a>
+    <a href="https://www.sydney.edu.au/units/MATH1061">Absolute</a>
+    <a href="/units/INFO1110/2026-S1C-ND-CC">Variant path</a>
+    <a href="/units/TESTVLAD">Not valid code format</a>
+  `;
+
+  const result = extractUsydCodesFromSeoHtml(html);
+  assert.deepEqual(result, ['COMP2017', 'INFO1110', 'MATH1061']);
 });

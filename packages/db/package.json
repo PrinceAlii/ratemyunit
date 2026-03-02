@@ -29,6 +29,7 @@
     "cleanup-templates": "tsx src/scripts/remove-non-list-templates.ts",
     "remove-broad-templates": "tsx src/scripts/remove-broad-range-templates.ts",
     "rebuild-uts-unsw-templates": "tsx src/scripts/rebuild-uts-unsw-templates.ts",
+    "rebuild-usyd-template": "tsx src/scripts/rebuild-usyd-template.ts",
     "test": "npm run build && node dist/scripts/__tests__/rebuild-uts-unsw-templates.helpers.test.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src"

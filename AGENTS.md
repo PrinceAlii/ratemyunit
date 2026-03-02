@@ -184,7 +184,7 @@ Auth notes:
   - Input normalization counters (duplicates removed, already indexed skipped, known already queued).
 - Job ID collision **signals** are approximate and inferred from timestamp comparison (`jobIdCollisionSignalsMethod: timestamp_before_batch_start`).
 - Public university lists are deduplicated by abbreviation; database now enforces unique `universities.abbreviation` to prevent duplicate entries.
-- Template source policy: UTS uses one full-list template from `https://www.handbook.uts.edu.au/subjects/alpha`; UNSW uses one full-list template from course-outlines API union of years 2025 and 2026 (deduped by subject code). Use `npm run rebuild-uts-unsw-templates -w @ratemyunit/db` to refresh both.
+- Template source policy: UTS uses one full-list template from `https://www.handbook.uts.edu.au/subjects/alpha`; UNSW uses one full-list template from course-outlines API union of years 2025 and 2026 (deduped by subject code); USYD uses one full-list template from `https://www.sydney.edu.au/students/units/seo.html` and linked SEO pages (deduped by subject code). Use `npm run rebuild-uts-unsw-templates -w @ratemyunit/db` for UTS/UNSW and `npm run rebuild-usyd-template -w @ratemyunit/db` for USYD.
 - Guest reviews:
   - When enabled, non-authenticated users can post reviews.
   - Guest reviews are rate-limited in-app to one review per unit per IP hash every 24 hours.

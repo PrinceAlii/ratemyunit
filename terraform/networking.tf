@@ -118,26 +118,4 @@ resource "aws_security_group" "web" {
   }
 }
 
-resource "aws_security_group" "db" {
-  name        = "ratemyunit-db-sg"
-  description = "Allow inbound traffic from Web SG"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.web.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "ratemyunit-db-sg"
-  }
-}
+# DB security group removed - database now runs locally

@@ -1,8 +1,3 @@
-resource "random_password" "db_password" {
-  length  = 16
-  special = false
-}
-
 resource "aws_kms_key" "ssm_parameters" {
   description             = "KMS key for RateMyUnit SSM SecureString parameters"
   deletion_window_in_days = 30
@@ -12,6 +7,14 @@ resource "aws_kms_key" "ssm_parameters" {
 resource "aws_kms_alias" "ssm_parameters" {
   name          = "alias/ratemyunit-ssm-parameters"
   target_key_id = aws_kms_key.ssm_parameters.key_id
+}
+
+# DB secrets now stored locally on EC2 via docker-compose
+# POSTGRES_PASSWORD is passed via docker-compose environment (generated at boot or from SSM)
+
+resource "random_password" "db_password" {
+  length  = 32
+  special = true
 }
 
 resource "aws_ssm_parameter" "db_password" {
@@ -29,7 +32,7 @@ resource "aws_ssm_parameter" "db_password" {
 resource "aws_ssm_parameter" "db_url" {
   name   = "/ratemyunit/production/database/url"
   type   = "SecureString"
-  value  = format("postgresql://%s:%s@%s/%s?sslmode=require", aws_db_instance.postgres.username, random_password.db_password.result, aws_db_instance.postgres.endpoint, aws_db_instance.postgres.db_name)
+  value  = "postgresql://ratemyunit:${random_password.db_password.result}@postgres:5432/ratemyunit"
   key_id = aws_kms_key.ssm_parameters.arn
 
   tags = {

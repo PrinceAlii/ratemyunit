@@ -13,11 +13,6 @@ output "api_instance_id" {
   value       = aws_instance.api.id
 }
 
-output "rds_endpoint" {
-  description = "The connection endpoint for the RDS instance"
-  value       = aws_db_instance.postgres.endpoint
-}
-
 output "vpc_id" {
   description = "The ID of the VPC"
   value       = aws_vpc.main.id

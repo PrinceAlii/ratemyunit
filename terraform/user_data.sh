@@ -63,7 +63,7 @@ TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-meta
 REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
 
 # Retrieve secrets from SSM Parameter Store
-export DATABASE_URL=$(aws ssm get-parameter --name "/ratemyunit/production/database/url" --with-decryption --query "Parameter.Value" --output text --region $REGION)
+export POSTGRES_PASSWORD=$(aws ssm get-parameter --name "/ratemyunit/production/database/password" --with-decryption --query "Parameter.Value" --output text --region $REGION)
 export JWT_SECRET=$(aws ssm get-parameter --name "/ratemyunit/production/jwt/secret" --with-decryption --query "Parameter.Value" --output text --region $REGION)
 export REDIS_URL=$(aws ssm get-parameter --name "/ratemyunit/production/redis/url" --with-decryption --query "Parameter.Value" --output text --region $REGION)
 export FRONTEND_URL=$(aws ssm get-parameter --name "/ratemyunit/production/frontend/url" --query "Parameter.Value" --output text --region $REGION)
@@ -73,16 +73,34 @@ export TRUSTED_PROXY_CIDRS=$(aws ssm get-parameter --name "/ratemyunit/productio
 # Create Docker Network
 docker network create ratemyunit-net || true
 
+# Start postgres container
+docker run -d \
+  --name postgres \
+  --network ratemyunit-net \
+  --restart always \
+  -e POSTGRES_USER=ratemyunit \
+  -e POSTGRES_PASSWORD=${POSTGRES_PASSWORD} \
+  -e POSTGRES_DB=ratemyunit \
+  -v postgres_data:/var/lib/postgresql/data \
+  postgres:15-alpine
+
+# Wait for postgres to be ready
+echo "Waiting for postgres to be ready..."
+for i in {1..30}; do
+    if docker exec postgres pg_isready -U ratemyunit >/dev/null 2>&1; then
+        echo "Postgres is ready!"
+        break
+    fi
+    sleep 2
+done
+
 # Start Redis with persistence
 docker run -d \
   --name redis \
   --network ratemyunit-net \
   --restart always \
-  -v redis-data:/data \
-  redis:alpine redis-server --appendonly yes
-
-# Wait for Redis to be ready
-sleep 5
+  -v redis_data:/data \
+  redis:7-alpine redis-server --appendonly yes
 
 # Log in to ECR (non-interactive)
 aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin ${ecr_repository_url}
@@ -92,11 +110,13 @@ aws ecr get-login-password --region $REGION | docker login --username AWS --pass
 # This ensures the app is running after boot/reboot
 docker pull ${api_image}
 
+export DATABASE_URL="postgresql://ratemyunit:${POSTGRES_PASSWORD}@postgres:5432/ratemyunit"
+
 docker run -d \
   --name ratemyunit-api \
   --network ratemyunit-net \
   --restart unless-stopped \
-  -p 80:3000 \
+  -p 3000:3000 \
   -e NODE_ENV=production \
   -e PORT=3000 \
   -e DATABASE_URL="$DATABASE_URL" \

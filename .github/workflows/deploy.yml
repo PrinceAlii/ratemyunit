@@ -156,6 +156,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Clear node modules cache
+        run: |
+          rm -rf node_modules apps/*/node_modules packages/*/node_modules 2>/dev/null || true
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:

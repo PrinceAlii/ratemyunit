@@ -68,21 +68,21 @@ resource "aws_iam_instance_profile" "ec2_profile" {
   role = aws_iam_role.ec2_role.name
 }
 
-# Data source for latest Amazon Linux 2023 AMI
+# Data source for latest Amazon Linux 2023 ARM64 AMI
 data "aws_ami" "amazon_linux_2023" {
   most_recent = true
   owners      = ["amazon"]
 
   filter {
     name   = "name"
-    values = ["al2023-ami-2023*-x86_64"]
+    values = ["al2023-ami-2023*-arm64"]
   }
 }
 
 # EC2 Instance
 resource "aws_instance" "api" {
   ami           = data.aws_ami.amazon_linux_2023.id
-  instance_type = "t4g.small"
+  instance_type = "t3.small"
 
   subnet_id                   = aws_subnet.public_1.id
   vpc_security_group_ids      = [aws_security_group.web.id]

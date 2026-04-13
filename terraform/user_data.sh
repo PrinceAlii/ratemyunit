@@ -10,9 +10,9 @@ systemctl enable docker
 systemctl start docker
 usermod -a -G docker ec2-user
 
-# Install Docker Compose
+# Install Docker Compose (ARM64)
 mkdir -p /usr/local/lib/docker/cli-plugins/
-curl -SL https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+curl -SL https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-aarch64 -o /usr/local/lib/docker/cli-plugins/docker-compose
 chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 # Install CloudWatch Agent and AWS CLI v2

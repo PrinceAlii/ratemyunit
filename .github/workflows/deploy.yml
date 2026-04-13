@@ -151,7 +151,7 @@ jobs:
        needs.changes.outputs.infra == 'true') &&
       github.event_name == 'push' &&
       (always() && (needs.infra-apply.result == 'success' || needs.infra-apply.result == 'skipped'))
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -164,6 +164,11 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Set up QEMU for ARM64
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - name: Login to Amazon ECR
         id: login-ecr

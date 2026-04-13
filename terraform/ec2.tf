@@ -92,6 +92,7 @@ resource "aws_instance" "api" {
   user_data = templatefile("${path.module}/user_data.sh", {
     ecr_repository_url = aws_ecr_repository.api.repository_url
     api_image          = "${aws_ecr_repository.api.repository_url}:latest"
+    POSTGRES_PASSWORD  = random_password.db_password.result
   })
 
   user_data_replace_on_change = true

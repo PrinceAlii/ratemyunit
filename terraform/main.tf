@@ -10,7 +10,8 @@ terraform {
 }
 // trigger deployment
 provider "aws" {
-  region = "ap-southeast-2"
+  region                  = "ap-southeast-2"
+  skip_metadata_api_check = true
 
   default_tags {
     tags = {

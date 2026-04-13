@@ -20,6 +20,9 @@ COPY packages ./packages
 # Install dependencies
 RUN npm ci
 
+# Ensure ARM64 lightningcss is available for Tailwind v4
+RUN npm install lightningcss-linux-arm64-gnu --save-optional || true
+
 # Install Playwright browsers (Chromium only to save space/time)
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN npx playwright install chromium && \

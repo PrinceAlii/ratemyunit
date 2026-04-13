@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim
+FROM --platform=linux/arm64/v8 node:20-bookworm-slim
 
 WORKDIR /app
 

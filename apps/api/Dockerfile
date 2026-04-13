@@ -1,10 +1,13 @@
-FROM node:20-bookworm
+FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-# Install system dependencies (PostgreSQL client for debugging)
+# Install system dependencies (PostgreSQL client + native module deps)
 RUN apt-get update && apt-get install -y \
     postgresql-client \
+    libc6 \
+    libgcc1 \
+    libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy root config files
@@ -17,12 +20,10 @@ COPY packages ./packages
 # Install dependencies
 RUN npm ci
 
-# Playwright needs this to find browsers
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-
 # Install Playwright browsers (Chromium only to save space/time)
-RUN npx playwright install chromium
-RUN npx playwright install-deps chromium
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx playwright install chromium && \
+    npx playwright install-deps chromium
 
 # Build the API and frontend
 RUN npx turbo build --filter=@ratemyunit/api...

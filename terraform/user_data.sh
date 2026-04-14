@@ -1,23 +1,14 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Update system
 yum update -y
 
-# Install Docker
-yum install -y docker
+# Install runtime dependencies
+yum install -y docker amazon-cloudwatch-agent aws-cli python3
 systemctl enable docker
 systemctl start docker
 usermod -a -G docker ec2-user
-
-# Install Docker Compose (ARM64)
-mkdir -p /usr/local/lib/docker/cli-plugins/
-curl -SL https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-aarch64 -o /usr/local/lib/docker/cli-plugins/docker-compose
-chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-
-# Install CloudWatch Agent and AWS CLI v2
-yum install -y amazon-cloudwatch-agent
-yum install -y aws-cli
 
 # Configure CloudWatch Agent (Basic)
 cat > /opt/aws/amazon-cloudwatch-agent/bin/config.json <<EOF
@@ -62,16 +53,54 @@ EOF
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
 REGION=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/placement/region)
 
-# Retrieve secrets from SSM Parameter Store
-export POSTGRES_PASSWORD=$(aws ssm get-parameter --name "/ratemyunit/production/database/password" --with-decryption --query "Parameter.Value" --output text --region $REGION)
-export JWT_SECRET=$(aws ssm get-parameter --name "/ratemyunit/production/jwt/secret" --with-decryption --query "Parameter.Value" --output text --region $REGION)
-export REDIS_URL=$(aws ssm get-parameter --name "/ratemyunit/production/redis/url" --with-decryption --query "Parameter.Value" --output text --region $REGION)
-export FRONTEND_URL=$(aws ssm get-parameter --name "/ratemyunit/production/frontend/url" --query "Parameter.Value" --output text --region $REGION)
-export GUEST_REVIEW_IP_HASH_SALT=$(aws ssm get-parameter --name "/ratemyunit/production/security/guest_review_ip_hash_salt" --with-decryption --query "Parameter.Value" --output text --region $REGION)
-export TRUSTED_PROXY_CIDRS=$(aws ssm get-parameter --name "/ratemyunit/production/network/trusted_proxy_cidrs" --query "Parameter.Value" --output text --region $REGION)
+fetch_param() {
+  local name="$1"
+  local with_decryption="${2:-false}"
+  if [[ "$with_decryption" == "true" ]]; then
+    aws ssm get-parameter --name "$name" --with-decryption --query "Parameter.Value" --output text --region "$REGION"
+  else
+    aws ssm get-parameter --name "$name" --query "Parameter.Value" --output text --region "$REGION"
+  fi
+}
+
+urlencode() {
+  python3 - "$1" <<'PY'
+import sys
+from urllib.parse import quote
+
+print(quote(sys.argv[1], safe=""))
+PY
+}
+
+POSTGRES_PASSWORD=$(fetch_param "/ratemyunit/production/database/password" true)
+POSTGRES_PASSWORD_ENCODED=$(urlencode "$POSTGRES_PASSWORD")
+JWT_SECRET=$(fetch_param "/ratemyunit/production/jwt/secret" true)
+REDIS_URL=$(fetch_param "/ratemyunit/production/redis/url" true)
+FRONTEND_URL=$(fetch_param "/ratemyunit/production/frontend/url" false)
+GUEST_REVIEW_IP_HASH_SALT=$(fetch_param "/ratemyunit/production/security/guest_review_ip_hash_salt" true)
+TRUSTED_PROXY_CIDRS=$(fetch_param "/ratemyunit/production/network/trusted_proxy_cidrs" false)
+RESEND_API_KEY=$(fetch_param "/ratemyunit/production/resend/api_key" true 2>/dev/null || true)
+RESEND_FROM_NAME=$(fetch_param "/ratemyunit/production/resend/from_name" false 2>/dev/null || echo "RateMyUnit")
+RESEND_FROM_EMAIL=$(fetch_param "/ratemyunit/production/resend/from_email" false 2>/dev/null || echo "verify@send.ratemyunit.dev")
 
 # Create Docker Network
 docker network create ratemyunit-net || true
+
+mkdir -p /etc/ratemyunit /var/lib/ratemyunit
+cat >/etc/ratemyunit/runtime.env <<EOF
+NODE_ENV=production
+PORT=3000
+DATABASE_URL=postgresql://ratemyunit:${POSTGRES_PASSWORD_ENCODED}@postgres:5432/ratemyunit
+REDIS_URL=${REDIS_URL}
+JWT_SECRET=${JWT_SECRET}
+FRONTEND_URL=${FRONTEND_URL}
+GUEST_REVIEW_IP_HASH_SALT=${GUEST_REVIEW_IP_HASH_SALT}
+TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS}
+RESEND_API_KEY=${RESEND_API_KEY}
+RESEND_FROM_NAME=${RESEND_FROM_NAME}
+RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL}
+EOF
+chmod 600 /etc/ratemyunit/runtime.env
 
 # Start postgres container
 docker run -d \
@@ -79,10 +108,10 @@ docker run -d \
   --network ratemyunit-net \
   --restart always \
   -e POSTGRES_USER=ratemyunit \
-  -e POSTGRES_PASSWORD=${POSTGRES_PASSWORD} \
+  -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
   -e POSTGRES_DB=ratemyunit \
   -v postgres_data:/var/lib/postgresql/data \
-  postgres:15-alpine
+  postgres:18.3-alpine || docker start postgres
 
 # Wait for postgres to be ready
 echo "Waiting for postgres to be ready..."
@@ -100,31 +129,6 @@ docker run -d \
   --network ratemyunit-net \
   --restart always \
   -v redis_data:/data \
-  redis:7-alpine redis-server --appendonly yes
+  redis:8.4.1-alpine redis-server --appendonly yes || docker start redis
 
-# Log in to ECR (non-interactive)
-aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin ${ecr_repository_url}
-
-# Pull and run API container
-# Note: CD pipeline will update this to specific SHA-tagged versions
-# This ensures the app is running after boot/reboot
-docker pull ${api_image}
-
-export DATABASE_URL="postgresql://ratemyunit:${POSTGRES_PASSWORD}@postgres:5432/ratemyunit"
-
-docker run -d \
-  --name ratemyunit-api \
-  --network ratemyunit-net \
-  --restart unless-stopped \
-  -p 3000:3000 \
-  -e NODE_ENV=production \
-  -e PORT=3000 \
-  -e DATABASE_URL="$DATABASE_URL" \
-  -e REDIS_URL="$REDIS_URL" \
-  -e JWT_SECRET="$JWT_SECRET" \
-  -e FRONTEND_URL="$FRONTEND_URL" \
-  -e GUEST_REVIEW_IP_HASH_SALT="$GUEST_REVIEW_IP_HASH_SALT" \
-  -e TRUSTED_PROXY_CIDRS="$TRUSTED_PROXY_CIDRS" \
-  ${api_image}
-
-echo "UserData Setup Complete"
+echo "UserData setup complete. Application container is deployed by GitHub Actions."

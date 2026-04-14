@@ -1,0 +1,202 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+AWS_REGION="${AWS_REGION:?AWS_REGION is required}"
+IMAGE_REF="${IMAGE_REF:?IMAGE_REF is required}"
+POSTGRES_IMAGE="${POSTGRES_IMAGE:-postgres:18.3-alpine}"
+REDIS_IMAGE="${REDIS_IMAGE:-redis:8.4.1-alpine}"
+RUNTIME_ENV_FILE="${RUNTIME_ENV_FILE:-/etc/ratemyunit/runtime.env}"
+RESET_MARKER_FILE="${RESET_MARKER_FILE:-/var/lib/ratemyunit/postgres-reset-v1-done}"
+APP_NAME="ratemyunit-api"
+NETWORK_NAME="ratemyunit-net"
+POSTGRES_CONTAINER="postgres"
+REDIS_CONTAINER="redis"
+
+fetch_param() {
+  local name="$1"
+  local with_decryption="${2:-false}"
+  if [[ "$with_decryption" == "true" ]]; then
+    aws ssm get-parameter \
+      --region "$AWS_REGION" \
+      --name "$name" \
+      --with-decryption \
+      --query 'Parameter.Value' \
+      --output text
+  else
+    aws ssm get-parameter \
+      --region "$AWS_REGION" \
+      --name "$name" \
+      --query 'Parameter.Value' \
+      --output text
+  fi
+}
+
+fetch_optional_param() {
+  local name="$1"
+  local with_decryption="${2:-false}"
+  if [[ "$with_decryption" == "true" ]]; then
+    aws ssm get-parameter \
+      --region "$AWS_REGION" \
+      --name "$name" \
+      --with-decryption \
+      --query 'Parameter.Value' \
+      --output text 2>/dev/null || true
+  else
+    aws ssm get-parameter \
+      --region "$AWS_REGION" \
+      --name "$name" \
+      --query 'Parameter.Value' \
+      --output text 2>/dev/null || true
+  fi
+}
+
+urlencode() {
+  python3 - "$1" <<'PY'
+import sys
+from urllib.parse import quote
+
+print(quote(sys.argv[1], safe=""))
+PY
+}
+
+render_runtime_env() {
+  local db_password db_password_encoded redis_url jwt_secret frontend_url guest_salt trusted_proxy_cidrs resend_api_key resend_from_name resend_from_email
+
+  db_password="$(fetch_param /ratemyunit/production/database/password true)"
+  db_password_encoded="$(urlencode "$db_password")"
+  redis_url="$(fetch_param /ratemyunit/production/redis/url true)"
+  jwt_secret="$(fetch_param /ratemyunit/production/jwt/secret true)"
+  frontend_url="$(fetch_param /ratemyunit/production/frontend/url false)"
+  guest_salt="$(fetch_param /ratemyunit/production/security/guest_review_ip_hash_salt true)"
+  trusted_proxy_cidrs="$(fetch_param /ratemyunit/production/network/trusted_proxy_cidrs false)"
+  resend_api_key="$(fetch_optional_param /ratemyunit/production/resend/api_key true)"
+  resend_from_name="$(fetch_optional_param /ratemyunit/production/resend/from_name false)"
+  resend_from_email="$(fetch_optional_param /ratemyunit/production/resend/from_email false)"
+
+  mkdir -p "$(dirname "$RUNTIME_ENV_FILE")" /var/lib/ratemyunit
+  cat >"$RUNTIME_ENV_FILE" <<EOF
+NODE_ENV=production
+PORT=3000
+DATABASE_URL=postgresql://ratemyunit:${db_password_encoded}@postgres:5432/ratemyunit
+REDIS_URL=${redis_url}
+JWT_SECRET=${jwt_secret}
+FRONTEND_URL=${frontend_url}
+GUEST_REVIEW_IP_HASH_SALT=${guest_salt}
+TRUSTED_PROXY_CIDRS=${trusted_proxy_cidrs}
+RESEND_API_KEY=${resend_api_key}
+RESEND_FROM_NAME=${resend_from_name:-RateMyUnit}
+RESEND_FROM_EMAIL=${resend_from_email:-verify@send.ratemyunit.dev}
+EOF
+  chmod 600 "$RUNTIME_ENV_FILE"
+}
+
+ensure_network() {
+  docker network inspect "$NETWORK_NAME" >/dev/null 2>&1 || docker network create "$NETWORK_NAME"
+}
+
+login_to_ecr() {
+  local registry="${IMAGE_REF%%/*}"
+  aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$registry"
+}
+
+ensure_redis() {
+  local current_image=""
+  if docker inspect "$REDIS_CONTAINER" >/dev/null 2>&1; then
+    current_image="$(docker inspect --format '{{.Config.Image}}' "$REDIS_CONTAINER" 2>/dev/null || true)"
+    if [[ "$current_image" == "$REDIS_IMAGE" ]]; then
+      docker start "$REDIS_CONTAINER" >/dev/null
+      return
+    fi
+
+    docker rm -f "$REDIS_CONTAINER" >/dev/null 2>&1 || true
+  fi
+
+  docker run -d \
+    --name "$REDIS_CONTAINER" \
+    --network "$NETWORK_NAME" \
+    --restart always \
+    -v redis_data:/data \
+    "$REDIS_IMAGE" redis-server --appendonly yes >/dev/null
+}
+
+wait_for_postgres() {
+  for attempt in $(seq 1 30); do
+    if docker exec "$POSTGRES_CONTAINER" pg_isready -U ratemyunit -d ratemyunit >/dev/null 2>&1; then
+      echo "✓ PostgreSQL is ready"
+      return 0
+    fi
+
+    echo "Waiting for PostgreSQL... (${attempt}/30)"
+    sleep 2
+  done
+
+  echo "✗ PostgreSQL did not become ready"
+  docker logs "$POSTGRES_CONTAINER" || true
+  exit 1
+}
+
+ensure_postgres() {
+  local db_password reset_db
+  db_password="$(fetch_param /ratemyunit/production/database/password true)"
+  reset_db="false"
+
+  if [[ ! -f "$RESET_MARKER_FILE" ]]; then
+    reset_db="true"
+  fi
+
+  if [[ "$reset_db" == "true" ]]; then
+    echo "Resetting local PostgreSQL volume for the ARM/local-DB migration..."
+    docker rm -f "$POSTGRES_CONTAINER" >/dev/null 2>&1 || true
+    docker volume rm postgres_data >/dev/null 2>&1 || true
+  fi
+
+  if ! docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1; then
+    docker run -d \
+      --name "$POSTGRES_CONTAINER" \
+      --network "$NETWORK_NAME" \
+      --restart always \
+      -e POSTGRES_USER=ratemyunit \
+      -e POSTGRES_PASSWORD="$db_password" \
+      -e POSTGRES_DB=ratemyunit \
+      -v postgres_data:/var/lib/postgresql/data \
+      "$POSTGRES_IMAGE" >/dev/null
+  else
+    docker start "$POSTGRES_CONTAINER" >/dev/null
+  fi
+
+  wait_for_postgres
+
+  if [[ "$reset_db" == "true" ]]; then
+    touch "$RESET_MARKER_FILE"
+    export FIRST_DEPLOY=true
+  else
+    export FIRST_DEPLOY=false
+  fi
+}
+
+deploy_app() {
+  docker rm -f "$APP_NAME" >/dev/null 2>&1 || true
+  docker pull "$IMAGE_REF" >/dev/null
+
+  docker run -d \
+    --name "$APP_NAME" \
+    --network "$NETWORK_NAME" \
+    --restart unless-stopped \
+    -p 80:3000 \
+    --env-file "$RUNTIME_ENV_FILE" \
+    -e FIRST_DEPLOY="$FIRST_DEPLOY" \
+    -e AUTO_SEED=false \
+    "$IMAGE_REF" >/dev/null
+}
+
+main() {
+  ensure_network
+  render_runtime_env
+  ensure_redis
+  ensure_postgres
+  login_to_ecr
+  deploy_app
+  docker ps --filter "name=${APP_NAME}"
+}
+
+main "$@"

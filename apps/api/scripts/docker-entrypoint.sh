@@ -1,14 +1,28 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+
+DB_WAIT_ATTEMPTS="${DB_WAIT_ATTEMPTS:-30}"
+DB_WAIT_SECONDS="${DB_WAIT_SECONDS:-2}"
 
 echo "🚀 RateMyUnit API - Starting..."
 echo ""
 
 # Wait for database to be ready
 echo "⏳ Waiting for database..."
-until psql "$DATABASE_URL" -c '\q' 2>/dev/null; do
-  echo "   Database is unavailable - sleeping"
-  sleep 2
+for attempt in $(seq 1 "$DB_WAIT_ATTEMPTS"); do
+  if psql "$DATABASE_URL" -c '\q' >/dev/null 2>&1; then
+    break
+  fi
+
+  echo "   Database connection failed (attempt ${attempt}/${DB_WAIT_ATTEMPTS})"
+
+  if [ "$attempt" -eq "$DB_WAIT_ATTEMPTS" ]; then
+    echo "   ❌ Unable to connect to PostgreSQL using DATABASE_URL after ${DB_WAIT_ATTEMPTS} attempts"
+    echo "   Check the configured database password and host reachability."
+    exit 1
+  fi
+
+  sleep "$DB_WAIT_SECONDS"
 done
 echo "   ✅ Database is ready"
 echo ""
@@ -38,7 +52,7 @@ fi
 # Run seeds (only if AUTO_SEED=true or on first deploy)
 if [ "$AUTO_SEED" = "true" ] || [ "$FIRST_DEPLOY" = "true" ]; then
   echo "🌱 Running database seeds..."
-  if bash scripts/seed.sh; then
+  if bash /app/packages/db/scripts/seed.sh; then
     echo "   ✅ Seeding completed"
   else
     echo "   ⚠️  Warning: Seeding issues (may be expected if already seeded)"

@@ -13,11 +13,14 @@ permissions:
 
 concurrency:
   group: deploy-production
-  cancel-in-progress: false  # Never cancel mid-flight deployments
+  cancel-in-progress: false
 
 env:
   AWS_REGION: ap-southeast-2
   TF_VERSION: '1.14.4'
+  APP_IMAGE_NAME: ratemyunit-api
+  POSTGRES_IMAGE: postgres:18.3-alpine
+  REDIS_IMAGE: redis:8.4.1-alpine
 
 jobs:
   changes:
@@ -28,19 +31,21 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4.0.1
         id: filter
         with:
           filters: |
             infra:
               - 'terraform/**'
               - '.github/workflows/deploy.yml'
+              - '.github/scripts/**'
             backend:
               - 'apps/api/**'
               - 'packages/**'
               - 'package.json'
               - 'package-lock.json'
+              - '.github/scripts/**'
             frontend:
               - 'apps/web/**'
               - 'packages/**'
@@ -54,10 +59,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6.1.0
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
@@ -80,7 +85,6 @@ jobs:
         working-directory: terraform
 
       - name: Terraform Plan
-        id: plan
         run: terraform plan -out=main.tfplan
         working-directory: terraform
 
@@ -94,15 +98,12 @@ jobs:
   infra-apply:
     name: Terraform Apply
     needs: [changes, infra-plan]
-    if: (needs.changes.outputs.infra == 'true' && github.event_name == 'push')
+    if: needs.changes.outputs.infra == 'true' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment: production
-    outputs:
-      ecr_repository: ${{ steps.tf-out.outputs.ecr_repository_url }}
-      api_public_ip: ${{ steps.tf-out.outputs.api_public_ip }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download Plan Artifact
         uses: actions/download-artifact@v4
@@ -111,7 +112,7 @@ jobs:
           path: terraform
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6.1.0
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
@@ -135,13 +136,6 @@ jobs:
         run: terraform apply -auto-approve main.tfplan
         working-directory: terraform
 
-      - name: Get Terraform Outputs
-        id: tf-out
-        working-directory: terraform
-        run: |
-          echo "ecr_repository_url=$(terraform output -raw ecr_repository_url)" >> $GITHUB_OUTPUT
-          echo "api_public_ip=$(terraform output -raw api_public_ip)" >> $GITHUB_OUTPUT
-
   deploy-backend:
     name: Deploy API + Frontend
     needs: [changes, infra-apply]
@@ -154,52 +148,58 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Clear node modules cache
-        run: |
-          rm -rf node_modules apps/*/node_modules packages/*/node_modules 2>/dev/null || true
+        uses: actions/checkout@v6
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6.1.0
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4.0.0
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@v2.1.2
 
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v5
+      - name: Set image reference
+        id: image
+        run: |
+          IMAGE_REF="${{ steps.login-ecr.outputs.registry }}/${{ env.APP_IMAGE_NAME }}:${{ github.sha }}"
+          echo "image_ref=$IMAGE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Build and Push ARM64 Docker Image
+        uses: docker/build-push-action@v7.1.0
         with:
           context: .
           file: apps/api/Dockerfile
+          platforms: linux/arm64
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:latest
-            ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.APP_IMAGE_NAME }}:latest
+            ${{ steps.image.outputs.image_ref }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            VITE_API_URL=https://ratemyunit.dev
+
+      - name: Verify pushed image is ARM64
+        run: |
+          docker buildx imagetools inspect "${{ steps.image.outputs.image_ref }}" | tee /tmp/imagetools.txt
+          grep -q "linux/arm64" /tmp/imagetools.txt
 
       - name: Update Resend API Key in SSM
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
         run: |
           if [ -n "$RESEND_API_KEY" ]; then
-            echo "Updating Resend API key in SSM Parameter Store..."
             aws ssm put-parameter \
               --name "/ratemyunit/production/resend/api_key" \
               --type "SecureString" \
               --value "$RESEND_API_KEY" \
               --overwrite \
-              --region ${{ env.AWS_REGION }}
-            echo "✓ Resend API key updated successfully"
-          else
-            echo "⚠ RESEND_API_KEY secret not set - emails will fall back to console logging"
+              --region "${{ env.AWS_REGION }}"
           fi
 
       - name: Update Resend Sender Identity in SSM
@@ -213,10 +213,7 @@ jobs:
               --type "String" \
               --value "$RESEND_FROM_NAME" \
               --overwrite \
-              --region ${{ env.AWS_REGION }}
-            echo "✓ Resend from name updated"
-          else
-            echo "ℹ RESEND_FROM_NAME secret not set - using app default"
+              --region "${{ env.AWS_REGION }}"
           fi
 
           if [ -n "$RESEND_FROM_EMAIL" ]; then
@@ -225,59 +222,14 @@ jobs:
               --type "String" \
               --value "$RESEND_FROM_EMAIL" \
               --overwrite \
-              --region ${{ env.AWS_REGION }}
-            echo "✓ Resend from email updated"
-          else
-            echo "ℹ RESEND_FROM_EMAIL secret not set - using app default"
+              --region "${{ env.AWS_REGION }}"
           fi
 
-      - name: Tag Current Version for Rollback
-        id: backup
+      - name: Resolve EC2 instance
+        id: ec2
         run: |
           INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters \
-              "Name=tag:Name,Values=ratemyunit-api" \
-              "Name=instance-state-name,Values=running" \
-            --query 'Reservations[0].Instances[0].InstanceId' \
-            --output text)
-
-          if [[ -n "$INSTANCE_ID" && "$INSTANCE_ID" != "None" ]]; then
-            # Get current running image
-            CURRENT_IMAGE=$(aws ssm send-command \
-              --document-name "AWS-RunShellScript" \
-              --instance-ids "$INSTANCE_ID" \
-              --parameters 'commands=["docker inspect ratemyunit-api --format=\"{{.Image}}\" 2>/dev/null || echo none"]' \
-              --query 'Command.CommandId' \
-              --output text)
-
-            # Wait and get result
-            sleep 5
-            BACKUP_IMAGE=$(aws ssm get-command-invocation \
-              --command-id "$CURRENT_IMAGE" \
-              --instance-id "$INSTANCE_ID" \
-              --query 'StandardOutputContent' \
-              --output text | tr -d '[:space:]')
-
-            if [[ -n "$BACKUP_IMAGE" && "$BACKUP_IMAGE" != "none" ]]; then
-              echo "backup_image=$BACKUP_IMAGE" >> $GITHUB_OUTPUT
-              echo "✓ Tagged backup image: $BACKUP_IMAGE"
-            else
-              echo "⚠ No existing container found (likely first deployment)"
-              echo "backup_image=none" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "backup_image=none" >> $GITHUB_OUTPUT
-          fi
-
-      # Pre-deployment migrations: Run migrations on the OLD container before deploying
-      # This ensures the database is ready for the new code
-      # NOTE: Migration scripts use .mjs (ES modules) from scripts/ directory
-      # Seed script uses .js (transpiled) from dist/ directory
-      # This is intentional - migrations are run directly, seeding is built first
-      - name: Run Database Migrations
-        run: |
-          # Resolve instance ID
-          INSTANCE_ID=$(aws ec2 describe-instances \
+            --region "${{ env.AWS_REGION }}" \
             --filters \
               "Name=tag:Name,Values=ratemyunit-api" \
               "Name=instance-state-name,Values=running" \
@@ -285,407 +237,230 @@ jobs:
             --output text)
 
           if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; then
-            echo "⚠ No running instance found, skipping pre-deployment migrations"
-            exit 0
+            echo "Failed to resolve EC2 instance" >&2
+            exit 1
           fi
 
-          echo "Running migrations on instance: $INSTANCE_ID"
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Record rollback image
+        id: backup
+        env:
+          INSTANCE_ID: ${{ steps.ec2.outputs.instance_id }}
+        run: |
+          COMMANDS_JSON=$(python - <<'PY'
+          import json
+          print(json.dumps({"commands": ["docker inspect --format '{{index .Config.Image}}' ratemyunit-api 2>/dev/null || echo none"]}))
+          PY
+          )
 
           COMMAND_ID=$(aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
+            --region "${{ env.AWS_REGION }}" \
+            --document-name AWS-RunShellScript \
             --instance-ids "$INSTANCE_ID" \
-            --parameters 'commands=["export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "timeout 90s docker exec -e DATABASE_URL=\"$DATABASE_URL\" ratemyunit-api node /app/packages/db/scripts/apply-migrations.mjs 2>&1 || echo \"Container not running, migration failed, or migration timed out; will migrate after deployment\""]' \
-            --comment "Running database migrations" \
-            --timeout-seconds 180 \
+            --parameters "$COMMANDS_JSON" \
             --query 'Command.CommandId' \
             --output text)
 
-          echo "Migration command ID: $COMMAND_ID"
-
-          # Wait for command to complete (allow up to ~3 minutes)
-          STATUS="Pending"
-          TERMINAL_STATUSES_REGEX='^(Success|Failed|TimedOut|Cancelled|DeliveryTimedOut|Undeliverable|Terminated)$'
-          for i in {1..60}; do
-            STATUS_RESULT=$(aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE_ID" \
-              --query 'Status' \
-              --output text 2>/tmp/ssm-status-error || true)
-
-            if [[ -n "$STATUS_RESULT" ]]; then
-              STATUS="$STATUS_RESULT"
-            elif grep -qi 'InvocationDoesNotExist\|InvalidCommandId' /tmp/ssm-status-error; then
-              STATUS="Pending"
-            else
-              echo "⚠ Failed to fetch migration status from SSM (attempt $i/60)"
-              cat /tmp/ssm-status-error
-              STATUS="Unknown"
-            fi
-
-            echo "Pre-deployment migration status: $STATUS ($i/60)"
-
-            if [[ "$STATUS" =~ $TERMINAL_STATUSES_REGEX ]]; then
-              break
-            fi
-
-            sleep 2
-          done
-
-          if [[ "$STATUS" == "Pending" || "$STATUS" == "InProgress" || "$STATUS" == "Delayed" || "$STATUS" == "Unknown" ]]; then
-            echo "Cancelling lingering pre-deployment migration command to avoid blocking deployment..."
-            aws ssm cancel-command \
-              --command-id "$COMMAND_ID" \
-              --region ${{ env.AWS_REGION }} || true
-          fi
-
-          if [[ "$STATUS" == "Success" ]]; then
-            echo "✓ Pre-deployment migrations completed successfully"
-          else
-            # Pre-deployment migration is a best-effort optimization.
-            # Continue deployment and rely on post-deployment migration handling.
-            echo "⚠ Pre-deployment migrations did not complete successfully (status: $STATUS). Continuing deployment."
-          fi
-
-          aws ssm get-command-invocation \
+          sleep 4
+          BACKUP_IMAGE=$(aws ssm get-command-invocation \
+            --region "${{ env.AWS_REGION }}" \
             --command-id "$COMMAND_ID" \
             --instance-id "$INSTANCE_ID" \
             --query 'StandardOutputContent' \
-            --output text || true
+            --output text | tr -d '[:space:]')
 
-      # Deploy new container: Stop old, start new
-      # Uses SSM to execute commands on EC2 without SSH access
-      - name: Deploy to EC2 via SSM
-        run: |
-          # Resolve instance ID first
-          INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters \
-              "Name=tag:Name,Values=ratemyunit-api" \
-              "Name=instance-state-name,Values=running" \
-            --query 'Reservations[0].Instances[0].InstanceId' \
-            --output text)
-
-          if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; then
-            echo "✗ Cannot resolve EC2 instance for deployment" && exit 1
+          if [[ -z "$BACKUP_IMAGE" ]]; then
+            BACKUP_IMAGE="none"
           fi
 
-          echo "Deploying to instance: $INSTANCE_ID"
+          echo "backup_image=$BACKUP_IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to EC2 via SSM
+        env:
+          INSTANCE_ID: ${{ steps.ec2.outputs.instance_id }}
+          IMAGE_REF: ${{ steps.image.outputs.image_ref }}
+        run: |
+          COMMANDS_JSON=$(python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          script = Path(".github/scripts/deploy-ec2.sh").read_text()
+          command = (
+            "cat <<'SCRIPT' >/tmp/ratemyunit-deploy.sh\n"
+            f"{script}\n"
+            "SCRIPT\n"
+            "chmod +x /tmp/ratemyunit-deploy.sh\n"
+            f"AWS_REGION='{os.environ['AWS_REGION']}' "
+            f"IMAGE_REF='{os.environ['IMAGE_REF']}' "
+            f"POSTGRES_IMAGE='{os.environ['POSTGRES_IMAGE']}' "
+            f"REDIS_IMAGE='{os.environ['REDIS_IMAGE']}' "
+            "/tmp/ratemyunit-deploy.sh"
+          )
+          print(json.dumps({"commands": [command]}))
+          PY
+          )
 
           COMMAND_ID=$(aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
+            --region "${{ env.AWS_REGION }}" \
+            --document-name AWS-RunShellScript \
             --instance-ids "$INSTANCE_ID" \
-            --parameters 'commands=["set -e", "EXISTING=$(docker ps -aq --filter name=^ratemyunit-api$)", "HAD_EXISTING=false", "if [ -n \"$EXISTING\" ]; then HAD_EXISTING=true; fi", "echo \"Cleaning up disk space...\"", "docker system prune -af", "echo \"Cleaning up existing containers...\"", "if [ -n \"$EXISTING\" ]; then echo \"Found container: $EXISTING\"; docker update --restart=no $EXISTING; docker stop $EXISTING; docker rm -f $EXISTING; echo \"Container removed\"; else echo \"No existing container\"; fi", "docker ps -a --filter name=ratemyunit-api", "echo \"Loading environment variables from SSM...\"", "export DATABASE_URL=$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export REDIS_URL=$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export JWT_SECRET=$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export FRONTEND_URL=$(aws ssm get-parameter --name /ratemyunit/production/frontend/url --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export GUEST_REVIEW_IP_HASH_SALT=$(aws ssm get-parameter --name /ratemyunit/production/security/guest_review_ip_hash_salt --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export TRUSTED_PROXY_CIDRS=$(aws ssm get-parameter --name /ratemyunit/production/network/trusted_proxy_cidrs --query Parameter.Value --output text --region ${{ env.AWS_REGION }})", "export RESEND_API_KEY=$(aws ssm get-parameter --name /ratemyunit/production/resend/api_key --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }} 2>/dev/null || echo \"\")", "export RESEND_FROM_NAME=$(aws ssm get-parameter --name /ratemyunit/production/resend/from_name --query Parameter.Value --output text --region ${{ env.AWS_REGION }} 2>/dev/null || echo \"RateMyUnit\")", "export RESEND_FROM_EMAIL=$(aws ssm get-parameter --name /ratemyunit/production/resend/from_email --query Parameter.Value --output text --region ${{ env.AWS_REGION }} 2>/dev/null || echo \"verify@send.ratemyunit.dev\")", "echo \"Validating required environment variables...\"", "if [ -z \"$DATABASE_URL\" ] || [ \"$DATABASE_URL\" = \"None\" ]; then echo \"ERROR: DATABASE_URL is not set or invalid\"; exit 1; fi", "if [ -z \"$REDIS_URL\" ] || [ \"$REDIS_URL\" = \"None\" ]; then echo \"ERROR: REDIS_URL is not set or invalid\"; exit 1; fi", "if [ -z \"$JWT_SECRET\" ] || [ \"$JWT_SECRET\" = \"None\" ]; then echo \"ERROR: JWT_SECRET is not set or invalid\"; exit 1; fi", "if [ -z \"$FRONTEND_URL\" ] || [ \"$FRONTEND_URL\" = \"None\" ]; then echo \"ERROR: FRONTEND_URL is not set or invalid\"; exit 1; fi", "if [ -z \"$GUEST_REVIEW_IP_HASH_SALT\" ] || [ \"$GUEST_REVIEW_IP_HASH_SALT\" = \"None\" ]; then echo \"ERROR: GUEST_REVIEW_IP_HASH_SALT is not set or invalid\"; exit 1; fi", "if [ -z \"$TRUSTED_PROXY_CIDRS\" ] || [ \"$TRUSTED_PROXY_CIDRS\" = \"None\" ]; then echo \"ERROR: TRUSTED_PROXY_CIDRS is not set or invalid\"; exit 1; fi", "echo \"✓ All required environment variables validated\"", "aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}", "docker pull ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:${{ github.sha }}", "echo \"Checking if this is first deployment...\"", "FIRST_DEPLOY=false", "if [ \"$HAD_EXISTING\" = \"false\" ]; then echo \"First deployment detected - will seed database\"; FIRST_DEPLOY=true; fi", "echo \"Starting new container...\"", "docker run -d --name ratemyunit-api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e NODE_ENV=production -e PORT=3000 -e DATABASE_URL=\"$DATABASE_URL\" -e REDIS_URL=\"$REDIS_URL\" -e JWT_SECRET=\"$JWT_SECRET\" -e FRONTEND_URL=\"$FRONTEND_URL\" -e GUEST_REVIEW_IP_HASH_SALT=\"$GUEST_REVIEW_IP_HASH_SALT\" -e TRUSTED_PROXY_CIDRS=\"$TRUSTED_PROXY_CIDRS\" -e RESEND_API_KEY=\"$RESEND_API_KEY\" -e RESEND_FROM_NAME=\"$RESEND_FROM_NAME\" -e RESEND_FROM_EMAIL=\"$RESEND_FROM_EMAIL\" -e FIRST_DEPLOY=\"$FIRST_DEPLOY\" -e AUTO_SEED=false ${{ steps.login-ecr.outputs.registry }}/ratemyunit-api:${{ github.sha }}", "echo \"Deployment complete!\"", "docker ps --filter name=ratemyunit-api"]' \
-            --comment "Deploying backend" \
+            --parameters "$COMMANDS_JSON" \
+            --comment "Deploying ARM64 application image" \
             --query 'Command.CommandId' \
             --output text)
 
-          echo "Deployment command ID: $COMMAND_ID"
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
 
-          # Wait for deployment to complete (timeout after 15 minutes)
-          STATUS="Pending"
-          TERMINAL_STATUSES_REGEX='^(Success|Failed|TimedOut|Cancelled|DeliveryTimedOut|Undeliverable|Terminated)$'
-          for i in {1..180}; do
-            STATUS_RESULT=$(aws ssm get-command-invocation \
+          for i in {1..90}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --region "${{ env.AWS_REGION }}" \
               --command-id "$COMMAND_ID" \
               --instance-id "$INSTANCE_ID" \
               --query 'Status' \
-              --output text 2>/tmp/ssm-status-error || true)
-
-            if [[ -n "$STATUS_RESULT" ]]; then
-              STATUS="$STATUS_RESULT"
-            elif grep -qi 'InvocationDoesNotExist\|InvalidCommandId' /tmp/ssm-status-error; then
-              STATUS="Pending"
-            else
-              echo "✗ Failed to fetch deployment status from SSM"
-              cat /tmp/ssm-status-error
-              exit 1
-            fi
-
-            echo "Deployment command status: $STATUS ($i/180)"
-
+              --output text 2>/dev/null || echo "Pending")
+            echo "Deploy status: $STATUS ($i/90)"
             if [[ "$STATUS" == "Success" ]]; then
-              echo "✓ Deployment completed successfully"
               aws ssm get-command-invocation \
+                --region "${{ env.AWS_REGION }}" \
                 --command-id "$COMMAND_ID" \
                 --instance-id "$INSTANCE_ID" \
                 --query 'StandardOutputContent' \
-                --output text || true
-              break
-            elif [[ "$STATUS" =~ $TERMINAL_STATUSES_REGEX ]]; then
-              echo "✗ Deployment failed with status: $STATUS"
+                --output text
+              exit 0
+            fi
+            if [[ "$STATUS" =~ ^(Failed|TimedOut|Cancelled|DeliveryTimedOut|Undeliverable|Terminated)$ ]]; then
               aws ssm get-command-invocation \
+                --region "${{ env.AWS_REGION }}" \
                 --command-id "$COMMAND_ID" \
                 --instance-id "$INSTANCE_ID" \
                 --query 'StandardErrorContent' \
                 --output text || true
               aws ssm get-command-invocation \
+                --region "${{ env.AWS_REGION }}" \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE_ID" \
+                --query 'StandardOutputContent' \
+                --output text || true
+              exit 1
+            fi
+            sleep 5
+          done
+
+          echo "Deployment timed out" >&2
+          exit 1
+
+      - name: Health Check
+        env:
+          INSTANCE_ID: ${{ steps.ec2.outputs.instance_id }}
+        run: |
+          COMMANDS_JSON=$(python - <<'PY'
+          import json
+          from pathlib import Path
+
+          script = Path(".github/scripts/health-check-ec2.sh").read_text()
+          command = (
+            "cat <<'SCRIPT' >/tmp/ratemyunit-health.sh\n"
+            f"{script}\n"
+            "SCRIPT\n"
+            "chmod +x /tmp/ratemyunit-health.sh\n"
+            "/tmp/ratemyunit-health.sh"
+          )
+          print(json.dumps({"commands": [command]}))
+          PY
+          )
+
+          COMMAND_ID=$(aws ssm send-command \
+            --region "${{ env.AWS_REGION }}" \
+            --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" \
+            --parameters "$COMMANDS_JSON" \
+            --comment "Validating deployed application health" \
+            --query 'Command.CommandId' \
+            --output text)
+
+          for i in {1..60}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --region "${{ env.AWS_REGION }}" \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query 'Status' \
+              --output text 2>/dev/null || echo "Pending")
+            echo "Health check status: $STATUS ($i/60)"
+            if [[ "$STATUS" == "Success" ]]; then
+              aws ssm get-command-invocation \
+                --region "${{ env.AWS_REGION }}" \
                 --command-id "$COMMAND_ID" \
                 --instance-id "$INSTANCE_ID" \
                 --query 'StandardOutputContent' \
                 --output text
-              exit 1
+              exit 0
             fi
-
-            sleep 5
-          done
-
-          if [[ "$STATUS" != "Success" ]]; then
-            echo "✗ Deployment timed out after 15 minutes (last status: $STATUS)"
-            aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE_ID" \
-              --query 'StandardErrorContent' \
-              --output text || true
-            aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE_ID" \
-              --query 'StandardOutputContent' \
-              --output text || true
-            exit 1
-          fi
-
-      - name: Wait for Container to Start
-        run: |
-          echo "Waiting for container to be ready..."
-          sleep 10
-          INSTANCE_ID="None"
-          attempt=0
-          until [[ -n "$INSTANCE_ID" && "$INSTANCE_ID" != "None" ]]; do
-            DESCRIBE_RESULT=$(aws ec2 describe-instances \
-              --filters \
-                "Name=tag:Name,Values=ratemyunit-api" \
-                "Name=instance-state-name,Values=running,pending,stopping,stopped" \
-              --query 'Reservations[0].Instances[0]' \
-              --output json)
-            INSTANCE_ID=$(echo "$DESCRIBE_RESULT" | jq -r '.InstanceId // empty')
-            INSTANCE_STATE=$(echo "$DESCRIBE_RESULT" | jq -r '.State.Name // empty')
-            attempt=$((attempt + 1))
-            if [[ $attempt -ge 60 ]]; then
-              echo "✗ Unable to resolve EC2 instance ID"
-              echo "EC2 describe output:"
-              echo "$DESCRIBE_RESULT"
-              exit 1
-            fi
-            sleep 5
-          done
-
-          if [[ "$INSTANCE_STATE" != "running" ]]; then
-            if [[ "$INSTANCE_STATE" == "stopped" ]]; then
-              echo "Instance is stopped. Starting..."
-              aws ec2 start-instances --instance-ids "$INSTANCE_ID"
-              aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
-              echo "✓ Instance is now running"
-            elif [[ "$INSTANCE_STATE" == "stopping" || "$INSTANCE_STATE" == "pending" ]]; then
-              echo "Instance is in transitional state: $INSTANCE_STATE. Waiting..."
-              aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
-              echo "✓ Instance is now running"
-            else
-              echo "✗ Instance is in unexpected state: $INSTANCE_STATE"
-              exit 1
-            fi
-          fi
-
-          COMMAND_ID=$(aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --instance-ids "$INSTANCE_ID" \
-            --parameters 'commands=["docker ps --filter name=ratemyunit-api --format \"{{.Status}}\""]' \
-            --comment "Verify container started (${INSTANCE_ID})" \
-            --query 'Command.CommandId' \
-            --output text)
-
-          STATUS="Pending"
-          for i in {1..60}; do
-            STATUS_RESULT=$(aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE_ID" \
-              --query 'Status' \
-              --output text 2>/tmp/ssm-status-error || true)
-
-            if [[ -n "$STATUS_RESULT" ]]; then
-              STATUS="$STATUS_RESULT"
-            elif grep -qi 'InvocationDoesNotExist\|InvalidCommandId' /tmp/ssm-status-error; then
-              STATUS="Pending"
-            else
-              echo "✗ Failed to fetch container startup status from SSM"
-              cat /tmp/ssm-status-error
-              exit 1
-            fi
-
-            if [[ "$STATUS" == "Success" || "$STATUS" == "Failed" || "$STATUS" == "TimedOut" || "$STATUS" == "Cancelled" ]]; then
-              break
-            fi
-
-            echo "Waiting for container verification... ($i/60)"
-            sleep 1
-          done
-
-          echo "Command invocation status: $STATUS"
-
-          if [[ "$STATUS" != "Success" ]]; then
-            echo "✗ Container verification command did not succeed"
-            aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE_ID" \
-              --query 'StandardErrorContent' \
-              --output text || true
-            exit 1
-          fi
-
-          aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "$INSTANCE_ID" \
-            --query 'StandardOutputContent' \
-            --output text
-
-      # Post-deployment migrations: Run any new migrations in the NEW container
-      # This handles migrations that can only run after the new code is deployed
-      - name: Run Post-Deployment Migrations
-        run: |
-          echo "Post-deployment migrations are handled by the application startup flow."
-          echo "Skipping explicit SSM post-deployment migration command."
-
-      # Database seeding: Handled automatically by container entrypoint if FIRST_DEPLOY=true or AUTO_SEED=true
-      # Set FIRST_DEPLOY=true in the docker run command for initial deployments
-      - name: Seed Database
-        run: |
-          echo "✓ Database seeding is handled automatically by the container entrypoint"
-          echo "  - Set FIRST_DEPLOY=true in docker run for initial deployment"
-          echo "  - Set AUTO_SEED=true to always seed on startup"
-
-      - name: Health Check
-        run: |
-          echo "Running health check on deployed application..."
-
-          # Resolve instance ID
-          INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters \
-              "Name=tag:Name,Values=ratemyunit-api" \
-              "Name=instance-state-name,Values=running" \
-            --query 'Reservations[0].Instances[0].InstanceId' \
-            --output text)
-
-          if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; then
-            echo "✗ Cannot resolve EC2 instance for health check"
-            exit 1
-          fi
-
-          echo "Running health check on instance: $INSTANCE_ID"
-
-          # Wait for app to be ready and check health via SSM (checking localhost from inside EC2)
-          for i in {1..30}; do
-            COMMAND_ID=$(aws ssm send-command \
-              --document-name "AWS-RunShellScript" \
-              --instance-ids "$INSTANCE_ID" \
-              --parameters 'commands=["code=$(curl --max-time 5 -s -o /dev/null -w \"%{http_code}\" http://localhost/health 2>/dev/null || true); echo ${code:-000}"]' \
-              --query 'Command.CommandId' \
-              --output text)
-
-            # Wait for SSM command to complete (timeout after 30 seconds)
-            CMD_STATUS="Pending"
-            for j in {1..30}; do
-              CMD_STATUS=$(aws ssm get-command-invocation \
+            if [[ "$STATUS" =~ ^(Failed|TimedOut|Cancelled|DeliveryTimedOut|Undeliverable|Terminated)$ ]]; then
+              aws ssm get-command-invocation \
+                --region "${{ env.AWS_REGION }}" \
                 --command-id "$COMMAND_ID" \
                 --instance-id "$INSTANCE_ID" \
-                --query 'Status' \
-                --output text 2>/dev/null || echo "Pending")
-
-              if [[ "$CMD_STATUS" == "Success" || "$CMD_STATUS" == "Failed" ]]; then
-                break
-              fi
-              sleep 1
-            done
-
-            # Only read output if command completed successfully
-            if [[ "$CMD_STATUS" == "Success" ]]; then
-              HTTP_CODE=$(aws ssm get-command-invocation \
+                --query 'StandardErrorContent' \
+                --output text || true
+              aws ssm get-command-invocation \
+                --region "${{ env.AWS_REGION }}" \
                 --command-id "$COMMAND_ID" \
                 --instance-id "$INSTANCE_ID" \
                 --query 'StandardOutputContent' \
-                --output text 2>/dev/null | tr -d '[:space:]')
-
-              if [[ "$HTTP_CODE" == "200" ]]; then
-                echo "✓ Application is healthy (HTTP $HTTP_CODE)"
-
-                # Get health check details
-                DETAIL_CMD=$(aws ssm send-command \
-                  --document-name "AWS-RunShellScript" \
-                  --instance-ids "$INSTANCE_ID" \
-                  --parameters 'commands=["curl -s http://localhost/health"]' \
-                  --query 'Command.CommandId' \
-                  --output text)
-
-                # Wait for details command to complete
-                for k in {1..10}; do
-                  DETAIL_STATUS=$(aws ssm get-command-invocation \
-                    --command-id "$DETAIL_CMD" \
-                    --instance-id "$INSTANCE_ID" \
-                    --query 'Status' \
-                    --output text 2>/dev/null || echo "Pending")
-                  if [[ "$DETAIL_STATUS" == "Success" ]]; then
-                    break
-                  fi
-                  sleep 1
-                done
-
-                if [[ "$DETAIL_STATUS" == "Success" ]]; then
-                  aws ssm get-command-invocation \
-                    --command-id "$DETAIL_CMD" \
-                    --instance-id "$INSTANCE_ID" \
-                    --query 'StandardOutputContent' \
-                    --output text
-                fi
-
-                exit 0
-              fi
-
-              echo "Health check attempt $i/30 (HTTP $HTTP_CODE)..."
-            else
-              echo "Health check attempt $i/30 (SSM command status: $CMD_STATUS)..."
+                --output text || true
+              exit 1
             fi
-
-            sleep 10
+            sleep 3
           done
 
-          echo "✗ Health check failed after 5 minutes"
+          echo "Health check timed out" >&2
           exit 1
 
       - name: Rollback on Failure
         if: failure() && steps.backup.outputs.backup_image != 'none'
+        env:
+          INSTANCE_ID: ${{ steps.ec2.outputs.instance_id }}
+          BACKUP_IMAGE_REF: ${{ steps.backup.outputs.backup_image }}
         run: |
-          echo "🔄 Rolling back to previous version: ${{ steps.backup.outputs.backup_image }}"
+          COMMANDS_JSON=$(python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-          INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters \
-              "Name=tag:Name,Values=ratemyunit-api" \
-              "Name=instance-state-name,Values=running" \
-            --query 'Reservations[0].Instances[0].InstanceId' \
+          script = Path(".github/scripts/rollback-ec2.sh").read_text()
+          command = (
+            "cat <<'SCRIPT' >/tmp/ratemyunit-rollback.sh\n"
+            f"{script}\n"
+            "SCRIPT\n"
+            "chmod +x /tmp/ratemyunit-rollback.sh\n"
+            f"AWS_REGION='{os.environ['AWS_REGION']}' "
+            f"BACKUP_IMAGE_REF='{os.environ['BACKUP_IMAGE_REF']}' "
+            "/tmp/ratemyunit-rollback.sh"
+          )
+          print(json.dumps({"commands": [command]}))
+          PY
+          )
+
+          COMMAND_ID=$(aws ssm send-command \
+            --region "${{ env.AWS_REGION }}" \
+            --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" \
+            --parameters "$COMMANDS_JSON" \
+            --comment "Rolling back deployment failure" \
+            --query 'Command.CommandId' \
             --output text)
 
-          if [[ -z "$INSTANCE_ID" || "$INSTANCE_ID" == "None" ]]; then
-            echo "✗ Cannot resolve EC2 instance for rollback"
-            exit 1
-          fi
-
-          aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --instance-ids "$INSTANCE_ID" \
-            --parameters "commands=[\"set -e\", \"echo \\\"Rolling back - cleaning up failed deployment...\\\"\", \"EXISTING=\$(docker ps -aq --filter name=^ratemyunit-api\$)\", \"if [ -n \\\"\$EXISTING\\\" ]; then docker update --restart=no \$EXISTING; docker stop \$EXISTING; docker rm -f \$EXISTING; fi\", \"export DATABASE_URL=\$(aws ssm get-parameter --name /ratemyunit/production/database/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export REDIS_URL=\$(aws ssm get-parameter --name /ratemyunit/production/redis/url --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export JWT_SECRET=\$(aws ssm get-parameter --name /ratemyunit/production/jwt/secret --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export FRONTEND_URL=\$(aws ssm get-parameter --name /ratemyunit/production/frontend/url --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export GUEST_REVIEW_IP_HASH_SALT=\$(aws ssm get-parameter --name /ratemyunit/production/security/guest_review_ip_hash_salt --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export TRUSTED_PROXY_CIDRS=\$(aws ssm get-parameter --name /ratemyunit/production/network/trusted_proxy_cidrs --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export RESEND_API_KEY=\$(aws ssm get-parameter --name /ratemyunit/production/resend/api_key --with-decryption --query Parameter.Value --output text --region ${{ env.AWS_REGION }})\", \"export RESEND_FROM_NAME=\$(aws ssm get-parameter --name /ratemyunit/production/resend/from_name --query Parameter.Value --output text --region ${{ env.AWS_REGION }} 2>/dev/null || echo RateMyUnit)\", \"export RESEND_FROM_EMAIL=\$(aws ssm get-parameter --name /ratemyunit/production/resend/from_email --query Parameter.Value --output text --region ${{ env.AWS_REGION }} 2>/dev/null || echo verify@send.ratemyunit.dev)\", \"docker run -d --name ratemyunit-api --network ratemyunit-net --restart unless-stopped -p 80:3000 -e NODE_ENV=production -e PORT=3000 -e DATABASE_URL=\\\"\$DATABASE_URL\\\" -e REDIS_URL=\\\"\$REDIS_URL\\\" -e JWT_SECRET=\\\"\$JWT_SECRET\\\" -e FRONTEND_URL=\\\"\$FRONTEND_URL\\\" -e GUEST_REVIEW_IP_HASH_SALT=\\\"\$GUEST_REVIEW_IP_HASH_SALT\\\" -e TRUSTED_PROXY_CIDRS=\\\"\$TRUSTED_PROXY_CIDRS\\\" -e RESEND_API_KEY=\\\"\$RESEND_API_KEY\\\" -e RESEND_FROM_NAME=\\\"\$RESEND_FROM_NAME\\\" -e RESEND_FROM_EMAIL=\\\"\$RESEND_FROM_EMAIL\\\" ${{ steps.backup.outputs.backup_image }}\"]" \
-            --comment "Rolling back deployment"
-
-          echo "✓ Rollback initiated"
-          exit 1
+          sleep 5
+          aws ssm get-command-invocation \
+            --region "${{ env.AWS_REGION }}" \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query 'StandardOutputContent' \
+            --output text || true
 
       - name: Notify Deployment Status
         if: always()
         run: |
-          if [[ "${{ job.status }}" == "success" ]]; then
-            EMOJI="✅"
-            STATUS="succeeded"
-            COLOR="good"
-          else
-            EMOJI="❌"
-            STATUS="failed"
-            COLOR="danger"
-          fi
-
-          echo "${EMOJI} Deployment ${STATUS} for commit ${{ github.sha }}"
-          echo "Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Deployment status: ${{ job.status }}"

@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: ["main"]
+    branches: ['main']
   push:
-    branches: ["main"]
+    branches: ['main']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,30 +16,54 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    
+
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 2
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24.14.1
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci --include=optional
 
       - name: Lint
-        run: npx turbo lint
+        run: npm run lint
 
       - name: Typecheck
-        run: npx turbo typecheck
+        run: npm run typecheck
 
       - name: Test
-        run: npx turbo test
+        run: npm test
 
       - name: Build Check
-        run: npx turbo build
+        run: npm run build
+
+  docker-smoke-arm:
+    name: ARM64 Docker Smoke Build
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.0.0
+
+      - name: Build ARM64 image
+        uses: docker/build-push-action@v7.1.0
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          platforms: linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VITE_API_URL=https://ratemyunit.dev

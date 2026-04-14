@@ -29,18 +29,6 @@ resource "aws_ssm_parameter" "db_password" {
   }
 }
 
-resource "aws_ssm_parameter" "db_url" {
-  name   = "/ratemyunit/production/database/url"
-  type   = "SecureString"
-  value  = "postgresql://ratemyunit:${random_password.db_password.result}@postgres:5432/ratemyunit"
-  key_id = aws_kms_key.ssm_parameters.arn
-
-  tags = {
-    Environment = "Production"
-    Project     = "RateMyUnit"
-  }
-}
-
 resource "aws_ssm_parameter" "redis_url" {
   name   = "/ratemyunit/production/redis/url"
   type   = "SecureString"

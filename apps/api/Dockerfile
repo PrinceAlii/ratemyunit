@@ -1,4 +1,4 @@
-FROM --platform=linux/arm64/v8 node:20-bookworm-slim
+FROM node:24.14.1-bookworm-slim
 
 WORKDIR /app
 
@@ -18,19 +18,18 @@ COPY apps ./apps
 COPY packages ./packages
 
 # Install dependencies
-RUN npm ci
-
-# Ensure ARM64 lightningcss is available for Tailwind v4
-RUN npm install lightningcss-linux-arm64-gnu --save-optional || true
+RUN npm ci --include=optional
 
 # Install Playwright browsers (Chromium only to save space/time)
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN npx playwright install chromium && \
     npx playwright install-deps chromium
 
-# Build the API and frontend
-RUN npx turbo build --filter=@ratemyunit/api...
-RUN VITE_API_URL=https://ratemyunit.dev npx turbo build --filter=@ratemyunit/web
+ARG VITE_API_URL=https://ratemyunit.dev
+ENV VITE_API_URL=$VITE_API_URL
+
+# Build the workspace
+RUN npm run build
 
 # Environment variables
 ENV NODE_ENV=production

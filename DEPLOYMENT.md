@@ -2,15 +2,17 @@
 
 ## Overview
 
-RateMyUnit uses automated migrations and seeding via the `docker-entrypoint.sh` script. Database changes persist in RDS across container restarts. The GitHub Actions workflow detects first deployments and triggers seeding.
+RateMyUnit deploys a single ARM64 application image to an ARM Graviton EC2 instance. PostgreSQL and Redis run as local containers on that same host, while the GitHub Actions deployment job builds the image, pushes it to ECR, renders a shared runtime env file on EC2, and starts the app container.
 
 ## Architecture
 
-- **Database**: AWS RDS PostgreSQL (persistent).
-- **API**: Docker container on EC2 (stateless).
-- **Migrations**: Automatic on container start via entrypoint.
-- **Seeds**: Automatic on first deploy or when configured.
-- **Entrypoint**: Handles migrations, seeding, and startup.
+- **Host**: AWS EC2 `t4g.small` running Amazon Linux 2023 (`arm64`).
+- **Database**: Local PostgreSQL container with persistent Docker volume.
+- **Cache/Jobs**: Local Redis container with persistent Docker volume.
+- **API + Frontend**: Single ARM64 Docker image served by the API container.
+- **Migrations**: Automatic on app container start via the entrypoint.
+- **Seeds**: Automatic only when the deploy marks the app as a first deploy.
+- **Entrypoint**: Handles database wait, migrations, optional seeding, and app startup.
 
 ## Docker Entrypoint
 
@@ -42,53 +44,30 @@ docker run --rm -e SKIP_MIGRATIONS=true ratemyunit-api bash /app/some-task.sh
 | `FIRST_DEPLOY`    | `false` | Trigger seeding for initial deployment. |
 | `AUTO_SEED`       | `false` | Run seeds on every container start.     |
 
-## Initial Setup
+## Deployment Flow
 
-### 1. Build and Push Image
+Committing to `main` triggers the deployment workflow:
 
-Committing to `main` triggers the CI/CD pipeline:
-
-- Builds Docker image.
-- Pushes to ECR.
-- Deploys to EC2.
-
-### 2. Deploy
-
-The GitHub Actions workflow automates the process:
-
-1. Detects first deployment (no existing container).
-2. Sets `FIRST_DEPLOY=true` if needed.
-3. Validates SSM parameters (DATABASE_URL, JWT_SECRET).
-4. Deploys container with environment variables.
-5. Runs migrations and seeds automatically.
-
-**Manual Deployment (SSM):**
-
-```bash
-aws ssm start-session --target i-07fb1dfd6a663367d
-
-sudo docker-compose pull api
-sudo docker-compose up -d api
-```
+1. Build the app image on `ubuntu-24.04-arm`.
+2. Push `linux/arm64` image tags to ECR.
+3. Verify the pushed manifest includes `linux/arm64`.
+4. Render `/etc/ratemyunit/runtime.env` on EC2 from SSM parameters.
+5. Ensure local PostgreSQL and Redis containers are running.
+6. Start the app container with the shared env file.
+7. Run `/health` from inside the EC2 host and fail fast with container diagnostics if it never becomes healthy.
 
 ## Manual Operations
 
 ### Run Seeds Manually
 
 ```bash
-# From container
 sudo docker exec -it ratemyunit-api bash /app/packages/db/scripts/seed.sh
-
-# Or set environment variable and restart
-sudo AUTO_SEED=true docker-compose up -d api
 ```
 
 ### Run Migrations Only
 
 ```bash
 sudo docker exec -it ratemyunit-api node /app/packages/db/dist/migrate.js
-# Fallback:
-sudo docker exec -it ratemyunit-api node /app/packages/db/scripts/apply-migrations.mjs
 ```
 
 ### Check Database Status
@@ -113,30 +92,19 @@ Located in `packages/db/seeds/`:
 
 ## Environment Variables
 
-| Variable         | Required | Description       | SSM Path                                |
-| ---------------- | -------- | ----------------- | --------------------------------------- |
-| `DATABASE_URL`   | Yes      | Connection string | `/ratemyunit/production/database/url`   |
-| `REDIS_URL`      | No       | Redis connection  | `/ratemyunit/production/redis/url`      |
-| `JWT_SECRET`     | Yes      | Signing secret    | `/ratemyunit/production/jwt/secret`     |
-| `FRONTEND_URL`   | No       | CORS origin       | `/ratemyunit/production/frontend/url`   |
-| `RESEND_API_KEY` | Yes      | Email API key     | `/ratemyunit/production/resend/api_key` |
+The app still consumes `DATABASE_URL`, but EC2 derives it locally from the SSM database password plus the fixed host topology (`postgres:5432/ratemyunit`). The full URL is no longer treated as a stored secret.
 
-### FRONTEND_URL Configuration
-
-`FRONTEND_URL` must match the production domain for CORS.
-
-**Update Procedure:**
-
-```bash
-aws ssm put-parameter \
-  --name /ratemyunit/production/frontend/url \
-  --value https://ratemyunit.dev \
-  --type String \
-  --overwrite \
-  --region ap-southeast-2
-
-sudo docker restart ratemyunit-api
-```
+| Variable                     | Required | Source                                             |
+| ---------------------------- | -------- | -------------------------------------------------- |
+| `DATABASE_URL`               | Yes      | Derived on EC2 from `/ratemyunit/production/database/password` |
+| `REDIS_URL`                  | Yes      | `/ratemyunit/production/redis/url`                 |
+| `JWT_SECRET`                 | Yes      | `/ratemyunit/production/jwt/secret`                |
+| `FRONTEND_URL`               | Yes      | `/ratemyunit/production/frontend/url`              |
+| `GUEST_REVIEW_IP_HASH_SALT`  | Yes      | `/ratemyunit/production/security/guest_review_ip_hash_salt` |
+| `TRUSTED_PROXY_CIDRS`        | Yes      | `/ratemyunit/production/network/trusted_proxy_cidrs` |
+| `RESEND_API_KEY`             | No       | `/ratemyunit/production/resend/api_key`            |
+| `RESEND_FROM_NAME`           | No       | `/ratemyunit/production/resend/from_name`          |
+| `RESEND_FROM_EMAIL`          | No       | `/ratemyunit/production/resend/from_email`         |
 
 ## Troubleshooting
 
@@ -145,7 +113,7 @@ sudo docker restart ratemyunit-api
 If "Configuration validation failed" occurs, check SSM parameters:
 
 1. **JWT_SECRET**: Must be 32+ characters.
-2. **DATABASE_URL**: Must be a valid `postgresql://` URI.
+2. **DATABASE_URL**: Derived locally, including URL-encoding for reserved password characters.
 3. **RESEND_API_KEY**: Must start with `re_`.
 
 ### Migrations Failed
@@ -169,6 +137,6 @@ If `POST /api/auth/logout` or `DELETE` requests fail with 400:
 ## Best Practices
 
 1. Test migrations locally (`npm run db:migrate`).
-2. Use RDS snapshots before major updates.
+2. Keep the EC2 runtime env sourced only from SSM plus the host-local DB topology.
 3. Monitor logs during deployment.
 4. Change default admin password immediately.

@@ -3,6 +3,9 @@ set -euo pipefail
 
 DB_WAIT_ATTEMPTS="${DB_WAIT_ATTEMPTS:-30}"
 DB_WAIT_SECONDS="${DB_WAIT_SECONDS:-2}"
+SKIP_MIGRATIONS="${SKIP_MIGRATIONS:-false}"
+AUTO_SEED="${AUTO_SEED:-false}"
+FIRST_DEPLOY="${FIRST_DEPLOY:-false}"
 
 echo "🚀 RateMyUnit API - Starting..."
 echo ""

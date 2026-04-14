@@ -250,7 +250,27 @@ jobs:
         run: |
           COMMANDS_JSON=$(python - <<'PY'
           import json
-          print(json.dumps({"commands": ["docker inspect --format '{{index .Config.Image}}' ratemyunit-api 2>/dev/null || echo none"]}))
+          command = r'''
+          image_id=$(docker inspect --format '{{.Image}}' ratemyunit-api 2>/dev/null || true)
+          if [ -z "$image_id" ]; then
+            echo none
+            exit 0
+          fi
+
+          repo_digest=$(docker image inspect "$image_id" --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}' 2>/dev/null || true)
+          if [ -n "$repo_digest" ]; then
+            echo "$repo_digest"
+            exit 0
+          fi
+
+          image_ref=$(docker inspect --format '{{index .Config.Image}}' ratemyunit-api 2>/dev/null || true)
+          if [ -n "$image_ref" ]; then
+            echo "$image_ref"
+          else
+            echo none
+          fi
+          '''
+          print(json.dumps({"commands": [command]}))
           PY
           )
 
